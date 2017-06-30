@@ -123,7 +123,7 @@ def main():
         for ifp in glob.glob(os.path.join(raster.srcdir,raster.stripid)+"*"):
             ofp = os.path.join(dst_dir,os.path.basename(ifp))
             if os.path.isfile(ofp) and args.overwrite:
-                logger.debug("Moving {} to {}".format(ifp,ofp))
+                logger.debug("Linking {} to {}".format(ifp,ofp))
                 if not args.dryrun:
                     os.remove(ofp)
                     if args.try_link:
