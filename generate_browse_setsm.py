@@ -1,6 +1,6 @@
 import os, string, sys, re, glob, argparse, subprocess, logging
 from osgeo import gdal, gdalconst
-from lib import dem, utils, taskhandler
+from lib import dem, taskhandler
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -175,9 +175,9 @@ def resample_setsm(dem, args):
             
         #print cmd
         if not args.dryrun:
-            utils.exec_cmd(cmd)
+            taskhandler.exec_cmd(cmd)
             if cmd2:
-                utils.exec_cmd(cmd2)
+                taskhandler.exec_cmd(cmd2)
     
         if not args.dryrun:
             for f in deletables:

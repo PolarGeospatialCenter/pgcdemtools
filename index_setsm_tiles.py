@@ -1,4 +1,4 @@
-import os, sys, string, shutil, glob, re, logging
+import os, sys, string, shutil, glob, re, logging, argparse
 from datetime import *
 import gdal, osr, ogr, gdalconst
 from lib import utils, dem, taskhandler
@@ -6,8 +6,6 @@ from lib import utils, dem, taskhandler
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
-
-
 
 def main():
     

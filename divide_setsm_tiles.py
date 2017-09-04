@@ -38,6 +38,8 @@ def main():
     parser.add_argument('--tiles', help="list of tiles to process, comma delimited")
     parser.add_argument("--version", help="version string (ex: v1.2)")
     parser.add_argument("--cutline-loc", help="directory containing cutline shps indicating areas of bad data")
+    parser.add_argument('--build-ovr', action='store_true', default=False,
+                        help="build overviews")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
     parser.add_argument("--pbs", action='store_true', default=False,
@@ -196,6 +198,8 @@ def divide_tile(src, args):
     
     if args.version:
         version_str = '_{}'.format(args.version)
+    else:
+        version_str = ''
     
     ## get tile geom and make subtiles
     ds = gdal.Open(src)
@@ -218,7 +222,6 @@ def divide_tile(src, args):
             reg_str = ''
             tile_base = src[:-8]
         
-        ## TODO build metadata?
         src_metapath = '{}_dem_meta.txt'.format(tile_base)
         src_regmetapath = '{}_reg.txt'.format(tile_base)
         dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], tile_res, version_str)
@@ -266,9 +269,10 @@ def divide_tile(src, args):
                             os.remove(mask)
                 
                 if os.path.isfile(dstfp) and not os.path.isfile(dstfp+'.ovr'):
-                    cmd = 'gdaladdo -ro {} 2 4 8 16'.format(dstfp)
-                    logger.info(cmd)
-                    subprocess.call(cmd, shell=True)
+                    if args.build_ovr:
+                        cmd = 'gdaladdo -ro {} 2 4 8 16'.format(dstfp)
+                        logger.info(cmd)
+                        subprocess.call(cmd, shell=True)
         
         else:            
             # for each subtile and each component type, call gdal_translate with projwin
@@ -310,9 +314,10 @@ def divide_tile(src, args):
                             logger.info("Tile statistics: {}".format(str(stats)))
                         
                         if os.path.isfile(dstfp) and not os.path.isfile(dstfp+'.ovr'):
-                            cmd = 'gdaladdo -ro {} 2 4 8 16'.format(dstfp)
-                            logger.info(cmd)
-                            subprocess.call(cmd, shell=True)
+                            if args.build_ovr:
+                                cmd = 'gdaladdo -ro {} 2 4 8 16'.format(dstfp)
+                                logger.info(cmd)
+                                subprocess.call(cmd, shell=True)
 
 
 if __name__ == '__main__':

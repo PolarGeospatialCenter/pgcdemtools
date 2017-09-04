@@ -12,8 +12,6 @@ ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
 tgt_srs = osr.SpatialReference()
 tgt_srs.ImportFromEPSG(3413)
 
-
-
 def main():
     
     #### Set Up Arguments 

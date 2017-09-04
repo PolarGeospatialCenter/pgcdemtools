@@ -32,7 +32,7 @@ def main():
     rasters = []
     #### ID rasters
     logger.info('Identifying DEMs')
-    if os.path.isfile(src) and f.endswith("_dem.tif") and not f.startswith("SETSM_"):
+    if os.path.isfile(src) and src.endswith("_dem.tif") and not os.path.basename(src).startswith("SETSM_"):
         logger.debug(src)
         try:
             raster = dem.SetsmDem(os.path.join(src))
