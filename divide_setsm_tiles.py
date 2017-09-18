@@ -110,6 +110,14 @@ def main():
                 dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], tile_res, version_str))
             else:
                 dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], tile_res, version_str))
+            
+            #### verify that cutlines can be found if requested
+            if args.cutline_loc:
+                tile = raster.tile_name
+                cutline_shp = os.path.join(args.cutline_loc, tile + '_cut.shp')
+                if not os.path.isfile(cutline_shp):
+                    logger.warning("Cutline shp not found for tile {}".format(raster.tileid))
+            
             if len(dstfp_list) == 0:
                 i+=1
                 task = taskhandler.Task(
@@ -147,6 +155,14 @@ def main():
                                 dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], tile_res, version_str))
                             if len(dstfp_list) == 0:
                                 logger.info("computing tile: {}".format(srcfp))
+                                
+                                #### verify that cutlines can be found if requested
+                                if args.cutline_loc:
+                                    tile = raster.tilename
+                                    cutline_shp = os.path.join(args.cutline_loc, tile + '_cut.shp')
+                                    if not os.path.isfile(cutline_shp):
+                                        logger.warning("Cutline shp not found for tile {}".format(raster.tileid))
+                                        
                                 i+=1
                                 task = taskhandler.Task(
                                     raster.tileid,
@@ -162,6 +178,7 @@ def main():
                                 logger.info("output tile(s) already exist: {}".format(srcfp))
                         
     logger.info('Number of incomplete tasks: {}'.format(i))
+    
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
         if args.pbs:
@@ -234,7 +251,7 @@ def divide_tile(src, args):
         ## aaply cutline file is present
         if args.cutline_loc:
             tile = '_'.join(os.path.basename(src).split('_')[:2])
-            cutline_shp = os.path.join(args.cutline_loc, tile + '_v1.0_cut.shp')
+            cutline_shp = os.path.join(args.cutline_loc, tile + '_cut.shp')
             mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], tile_res, version_str)
             if not os.path.isfile(cutline_shp):
                 logger.info('No cutline file found for src tile: {}'.format(cutline_shp))
