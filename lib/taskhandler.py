@@ -55,6 +55,40 @@ class PBSTaskHandler(object):
             subprocess.call(cmd, shell=True)
 
 
+class PBSTaskGenerator(object):
+
+    def __init__(self, qsubscript, qsub_args=""):
+
+        ####  verify PBS is present by calling pbsnodes cmd
+        try:
+            cmd = "pbsnodes"
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            so, se = p.communicate()
+        except OSError,e:
+            raise RuntimeError("PBS job submission is not available on this system")
+
+        self.qsubscript = qsubscript
+        if not qsubscript:
+            raise RuntimeError("PBS job submission resuires a valid qsub script")
+        elif not os.path.isfile(qsubscript):
+            raise RuntimeError("Qsub script does not exist: {}".format(qsubscript))
+
+        self.qsub_args = qsub_args
+
+    def run_tasks(self, tasks, dstdir):
+        
+        fh = open(self.qsubscript,'r')
+        buf = fh.read()
+        fh.close()
+        
+        for task in tasks:
+            # read in qsub and write out in dstdir
+            qs = os.path.join(dstdir,task.name)+".sh"
+            fh = open(qs,'w')
+            fh.write(buf.replace("$p1",task.cmd))
+            fh.close()
+
+
 class SLURMTaskHandler(object):
 
     def __init__(self, qsubscript, qsub_args=""):

@@ -41,7 +41,7 @@ for x in range(6,8):
 
 #### Strip DEM name pattern
 setsm_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>[SEG\d]+)_(?P<res>\d+m)_?(?P<crdate>\d{8})?(?P<version>v[\d/.]+)?_dem.(tif|jpg)\Z", re.I)
-asp_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<res>\d+m)-DEM.(tif|jpg)\Z", re.I)
+asp_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_?(?P<res>\d+m)?-DEM.(tif|jpg)\Z", re.I)
 setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>[258]m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
 
 class SetsmDem(object):
@@ -713,28 +713,30 @@ class AspDem(object):
     
             ds2 = ogr.Open(index)
             if ds2 is not None:
-    
-                lyr2 = ds2.GetLayerByName('OGRGeoJSON')
-                lyr2.ResetReading()
-                srs = lyr2.GetSpatialRef()
-    
-                for feat2 in lyr2:
-    
-                    #get attribs
-                    for fld_def in utils.OVERLAP_FILE_ATTRIBUTE_DEFINITIONS:
-                        fld = fld_def.fname
-                        i = feat2.GetFieldIndex(fld)
-                        if i >= 0:
-                            attrib = feat2.GetField(i)
-                            if attrib:
-                                if fld == "OVERLAP":
-                                    overlap = attrib
-                                if fld == "DEM_NAME":
-                                    dem_name = attrib
-    
-    
-                    #### transfrom and write geom
-                    self.exact_geom = feat2.GetGeometryRef().Clone()
+                lyr2 = ds2.GetLayer(0)
+                if not lyr2:
+                    logger.error("Cannot read {}".format(index))
+                else:
+                    lyr2.ResetReading()
+                    srs = lyr2.GetSpatialRef()
+        
+                    for feat2 in lyr2:
+        
+                        #get attribs
+                        for fld_def in utils.OVERLAP_FILE_ATTRIBUTE_DEFINITIONS:
+                            fld = fld_def.fname
+                            i = feat2.GetFieldIndex(fld)
+                            if i >= 0:
+                                attrib = feat2.GetField(i)
+                                if attrib:
+                                    if fld == "OVERLAP":
+                                        overlap = attrib
+                                    if fld == "DEM_NAME":
+                                        dem_name = attrib
+        
+        
+                        #### transfrom and write geom
+                        self.exact_geom = feat2.GetGeometryRef().Clone()
     
             ds2 = None
 
