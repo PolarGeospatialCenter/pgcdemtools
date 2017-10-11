@@ -27,7 +27,7 @@ shelve_setsm_by_geocell - Move or copy a SETSM DEM or a directory of DEMs into f
 
 shelve_setsm_by_shp - Move or copy a SETSM DEM or a directory of DEMs into folders based on a custon shapefile index.
 
-### Retrieval
+### Retrieve
 copy_dems - Copy DEMs using a subset of the DEM index bult using index_setsm.py.
 
 ### Misc
@@ -36,6 +36,9 @@ apply_setsm_registration - If GCP registration information is included with a SE
 resample_setsm - resample SETSM DEMs to a lower resolution.
 
 divide_setsm_tiles - Divide SETSM DEM mosaic tiles into subtiles.
+
+## Usage notes
+Some of the tools are designed to be run either in a serial, parallel, or with a PBS scheduler.  IF the --pbs option is available, the tools can submit it's jobs to a PBS scheduler.  the qsub* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows several the tool to operate on several tasks at once.
 
 ## Contact
 Claire Porter
