@@ -2,9 +2,9 @@
 Tools for indexing, shelving, copying, and modifying SETSM and ASP dems
 
 ## Download
-Version `1.0.0` released 11 Oct 2017.
+Version `1.0` released 11 Oct 2017.
 
-#### [Download Latest](https://github.com/PolarGeospatialCenter/pgcdemtools/v1.0.0)
+#### [Download Latest](https://github.com/PolarGeospatialCenter/pgcdemtools/releases)
 
 ## Tools
 ### Rename
