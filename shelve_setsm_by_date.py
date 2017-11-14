@@ -24,7 +24,7 @@ def main():
     parser.add_argument('dst', help="destination directory")
     
     #### Optionsl Arguments
-    parser.add_argument('--try-link', action='store_true', default=False, help="try linking instead of moving files")
+    parser.add_argument('--try-link', action='store_true', default=False, help="try linking instead of copying files")
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -116,22 +116,22 @@ def main():
         for ifp in glob.glob(os.path.join(raster.srcdir,raster.stripid)+"*"):
             ofp = os.path.join(dst_dir,os.path.basename(ifp))
             if os.path.isfile(ofp) and args.overwrite:
-                logger.debug("Moving {} to {}".format(ifp,ofp))
+                logger.debug("Copying {} to {}".format(ifp,ofp))
                 if not args.dryrun:
                     os.remove(ofp)
                     if args.try_link:
                         os.link(ifp,ofp)
                     else:
-                        os.rename(ifp,ofp)
+                        shutil.copy2(ifp,ofp)
 
                     
             elif not os.path.isfile(ofp):
-                logger.debug("Moving {} to {}".format(ifp,ofp))
+                logger.debug("Copying {} to {}".format(ifp,ofp))
                 if not args.dryrun:
                     if args.try_link:
                         os.link(ifp,ofp)
                     else:
-                        os.rename(ifp,ofp)
+                        shutil.copy2(ifp,ofp)
 
                     
             else:
