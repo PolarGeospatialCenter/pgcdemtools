@@ -71,8 +71,10 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     ## Overlap attributes
     StandardAttribute("DEM_ID", ogr.OFTString, 254, 0),
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
-    StandardAttribute("SENSOR", ogr.OFTString, 8, 0),
-    StandardAttribute("ACQDATE", ogr.OFTString, 32, 0),
+    StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
+    StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
+    StandardAttribute("ACQDATE1", ogr.OFTString, 32, 0),
+    StandardAttribute("ACQDATE2", ogr.OFTString, 32, 0),
     StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
     StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
     StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),

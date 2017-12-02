@@ -40,7 +40,7 @@ for x in range(6,8):
         epsgs.append(epsg)
 
 #### Strip DEM name pattern
-setsm_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>[SEG\d]+)_(?P<res>\d+m)_?(?P<crdate>\d{8})?(?P<version>v[\d/.]+)?_dem.(tif|jpg)\Z", re.I)
+setsm_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z][A-Z\d]{2}\d)_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>[SEG\d]+)_(?P<res>\d+m)_?(?P<crdate>\d{8})?(?P<version>v[\d/.]+)?_dem.(tif|jpg)\Z", re.I)
 asp_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_?(?P<res>\d+m)?-DEM.(tif|jpg)\Z", re.I)
 setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>[258]m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
 
@@ -54,7 +54,6 @@ class SetsmDem(object):
         if os.path.isfile(metapath):
             self.metapath = metapath
         else:
-            raise RuntimeError("Source meta file not found: {}".format(metapath))
             self.metapath = None
             
         self.matchtag = os.path.join(self.srcdir,self.stripid+"_matchtag.tif")
@@ -77,11 +76,13 @@ class SetsmDem(object):
             self.pairname = groups['pairname']
             self.catid1 = groups['catid1']
             self.catid2 = groups['catid2']
-            self.acqdate = datetime.strptime(groups['timestamp'], '%Y%m%d')
-            self.sensor = groups['sensor']
+            self.acqdate1 = datetime.strptime(groups['timestamp'], '%Y%m%d') # if present, the metadata file value will overwrite this
+            self.acqdate2 = self.acqdate1 
+            self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
+            self.sensor2 = self.sensor1
             self.res = groups['res']
             self.creation_date = None
-            self.algm_version = 'SETSM'
+            self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
             self.exact_geom = None
             if 'version' in groups:
                 self.version = groups['version']
@@ -110,74 +111,6 @@ class SetsmDem(object):
         self.geocell = '{}{:02d}{}{:03d}'.format(lat_letter, int(abs(math.floor(lat))), lon_letter, int(abs(math.floor(lon))))
         return self.geocell
 
-    def _parse_metadata_file(self):
-        metad = {}
-        
-        mdf = open(self.metapath,'r')
-        in_header = True
-        scene_dict = None
-        scene_list = []
-        alignment_dct = {}
-        for line in mdf.readlines():
-            l = line.strip()
-            
-            if l:
-                #print l, in_header
-                #### Set scene number marker
-                if l == 'Scene Metadata':
-                    scene_num = 0
-                    in_header = False
-                elif l.startswith("scene ") and not in_header:
-                    scene_num +=1
-                    #print scene_dict
-                    if scene_dict is not None:
-                        scene_list.append(scene_dict)
-                    scene_dict = {}
-                    
-                #### strip metadata info
-                if in_header:
-                    if ': ' in l:
-                        try:
-                            key,val = l.split(': ')
-                        except ValueError, e:
-                            logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
-                        else:
-                            metad[key.strip()] = val.strip()                
-                
-                    elif '.tif ' in l:
-                        alignment_stats = l.split()
-                        scene_id = os.path.splitext(alignment_stats[0])[0]
-                        alignment_dct[scene_id] = alignment_stats[1:]
-                
-                #### scene metadata info
-                if not in_header:
-                    if '=' in l:
-                        if l.startswith('Output Projection='):
-                            key = 'Output Projection='
-                            val = l[l.find('=')+1:]
-                        else:
-                            try:
-                                key,val = l.split('=')
-                            except ValueError, e:
-                                logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,self.metapath))
-                            else:
-                                if key.startswith('scene '):
-                                    key = 'scene_name'
-                                    scene_dict[key.strip()] = os.path.splitext(val.strip())[0]
-                                else:
-                                    scene_dict[key.strip()] = val.strip()
-        
-        if scene_dict is not None:
-            scene_list.append(scene_dict)
-        metad['scene_list'] = scene_list
-        metad['alignment_dct'] = alignment_dct
-        
-        mdf.close()
-        
-        #print metad
-        
-        return metad
-    
     def get_dem_info(self):
         
         ds = gdal.Open(self.srcfp)
@@ -259,49 +192,7 @@ class SetsmDem(object):
 
         ds = None
         
-        #### if metadata file parse it
-        if self.metapath:
-            try:
-                scene_count = len(self.scenes)
-            except AttributeError:
-                self.get_metafile_info()
-
-            #### If density file exists, get density from there
-            self.density = None
-            self.stats = (None, None, None, None)
-            if os.path.isfile(self.density_file):
-                fh = open(self.density_file,'r')
-                lines = fh.readlines()
-                density = lines[0].strip()
-                self.density = float(density)
-                stats = lines[1].strip().split(',')
-                try:
-                    self.stats = [float(stat) for stat in stats]
-                except ValueError:
-                    self.stats = (None,None,None,None)
-                fh.close()
-                
-            #### If reg.txt file exists, parse it for registration info
-            self.reginfo_list = []
-            
-            for reg_file in self.reg_files:
-                dx, dy, dz, num_gcps, mean_resid_z = [None, None, None, None, None]
-                if os.path.isfile(reg_file):
-                    fh = open(reg_file, 'r')
-                    for line in fh.readlines():
-                        if line.startswith("Translation Vector (dz,dx,dy)"):
-                            vectors = line.split('=')[1].split(',')
-                            dz, dx, dy = [float(v.strip()) for v in vectors]
-                        elif line.startswith("Mean Vertical Residual"):
-                            mean_resid_z = line.split('=')[1].strip()
-                        elif line.startswith("# GCPs"):
-                            num_gcps = line.split('=')[1].strip()
-                    if dx is not None and num_gcps is not None and mean_resid_z is not None:
-                        self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, reg_file))
-                    else:
-                        logger.error("Registration file cannot be parsed: {}".format(reg_file))
-                    #logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
-                    fh.close()
+        self.get_metafile_info() 
 
     def compute_density_and_statistics(self):
         #### If no mdf or mdf does not contain valid density key, compute
@@ -351,41 +242,183 @@ class SetsmDem(object):
                                     
     def get_metafile_info(self):
         
-        metad = self._parse_metadata_file()
-        self.scenes = metad['scene_list']
-        self.alignment_dct = metad['alignment_dct']
+        ## If metafile exists
+        if self.metapath:
+            metad = self._parse_metadata_file()
+            
+            self.scenes = metad['scene_list']
+            self.alignment_dct = metad['alignment_dct']
+            
+            pts = zip(metad['X'].split(), metad['Y'].split())
+            #### create geometry
+            
+            if pts == [('NaN', 'NaN')]:
+                logger.error("No valid vertices found: {}".format(self.metapath))
+                self.exact_geom = None
+            else:
+                poly_vts = []
+                for pt in pts:
+                    poly_vts.append("{} {}".format(pt[0],pt[1]))
+                if len(pts) > 0:
+                    poly_vts.append("{} {}".format(pts[0][0],pts[0][1]))
+                
+                if len(poly_vts) > 0:
+                    poly_wkt = 'POLYGON (( {} ))'.format(", ".join(poly_vts))
+                    self.exact_geom = ogr.CreateGeometryFromWkt(poly_wkt)
+            
+            self.proj4_meta = metad['Strip projection (proj4)'].replace("'","")
+            
+            if 'Strip creation date' in metad:
+                self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
+            else:
+                raise RuntimeError('Key "Strip Creation" not found in meta dict from {}'.format(self.metapath))
+            
+            # get ersion    
+            values = []
+            for x in range(len(self.scenes)):
+                if 'SETSM Version' in self.scenes[x]:
+                    values.append(self.scenes[x]['SETSM Version'])
+            if len(values) > 0:
+                self.algm_version = 'SETSM {}'.format(values[0])
+                            
+            ## get acqdates
+            values = []
+            for x in range(len(self.scenes)):
+                if 'Image_1_Acquisition_time' in self.scenes[x]:
+                    values.append(self.scenes[x]['Image_1_Acquisition_time'])
+            if len(values) > 0:
+                self.acqdate1 = datetime.strptime(values[0], "%Y-%m-%dT%H:%M:%S.%fZ")
+            
+            values = []
+            for x in range(len(self.scenes)):
+                if 'Image_2_Acquisition_time' in self.scenes[x]:
+                    values.append(self.scenes[x]['Image_2_Acquisition_time'])
+            if len(values) > 0:
+                self.acqdate2 = datetime.strptime(values[0], "%Y-%m-%dT%H:%M:%S.%fZ")
+            
+            ## get sensors
+            values = []
+            for x in range(len(self.scenes)):
+                if 'Image_1_satID' in self.scenes[x]:
+                    values.append(self.scenes[x]['Image_1_satID'])
+            if len(values) > 0:
+                self.sensor1 = values[0]
+            
+            values = []
+            for x in range(len(self.scenes)):
+                if 'Image_2_satID' in self.scenes[x]:
+                    values.append(self.scenes[x]['Image_2_satID'])
+            if len(values) > 0:
+                self.sensor2 = values[0]
+            
+            #### If density file exists, get density from there
+            self.density = None
+            self.stats = (None, None, None, None)
+            if os.path.isfile(self.density_file):
+                fh = open(self.density_file,'r')
+                lines = fh.readlines()
+                density = lines[0].strip()
+                self.density = float(density)
+                stats = lines[1].strip().split(',')
+                try:
+                    self.stats = [float(stat) for stat in stats]
+                except ValueError:
+                    self.stats = (None,None,None,None)
+                fh.close()
+                
+            #### If reg.txt file exists, parse it for registration info
+            self.reginfo_list = []
+            
+            for reg_file in self.reg_files:
+                dx, dy, dz, num_gcps, mean_resid_z = [None, None, None, None, None]
+                if os.path.isfile(reg_file):
+                    fh = open(reg_file, 'r')
+                    for line in fh.readlines():
+                        if line.startswith("Translation Vector (dz,dx,dy)"):
+                            vectors = line.split('=')[1].split(',')
+                            dz, dx, dy = [float(v.strip()) for v in vectors]
+                        elif line.startswith("Mean Vertical Residual"):
+                            mean_resid_z = line.split('=')[1].strip()
+                        elif line.startswith("# GCPs"):
+                            num_gcps = line.split('=')[1].strip()
+                    if dx is not None and num_gcps is not None and mean_resid_z is not None:
+                        self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, reg_file))
+                    else:
+                        logger.error("Registration file cannot be parsed: {}".format(reg_file))
+                    #logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
+                    fh.close()
         
-        pts = zip(metad['X'].split(), metad['Y'].split())
-        #### create geometry
-        
-        if pts == [('NaN', 'NaN')]:
-            logger.error("No valid vertices found: {}".format(self.metapath))
-            self.exact_geom = None
-        else:
+        ## If mdf exists without metafile 
+        elif os.path.isfile(self.mdf):
+            metad = self._read_mdf_file()
+
+            ## populate attribs
+            ## exact_geom
+            keys = metad.keys()
+            x_keys = [int(k[11:]) for k in keys if k.startswith("STRIP_DEM_X") ]
+            y_keys = [int(k[11:]) for k in keys if k.startswith("STRIP_DEM_Y") ]
+            x_keys.sort()
+            y_keys.sort()
+            
             poly_vts = []
-            for pt in pts:
-                poly_vts.append("{} {}".format(pt[0],pt[1]))
-            if len(pts) > 0:
-                poly_vts.append("{} {}".format(pts[0][0],pts[0][1]))
+            for i in range(1,len(x_keys)+1):
+                x = metad["STRIP_DEM_X{}".format(i)]
+                y = metad["STRIP_DEM_Y{}".format(i)]
+                poly_vts.append("{} {}".format(x,y))
             
             if len(poly_vts) > 0:
+                poly_vts.append("{} {}".format(metad["STRIP_DEM_X1"],metad["STRIP_DEM_Y1"]))
                 poly_wkt = 'POLYGON (( {} ))'.format(", ".join(poly_vts))
                 self.exact_geom = ogr.CreateGeometryFromWkt(poly_wkt)
-        
-        if 'Strip creation date' in metad:
-            self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
+             
+            ## density, stats, proj4, creation date, version
+            try:
+                self.density = float(metad['STRIP_DEM_matchtagDensity'])
+            except ValueError, e:
+                logger.info("Cannot convert density value ({}) to float for {}".format(metad['STRIP_DEM_matchtagDensity'], self.srcfp))
+                self.density = None
+            
+            try:
+                min_elev = float(metad['STRIP_DEM_minElevValue'])
+                max_elev = float(metad['STRIP_DEM_maxElevValue'])
+            except ValueError, e:
+                logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
+                min_elev, max_elev = None, None
+            
+            self.stats = (min_elev, max_elev, None, None)
+            self.proj4_meta = metad['STRIP_DEM_horizontalCoordSysProj4'].replace("'","")
+            self.creation_date = datetime.strptime(metad['STRIP_DEM_stripCreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+            
+            try:
+                self.algm_version = metad['COMPONENT_1_setsmVersion']
+            except KeyError, e:
+                pass
+            
+            ## acqdate
+            try:
+                self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate1'], "%Y-%m-%d")
+                self.acqdate2 = datetime.strptime(metad['STRIP_DEM_acqDate2'], "%Y-%m-%d")
+            except KeyError, e:
+                self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate'], "%Y-%m-%d")
+                self.acqdate2 = self.acqdate1            
+            
+            ## registration info (code assumes only one registration source in mdf)
+            self.reginfo_list = []
+            try:
+                dx = float(metad['STRIP_DEM_REGISTRATION_registrationDX'])
+                dy = float(metad['STRIP_DEM_REGISTRATION_registrationDY'])
+                dz = float(metad['STRIP_DEM_REGISTRATION_registrationDZ'])
+                mean_resid_z = float(metad['STRIP_DEM_REGISTRATION_registrationMeanVerticalResidual'])
+                num_gcps = int(metad['STRIP_DEM_REGISTRATION_registrationNumGCPs'])
+                name = metad['STRIP_DEM_REGISTRATION_registrationSource']
+            except KeyError, e:
+                logger.warning("Registration info not found in {}".format(self.srcfp))
+            else:
+                self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
+            
         else:
-            raise RuntimeError('Key "Strip Creation" not found in meta dict from {}'.format(self.metapath))
-            
-        versions = []
-        for x in range(len(self.scenes)):
-            if 'SETSM Version' in self.scenes[x]:
-                versions.append(self.scenes[x]['SETSM Version'])
-        if len(versions) > 0:
-            self.algm_version = 'SETSM {}'.format(versions[0])
-            
-        self.proj4_meta = metad['Strip projection (proj4)'].replace("'","")
-   
+            raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
+
     def write_mdf_file(self):
         
         if self.exact_geom:
@@ -408,10 +441,12 @@ class SetsmDem(object):
                 ('stripCreationTime',(self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
                 ('releaseVersion','"{}"'.format(self.version if self.version else 'NA')),
                 ('noDataValue',self.ndv),
-                ('platform','"{}"'.format(self.sensor)),
+                ('platform1','"{}"'.format(self.sensor1)),
+                ('platform2','"{}"'.format(self.sensor2)),
                 ('catId1','"{}"'.format(self.catid1)),
                 ('catId2','"{}"'.format(self.catid2)),
-                ('acqDate',self.acqdate.strftime("%Y-%m-%d")),
+                ('acqDate1',self.acqdate1.strftime("%Y-%m-%d")),
+                ('acqDate2',self.acqdate2.strftime("%Y-%m-%d")),
             ]
             
             #### make list of points
@@ -536,6 +571,25 @@ class SetsmDem(object):
             #logger.info("\n"+text)
             mdf.write(text)
             mdf.close()
+   
+    def write_readme_file(self):
+        #### general info
+        readme_contents = [
+            ('licenseText','"Acknowledgment for the SETSM surface models should be present in any publication, proceeding, presentation, etc. You must notify Ian Howat at The Ohio State University if you are to use the surface models in any of those forms. Please note, the SETSM mosaics are currently in BETA release. The dataset authors make no guarantees of product accuracy and cannot be held liable for any errors, events, etc. arising from its use."'),
+            ('contact','"Polar Geospatial Center, University of Minnesota, 612-626-0505, www.pgc.umn.edu"'),
+            ('BEGIN_GROUP','PRODUCT_1'),
+            ('demFilename','{}'.format(self.srcfn)),
+            ('metadataFilename','{}'.format(os.path.basename(self.mdf))),
+            ('matchtagFilename','{}'.format(os.path.basename(self.matchtag))),
+            ('readmeFilename','{}'.format(os.path.basename(self.readme))),
+            ('END_GROUP','PRODUCT_1'),
+        ]
+        
+        readme = open(self.readme,'w')
+        text = format_as_imd(readme_contents)
+        #logger.info(text)
+        readme.write(text)
+        readme.close()
     
     def _read_mdf_file(self):
         if os.path.isfile(self.mdf):
@@ -561,7 +615,75 @@ class SetsmDem(object):
             return mdf_dct
         else:
             return None
+
+    def _parse_metadata_file(self):
+        metad = {}
         
+        mdf = open(self.metapath,'r')
+        in_header = True
+        scene_dict = None
+        scene_list = []
+        alignment_dct = {}
+        for line in mdf.readlines():
+            l = line.strip()
+            
+            if l:
+                #print l, in_header
+                #### Set scene number marker
+                if l == 'Scene Metadata':
+                    scene_num = 0
+                    in_header = False
+                elif l.startswith("scene ") and not in_header:
+                    scene_num +=1
+                    #print scene_dict
+                    if scene_dict is not None:
+                        scene_list.append(scene_dict)
+                    scene_dict = {}
+                    
+                #### strip metadata info
+                if in_header:
+                    if ': ' in l:
+                        try:
+                            key,val = l.split(': ')
+                        except ValueError, e:
+                            logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
+                        else:
+                            metad[key.strip()] = val.strip()                
+                
+                    elif '.tif ' in l:
+                        alignment_stats = l.split()
+                        scene_id = os.path.splitext(alignment_stats[0])[0]
+                        alignment_dct[scene_id] = alignment_stats[1:]
+                
+                #### scene metadata info
+                if not in_header:
+                    if '=' in l:
+                        if l.startswith('Output Projection='):
+                            key = 'Output Projection='
+                            val = l[l.find('=')+1:]
+                        else:
+                            try:
+                                key,val = l.split('=')
+                            except ValueError, e:
+                                logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,self.metapath))
+                            else:
+                                if key.startswith('scene '):
+                                    key = 'scene_name'
+                                    scene_dict[key.strip()] = os.path.splitext(val.strip())[0]
+                                else:
+                                    scene_dict[key.strip()] = val.strip()
+        
+        if scene_dict is not None:
+            scene_list.append(scene_dict)
+        metad['scene_list'] = scene_list
+        metad['alignment_dct'] = alignment_dct
+        
+        mdf.close()
+        
+        #print metad
+        
+        return metad
+    
     def _parse_creation_date(self, creation_date):
         if len(creation_date) <= 2:
             return ''
@@ -571,26 +693,7 @@ class SetsmDem(object):
             return datetime.strptime(creation_date[:-6],"%Y-%m-%d %H:%M:%S.%f").strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         else: #if len(creation_date) <= 36:  #2016-01-11 11:49:50.835182735 -0500
             return datetime.strptime(creation_date[:26],"%Y-%m-%d %H:%M:%S.%f").strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-   
-    def write_readme_file(self):
-        #### general info
-        readme_contents = [
-            ('licenseText','"Acknowledgment for the SETSM surface models should be present in any publication, proceeding, presentation, etc. You must notify Ian Howat at The Ohio State University if you are to use the surface models in any of those forms. Please note, the SETSM mosaics are currently in BETA release. The dataset authors make no guarantees of product accuracy and cannot be held liable for any errors, events, etc. arising from its use."'),
-            ('contact','"Polar Geospatial Center, University of Minnesota, 612-626-0505, www.pgc.umn.edu"'),
-            ('BEGIN_GROUP','PRODUCT_1'),
-            ('demFilename','{}'.format(self.srcfn)),
-            ('metadataFilename','{}'.format(os.path.basename(self.mdf))),
-            ('matchtagFilename','{}'.format(os.path.basename(self.matchtag))),
-            ('readmeFilename','{}'.format(os.path.basename(self.readme))),
-            ('END_GROUP','PRODUCT_1'),
-        ]
-        
-        readme = open(self.readme,'w')
-        text = format_as_imd(readme_contents)
-        #logger.info(text)
-        readme.write(text)
-        readme.close()
- 
+
 
 class AspDem(object):
     def __init__(self,filepath):
@@ -1070,16 +1173,20 @@ class SetsmTile(object):
 
 class RegInfo(object):
     
-    def __init__(self, dx, dy, dz, num_gcps, mean_resid_z, src):
+    def __init__(self, dx, dy, dz, num_gcps, mean_resid_z, src, name=None):
         self.src = src
         
-        self.name = 'Unknown'
-        if src.endswith('oibreg.txt'):
-            self.name = 'IceBridge'
-        elif src.endswith('ngareg.txt'):
-            self.name = 'NGA'
-        elif src.endswith('reg.txt'):
-            self.name = 'ICESat'
+        if name:
+            self.name = name
+        
+        else:
+            self.name = 'Unknown'
+            if src.endswith('oibreg.txt'):
+                self.name = 'IceBridge'
+            elif src.endswith('ngareg.txt'):
+                self.name = 'NGA'
+            elif src.endswith('reg.txt'):
+                self.name = 'ICESat'
         
         self.dx = dx
         self.dy = dy
