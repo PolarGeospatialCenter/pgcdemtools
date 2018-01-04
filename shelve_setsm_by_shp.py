@@ -107,10 +107,10 @@ def main():
             except RuntimeError, e:
                 logger.error( e )
             else:
-                if raster.metapath is not None:
+                if raster.metapath or os.path.isfile(raster.mdf):
                     rasters.append(raster)
                 else:
-                    logger.warning("DEM does not include a valid meta.txt, skipping: {}".format(raster.srcfp))
+                    logger.warning("DEM does not include a valid meta.txt or mdf.txt, skipping: {}".format(raster.srcfp))
         
         else:
             for root,dirs,files in os.walk(src):
@@ -122,10 +122,10 @@ def main():
                         except RuntimeError, e:
                             logger.error( e )
                         else:
-                            if raster.metapath is not None:
+                            if raster.metapath or os.path.isfile(raster.mdf):
                                 rasters.append(raster)
                             else:
-                                logger.warning("DEM does not include a valid meta.txt, skipping: {}".format(raster.srcfp))
+                                logger.warning("DEM does not include a valid meta.txt or mdf.txt, skipping: {}".format(raster.srcfp))
         
         logger.info('Shelving DEMs')
         total = len(rasters)
@@ -151,8 +151,11 @@ def main():
                 if centroid.Intersects(tile_geom):
                     tile_overlaps.append(tile_name)
             
-            ## Raise an error on multiple intersections        
-            if len(tile_overlaps) > 1:
+            ## Raise an error on multiple intersections or zero intersections
+            if len (tile_overlaps) == 0:
+                logger.error("raster {} does not intersect the index shp, skipping".format(raster.srcfn))
+            
+            elif len(tile_overlaps) > 1:
                 logger.error("raster {} intersects more than one tile ({}), skipping".format(raster.srcfn, ','.join(tile_overlaps)))
             
             else:

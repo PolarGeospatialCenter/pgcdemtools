@@ -179,8 +179,10 @@ def main():
                         ## Set fields
                         feat.SetField("DEM_ID",raster.stripid)
                         feat.SetField("PAIRNAME",raster.pairname)
-                        feat.SetField("SENSOR",raster.sensor)
-                        feat.SetField("ACQDATE",raster.acqdate.strftime("%Y-%m-%d"))
+                        feat.SetField("SENSOR1",raster.sensor1)
+                        feat.SetField("SENSOR2",raster.sensor2)
+                        feat.SetField("ACQDATE1",raster.acqdate1.strftime("%Y-%m-%d"))
+                        feat.SetField("ACQDATE2",raster.acqdate2.strftime("%Y-%m-%d"))
                         feat.SetField("CATALOGID1",raster.catid1)
                         feat.SetField("CATALOGID2",raster.catid2)
                         feat.SetField("ND_VALUE",raster.ndv)
