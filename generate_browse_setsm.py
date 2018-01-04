@@ -141,6 +141,9 @@ def main():
                 
                 if not args.dryrun:
                     task.method(src, task_arg_obj)
+                
+                #### remove existing file handler
+                logger.removeHandler(lfh)
     
     else:
         logger.info("No tasks found to process")

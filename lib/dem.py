@@ -40,7 +40,7 @@ for x in range(6,8):
         epsgs.append(epsg)
 
 #### Strip DEM name pattern
-setsm_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>[SEG\d]+)_(?P<res>\d+m)_?(?P<crdate>\d{8})?(?P<version>v[\d/.]+)?_dem.(tif|jpg)\Z", re.I)
+setsm_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z][A-Z\d]{2}\d)_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>[SEG\d]+)_(?P<res>\d+m)_?(?P<crdate>\d{8})?(?P<version>v[\d/.]+)?_dem.(tif|jpg)\Z", re.I)
 asp_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_?(?P<res>\d+m)?-DEM.(tif|jpg)\Z", re.I)
 setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>[258]m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
 

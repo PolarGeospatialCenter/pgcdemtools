@@ -133,7 +133,10 @@ def main():
                 src, task_arg_obj = task.method_arg_list
                 
                 #### Set up processing log handler
-                logfile = os.path.splitext(src)[0]+".log"
+                if args.dstdir:
+                    logfile = "{}.log".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(src)[0])))
+                else:
+                    logfile = os.path.splitext(src)[0]+".log"
                 lfh = logging.FileHandler(logfile)
                 lfh.setLevel(logging.DEBUG)
                 formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
@@ -142,6 +145,9 @@ def main():
                 
                 if not args.dryrun:
                     task.method(src, task_arg_obj)
+                
+                #### remove existing file handler
+                logger.removeHandler(lfh)
     
     else:
         logger.info("No tasks found to process")
@@ -168,7 +174,7 @@ def apply_reg(srcfp, args):
             trans_vector = line.strip().split('=')[1]
             trans_vector = trans_vector.split(', ')
             dx, dy, dz = [float(parm.strip()) for parm in trans_vector]
-            print dx, dy, dz
+            logger.info("Translation Vector (dx, dy, dz) (m) = {}, {}, {}".format(dx, dy, dz))
     regfh.close()
     
     ## open image and built vrt with modified geotransform for x and y offset
@@ -217,18 +223,21 @@ def apply_reg(srcfp, args):
         if os.path.isfile(reg_vrt) and not os.path.isfile(temp_fp):
             cmd = 'gdal_translate -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,dstfp)
             if not args.dryrun:
+                logger.info(cmd)
                 subprocess.call(cmd,shell=True)
     
     else:
         if os.path.isfile(reg_vrt) and not os.path.isfile(temp_fp):
             cmd = 'gdal_translate -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,temp_fp)
             if not args.dryrun:
+                logger.info(cmd)
                 subprocess.call(cmd,shell=True)
                 
         ## use gdal_calc to modify for z offset if raster is a DEM only
         if os.path.isfile(temp_fp) and not os.path.isfile(dstfp):
             cmd = 'gdal_calc.py --co COMPRESS=LZW --co TILED=YES -A {} --calc "A+{}" --outfile {}'.format(temp_fp,dz,dstfp)
             if not args.dryrun:
+                logger.info(cmd)
                 subprocess.call(cmd,shell=True)
         
         files_to_remove.append(temp_fp)
