@@ -38,7 +38,7 @@ resample_setsm - resample SETSM DEMs to a lower resolution.
 divide_setsm_tiles - Divide SETSM DEM mosaic tiles into subtiles.
 
 ## Usage notes
-Some of the tools are designed to be run either in a serial, parallel, or with a PBS scheduler.  IF the --pbs option is available, the tools can submit it's jobs to a PBS scheduler.  the qsub* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows several the tool to operate on several tasks at once.
+Some of the tools are designed to be run either in a serial, parallel, or with a PBS scheduler.  If a PBS scheduler is present, the --pbs option can often be used to submit the jobs to PBS.  The qsub* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
 
 ## Contact
 Claire Porter
