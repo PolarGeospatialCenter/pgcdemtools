@@ -67,7 +67,7 @@ def main():
     logger.addHandler(lso)
     
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
+    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'slurm', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
         
     task_queue = []
