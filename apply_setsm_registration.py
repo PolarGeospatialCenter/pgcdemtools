@@ -22,10 +22,12 @@ def main():
                 help="overwrite existing files if present")
     parser.add_argument("--pbs", action='store_true', default=False,
                 help="submit tasks to PBS")
+    parser.add_argument("--slurm", action='store_true', default=False,
+                help="submit tasks to SLURM")
     parser.add_argument("--parallel-processes", type=int, default=1,
                 help="number of parallel processes to spawn (default 1)")
     parser.add_argument("--qsubscript",
-                help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
+                help="qsub script to use in scheduler submission (PBS default is qsub_resample.sh, SLURM default is slurm_resample.sh)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
     pos_arg_keys = ['src']
@@ -40,16 +42,22 @@ def main():
         parser.error('src must be avalid directory or file')
         
     ## Verify qsubscript
-    if args.qsubscript is None:
-        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_resample.sh')
-    else:
-        qsubpath = os.path.abspath(args.qsubscript)
-    if not os.path.isfile(qsubpath):
-        parser.error("qsub script path is not valid: %s" %qsubpath)
+    if args.pbs or args.slurm:
+        if args.qsubscript is None:
+            if args.pbs:
+                qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_resample.sh')
+            if args.slurm:
+                qsubpath = os.path.join(os.path.dirname(scriptpath),'slurm_resample.sh')
+        else:
+            qsubpath = os.path.abspath(args.qsubscript)
+        if not os.path.isfile(qsubpath):
+            parser.error("qsub script path is not valid: %s" %qsubpath)
     
     ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
+    if args.pbs and args.slurm:
+        parser.error("Options --pbs and --slurm are mutually exclusive")
+    if (args.pbs or args.slurm) and args.parallel_processes > 1:
+        parser.error("HPC Options (--pbs or --slurm) and --parallel-processes > 1 are mutually exclusive")
     
     #### Set up console logging handler
     lso = logging.StreamHandler()
@@ -81,7 +89,7 @@ def main():
                     i+=1
                     task = taskhandler.Task(
                         os.path.basename(srcfp),
-                        'ApplyReg{:04g}'.format(i),
+                        'Reg{:04g}'.format(i),
                         'python',
                         '{} {} {}'.format(scriptpath, arg_str_base, srcfp),
                         apply_reg,
@@ -106,7 +114,7 @@ def main():
                             i+=1
                             task = taskhandler.Task(
                                 f,
-                                'ApplyReg{:04g}'.format(i),
+                                'Reg{:04g}'.format(i),
                                 'python',
                                 '{} {} {}'.format(scriptpath, arg_str_base, srcfp),
                                 apply_reg,
@@ -118,15 +126,32 @@ def main():
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
         if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+            try:
+                task_handler = taskhandler.PBSTaskHandler(qsubpath)
+            except RuntimeError, e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
+        
+        elif args.slurm:
+            try:
+                task_handler = taskhandler.SLURMTaskHandler(qsubpath)
+            except RuntimeError, e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
             
         elif args.parallel_processes > 1:
-            task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
-            logger.info("Number of child processes to spawn: {0}".format(task_handler.num_processes))
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+            try:
+                task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
+            except RuntimeError, e:
+                logger.error(e)
+            else:
+                logger.info("Number of child processes to spawn: {0}".format(task_handler.num_processes))
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
     
         else:         
             for task in task_queue:

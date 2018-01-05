@@ -93,7 +93,7 @@ class SLURMTaskHandler(object):
 
     def __init__(self, qsubscript, qsub_args=""):
 
-        ####  verify PBS is present by calling pbsnodes cmd
+        ####  verify SLURM is present by calling sinfo cmd
         try:
             cmd = "sinfo"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -103,9 +103,9 @@ class SLURMTaskHandler(object):
 
         self.qsubscript = qsubscript
         if not qsubscript:
-            raise RuntimeError("SLURM job submission requires a valid qsub script")
+            raise RuntimeError("SLURM job submission requires a valid submission script")
         elif not os.path.isfile(qsubscript):
-            raise RuntimeError("Qsub script does not exist: {}".format(qsubscript))
+            raise RuntimeError("Submission script does not exist: {}".format(qsubscript))
 
         self.qsub_args = qsub_args
 

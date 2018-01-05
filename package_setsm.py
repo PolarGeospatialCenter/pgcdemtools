@@ -153,7 +153,6 @@ def main():
             for task in task_queue:
                 src, scratch, task_arg_obj = task.method_arg_list
                 
-                #### Set up processing log handler
                 if not args.dryrun:
                     task.method(src, scratch, task_arg_obj)
     
