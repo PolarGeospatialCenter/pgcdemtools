@@ -1,6 +1,6 @@
 import os, string, sys, re, glob, argparse, subprocess, logging
 from osgeo import gdal, gdalconst
-from lib import dem, taskhandler
+from lib import taskhandler
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -77,9 +77,9 @@ def main():
         if path.endswith('{}.tif'.format(args.component)):
             dem = path
             if args.dstdir:
-                low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
+                low_res_dem = "{}_browse_{}m.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), args.resolution, ext)
             else:
-                low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0],ext)
+                low_res_dem = "{}_browse_{}m.{}".format(os.path.splitext(dem)[0], args.resolution, ext)
             if not os.path.isfile(low_res_dem):
                 i+=1
                 task = taskhandler.Task(
@@ -98,9 +98,9 @@ def main():
                 if f.endswith('{}.tif'.format(args.component)):
                     dem = os.path.join(root,f)
                     if args.dstdir:
-                        low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
+                        low_res_dem = "{}_browse_{}m.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), args.resolution, ext)
                     else:
-                        low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0],ext)
+                        low_res_dem = "{}_browse_{}m.{}".format(os.path.splitext(dem)[0], args.resolution, ext)
                     if not os.path.isfile(low_res_dem):
                         i+=1
                         task = taskhandler.Task(
@@ -153,10 +153,10 @@ def resample_setsm(dem, args):
     ext = get_extension(args.format)
     if args.dstdir:
         tempfile = "{}_temp.tif".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])))
-        low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
+        low_res_dem = "{}_browse_{}m.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), args.resolution, ext)
     else:
         tempfile = "{}_temp.tif".format(os.path.splitext(dem)[0])
-        low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0],ext)
+        low_res_dem = "{}_browse_{}m.{}".format(os.path.splitext(dem)[0], args.resolution, ext)
             
     deletables = []
     deletables.append(tempfile)
@@ -165,7 +165,7 @@ def resample_setsm(dem, args):
         logger.info("Resampling {}".format(dem))
         #print low_res_dem
         if args.component == 'dem':
-            cmd = 'gdal_translate -q -tr {0} {0} -r bilinear -a_nodata -9999 "{1}" "{2}"'.format(args.resolution, dem, tempfile)
+            cmd = 'gdalwarp -tap -q -tr {0} {0} -r bilinear -dstnodata -9999 "{1}" "{2}"'.format(args.resolution, dem, tempfile)
             cmd2 = 'gdaldem hillshade -q -z 3 -compute_edges -of {2} -co TILED=YES -co BIGTIFF=IF_SAFER -co COMPRESS=LZW "{0}" "{1}"'.format(tempfile, low_res_dem, args.format)
             
         elif args.component == 'matchtag':
@@ -173,7 +173,7 @@ def resample_setsm(dem, args):
             cmd2 = None
             
         else:
-            cmd = 'gdal_translate -q -ot Byte -scale -tr {0} {0} -of {3} -r cubic -a_nodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
+            cmd = 'gdal_translate -tap -q -ot Byte -scale -tr {0} {0} -of {3} -r cubic -a_nodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
             cmd2 = None
             
         #print cmd

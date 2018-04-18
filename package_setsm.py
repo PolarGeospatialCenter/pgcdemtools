@@ -35,6 +35,7 @@ def main():
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
+    parser.add_argument("--tasks-per-job", type=int, help="number of tasks to bundle into a single job (requires pbs option)")
     parser.add_argument("--pbs", action='store_true', default=False,
                         help="submit tasks to PBS")
     parser.add_argument("--parallel-processes", type=int, default=1,
@@ -65,6 +66,9 @@ def main():
     if not os.path.isfile(qsubpath):
         parser.error("qsub script path is not valid: %s" %qsubpath)
     
+    if args.tasks_per_job and not args.pbs:
+        parser.error("jobs-per-task argument requires the pbs option")
+    
     ## Verify processing options do not conflict
     if args.pbs and args.parallel_processes > 1:
         parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
@@ -81,15 +85,15 @@ def main():
     logger.addHandler(lsh)
     
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
+    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
     
     i=0
     j=0
-    task_queue = []
+    scenes = []
     #### ID rasters
     logger.info('Identifying DEMs')
-    if os.path.isfile(src):
+    if os.path.isfile(src) and src.endswith('.tif'):
         logger.debug(src)
         try:
             raster = dem.SetsmDem(src)
@@ -99,17 +103,24 @@ def main():
             j+=1
             if not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme) or args.overwrite or args.force_filter_dems:
                 i+=1
-                task = taskhandler.Task(
-                    os.path.basename(src),
-                    'Pkg{:04g}'.format(i),
-                    'python',
-                    '{} {} {} {}'.format(scriptpath, arg_str_base, src, scratch),
-                    build_archive,
-                    [src, scratch, args]
-                )
-                task_queue.append(task)
+                scenes.append(src)
+                
+    elif os.path.isfile(src) and src.endswith('.txt'):
+        fh = open(src,'r')
+        for line in fh.readlines():
+            sceneid = line.strip()
+            
+            try:
+                raster = dem.SetsmDem(sceneid)
+            except RuntimeError, e:
+                logger.error( e )
+            else:
+                j+=1
+                if not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme) or args.overwrite or args.force_filter_dems:
+                    i+=1
+                    scenes.append(sceneid)
     
-    else:
+    elif os.path.isdir(src):
         for root,dirs,files in os.walk(src):
             for f in files:
                 if f.endswith("_dem.tif") and "m_" in f:
@@ -123,19 +134,68 @@ def main():
                         j+=1
                         if not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme) or args.overwrite or args.force_filter_dems:
                             i+=1
-                            task = taskhandler.Task(
-                                f,
-                                'Pkg{:04g}'.format(i),
-                                'python',
-                                '{} {} {} {}'.format(scriptpath, arg_str_base, srcfp, scratch),
-                                build_archive,
-                                [srcfp, scratch, args]
-                            )
-                            task_queue.append(task)
-                                
+                            scenes.append(srcfp)
+                            
+    else:
+        logger.error( "src must be a directory, a strip dem, or a text file")
     
+    scenes = list(set(scenes))
     logger.info('Number of src rasters: {}'.format(j))
-    logger.info('Number of incomplete tasks: {}'.format(i))
+    logger.info('Number of incomplete tasks: {}'.format(len(scenes)))
+    
+    tm = datetime.now()
+    job_count=0
+    scene_count=0
+    scenes_in_job_count=0
+    task_queue = []
+    
+    for srcfp in scenes:
+        scene_count+=1
+        srcdir, srcfn = os.path.split(srcfp)            
+        if args.tasks_per_job:
+            # bundle tasks into text files in the dst dir and pass the text file in as src
+            scenes_in_job_count+=1
+            src_txt = os.path.join(scratch,'src_dems_{}_{}.txt'.format(tm.strftime("%Y%m%d%H%M%S"),job_count))
+            
+            if scenes_in_job_count == 1:
+                # remove text file if dst already exists
+                try:
+                    os.remove(src_txt)
+                except OSError:
+                    pass
+                
+            if scenes_in_job_count <= args.tasks_per_job:
+                # add to txt file
+                fh = open(src_txt,'a')
+                fh.write("{}\n".format(srcfp))
+                fh.close()
+            
+            if scenes_in_job_count == args.tasks_per_job or scene_count == len(scenes):
+                scenes_in_job_count=0
+                job_count+=1
+                
+                task = taskhandler.Task(
+                    'Pkg{:04g}'.format(job_count),
+                    'Pkg{:04g}'.format(job_count),
+                    'python',
+                    '{} {} {} {}'.format(scriptpath, arg_str_base, src_txt, scratch),
+                    build_archive,
+                    [srcfp, scratch, args]
+                )
+                task_queue.append(task)
+            
+        else:
+            job_count += 1
+            task = taskhandler.Task(
+                srcfn,
+                'Pkg{:04g}'.format(job_count),
+                'python',
+                '{} {} {} {}'.format(scriptpath, arg_str_base, srcfp, scratch),
+                build_archive,
+                [srcfp, scratch, args]
+            )
+            task_queue.append(task)
+       
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
         if args.pbs:
@@ -284,8 +344,10 @@ def build_archive(src,scratch,args):
                                     ## Set fields
                                     feat.SetField("DEM_ID",raster.stripid)
                                     feat.SetField("PAIRNAME",raster.pairname)
-                                    feat.SetField("SENSOR",raster.sensor)
-                                    feat.SetField("ACQDATE",raster.acqdate.strftime("%Y-%m-%d"))
+                                    feat.SetField("SENSOR1",raster.sensor1)
+                                    feat.SetField("SENSOR2",raster.sensor2)
+                                    feat.SetField("ACQDATE1",raster.acqdate1.strftime("%Y-%m-%d"))
+                                    feat.SetField("ACQDATE2",raster.acqdate2.strftime("%Y-%m-%d"))
                                     feat.SetField("CATALOGID1",raster.catid1)
                                     feat.SetField("CATALOGID2",raster.catid2)
                                     feat.SetField("ND_VALUE",raster.ndv)
