@@ -856,6 +856,8 @@ class SetsmTile(object):
             self.tileid = self.srcfn[:-12]
             self.matchtag = os.path.join(self.srcdir,self.srcfn[:-8] + '_matchtag.tif')
             self.ortho = os.path.join(self.srcdir,self.srcfn[:-8] + '_ortho.tif')
+            self.err = os.path.join(self.srcdir,self.srcfn[:-8] + '_err.tif')
+            self.day = os.path.join(self.srcdir,self.srcfn[:-8] + '_day.tif')
         else:
             self.tileid = self.srcfn[:-8]
             self.matchtag = os.path.join(self.srcdir,self.tileid + '_matchtag.tif')
