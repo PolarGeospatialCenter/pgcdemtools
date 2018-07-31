@@ -9,8 +9,6 @@ logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
 
 ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
-tgt_srs = osr.SpatialReference()
-tgt_srs.ImportFromEPSG(3413)
 
 def main():
     
@@ -25,6 +23,8 @@ def main():
     
     #### Optionsl Arguments
     parser.add_argument('--log', help="directory for log output")
+    parser.add_argument('--epsg', type=int, default=3413,
+                        help="egsg code for output index projection (default epsg:3413)")
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -131,12 +131,15 @@ def build_archive(raster,scratch,args):
         
             components = (
                 os.path.basename(raster.srcfp), # dem
-                os.path.basename(raster.matchtag), # matchtags
                 os.path.basename(raster.metapath), # mdf
                 # index shp files
             )
 
-            optional_components = [os.path.basename(raster.regmetapath)] #reg
+            optional_components = [
+                os.path.basename(raster.regmetapath), #reg
+                os.path.basename(raster.err), # err
+                os.path.basename(raster.day), # day
+                ] 
             
             os.chdir(dstdir)
             #logger.info(os.getcwd())
@@ -162,6 +165,8 @@ def build_archive(raster,scratch,args):
                 if not os.path.isfile(index):
                     ds = ogrDriver.CreateDataSource(index)
                     if ds is not None:
+                        tgt_srs = osr.SpatialReference()
+                        tgt_srs.ImportFromEPSG(args.epsg)
                     
                         lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbPolygon)
             

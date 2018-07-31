@@ -100,10 +100,10 @@ def main():
         i+=1
         #logger.info("[{} of {}] - {}".format(i,total,raster.stripid))
         #### move data
-        platform = raster.sensor
-        year = raster.acqdate.strftime("%Y")
-        month = raster.acqdate.strftime("%m")
-        day = raster.acqdate.strftime("%d")
+        platform = raster.sensor1
+        year = raster.acqdate1.strftime("%Y")
+        month = raster.acqdate1.strftime("%m")
+        day = raster.acqdate1.strftime("%d")
         #pair_folder = "{}_{}".format(raster.pairname, raster.creation_date.strftime("%Y%m%d"))
 
         #dst_dir = os.path.join(dst, platform, year, month, day, pair_folder)
@@ -135,7 +135,7 @@ def main():
 
                     
             else:
-                logger.warning("Cannot move {} to {}".format(ifp,ofp))
+                logger.warning("Cannot copy {} to {}".format(ifp,ofp))
             
     logger.info('Done')
 

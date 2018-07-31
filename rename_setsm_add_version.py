@@ -80,7 +80,7 @@ def rename(raster, args):
         if os.path.isfile(ofp):
             print "Output file already exists: {}".format(ofp)
         else:
-            logger.info("{} --> {}".format(ifp, ofp))
+            logger.debug("{} --> {}".format(ifp, ofp))
             if not args.dryrun:
                 os.rename(ifp, ofp)
             

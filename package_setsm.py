@@ -28,6 +28,8 @@ def main():
     #### Optionsl Arguments
     parser.add_argument('--mdf-only', action='store_true', default=False,
                         help="build mdf and readme files only, do not archive")
+    parser.add_argument('--lsf', action='store_true', default=False,
+                        help="package LSF DEM instead of original DEM. Includes metadata flag.")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="filter dems with area < 5.6 sqkm and density < 0.1")
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
@@ -88,7 +90,11 @@ def main():
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
     
-    i=0
+    if args.lsf:   
+        logger.info('Packaging LSF DEMs')
+    else:
+        logger.info('Packaging non-LSF DEMs')
+    
     j=0
     scenes = []
     #### ID rasters
@@ -101,8 +107,12 @@ def main():
             logger.error( e )
         else:
             j+=1
-            if not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme) or args.overwrite or args.force_filter_dems:
-                i+=1
+            if args.overwrite or args.force_filter_dems:
+                scenes.append(src)
+            elif args.mdf_only:
+                if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
+                    scenes.append(src)
+            elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
                 scenes.append(src)
                 
     elif os.path.isfile(src) and src.endswith('.txt'):
@@ -116,8 +126,12 @@ def main():
                 logger.error( e )
             else:
                 j+=1
-                if not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme) or args.overwrite or args.force_filter_dems:
-                    i+=1
+                if args.overwrite or args.force_filter_dems:
+                    scenes.append(sceneid)
+                elif args.mdf_only:
+                    if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
+                        scenes.append(sceneid)
+                elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
                     scenes.append(sceneid)
     
     elif os.path.isdir(src):
@@ -132,8 +146,12 @@ def main():
                         logger.error( e )
                     else:
                         j+=1
-                        if not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme) or args.overwrite or args.force_filter_dems:
-                            i+=1
+                        if args.overwrite or args.force_filter_dems:
+                            scenes.append(srcfp)
+                        elif args.mdf_only:
+                            if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
+                                scenes.append(srcfp)
+                        elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
                             scenes.append(srcfp)
                             
     else:
@@ -242,10 +260,12 @@ def build_archive(src,scratch,args):
             except RuntimeError, e:
                 logger.warning(e)
         
-        if args.filter_dems:
+        if args.filter_dems or args.force_filter_dems:
             # filter dems with area < 5.5 sqkm and density < .1
             
             area = raster.exact_geom.Area()
+            # logger.info(raster.exact_geom.Area())
+            # logger.info(raster.density)
             if area < 5500000:
                 logger.info("Raster area {} falls below threshold: {}".format(area,raster.srcfp))
                 process = False
@@ -268,7 +288,7 @@ def build_archive(src,scratch,args):
                         os.remove(raster.mdf)
                 try:
                     if not args.dryrun:
-                        raster.write_mdf_file()
+                        raster.write_mdf_file(args.lsf)
                 except RuntimeError, e:
                     logger.error(e)
             
@@ -292,13 +312,24 @@ def build_archive(src,scratch,args):
             
                 if not os.path.isfile(dstfp):    
                 
-                    components = (
-                        os.path.basename(raster.srcfp), # dem
-                        os.path.basename(raster.matchtag), # matchtags
-                        os.path.basename(raster.mdf), # mdf
-                        os.path.basename(raster.readme), # readme
-                        # index shp files
-                    )
+                    if args.lsf:
+                        components = (
+                            os.path.basename(raster.srcfp).replace("dem.tif","dem_smooth.tif"), # dem
+                            os.path.basename(raster.matchtag), # matchtag
+                            os.path.basename(raster.mdf), # mdf
+                            os.path.basename(raster.readme), # readme
+                            os.path.basename(raster.browse), # browse
+                            # index shp files
+                        )
+                    else:
+                        components = (
+                            os.path.basename(raster.srcfp), # dem
+                            os.path.basename(raster.matchtag), # matchtag
+                            os.path.basename(raster.mdf), # mdf
+                            os.path.basename(raster.readme), # readme
+                            os.path.basename(raster.browse), # browse
+                            # index shp files
+                        )
     
                     optional_components = [os.path.basename(r) for r in raster.reg_files] #reg
                     
@@ -404,9 +435,12 @@ def build_archive(src,scratch,args):
                                         for component in components:
                                             logger.debug("Adding {} to {}".format(component,dstfn))
                                             k+=1
+                                            if "dem_smooth.tif" in component:
+                                                arcn = component.replace("dem_smooth.tif","dem.tif")
+                                            else:
+                                                arcn = component
                                             if not args.dryrun:
-                                                archive.add(component)
-                                                #archive.write(component)
+                                                archive.add(component,arcname=arcn)
     
                                         ## Add optional components
                                         for component in optional_components:
@@ -419,11 +453,11 @@ def build_archive(src,scratch,args):
                                         ## Add index in subfolder
                                         os.chdir(scratch)
                                         for f in glob.glob(index_lyr+".*"):
-                                            arcname = os.path.join("index",f)
+                                            arcn = os.path.join("index",f)
                                             logger.debug("Adding {} to {}".format(f,dstfn))
                                             k+=1
                                             if not args.dryrun:
-                                                archive.add(f,arcname=arcname)
+                                                archive.add(f,arcname=arcn)
                                             os.remove(f)
                                         
                                         logger.info("Added {} items to archive: {}".format(k,dstfn))

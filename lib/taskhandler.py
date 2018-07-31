@@ -173,11 +173,9 @@ def exec_cmd(cmd):
     if rc != 0:
         logger.error("Error found - Return Code = %s:  %s" %(rc,cmd))
         err = 1
-    else:
-        logger.debug("Return Code = %s:  %s" %(rc,cmd))
+        logger.error("STDOUT:  "+so)
+        logger.error("STDERR:  "+se)
 
-    logger.debug("STDOUT:  "+so)
-    logger.debug("STDERR:  "+se)
     return (err,so,se)
 
 def convert_optional_args_to_string(args, positional_arg_keys, arg_keys_to_remove):

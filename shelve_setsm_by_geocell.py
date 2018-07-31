@@ -127,7 +127,10 @@ def main():
                 if not args.dryrun:
                     os.remove(ofp)
                     if args.try_link:
-                        os.link(ifp,ofp)
+                        try:
+                            os.link(ifp,ofp)
+                        except OSError, e:
+                            logger.error("os.link failed on {}".format(ifp))
                     else:
                         shutil.copy2(ifp,ofp)
                     
@@ -135,7 +138,10 @@ def main():
                 logger.debug("Copying {} to {}".format(ifp,ofp))
                 if not args.dryrun:
                     if args.try_link:
-                        os.link(ifp,ofp)
+                        try:
+                            os.link(ifp,ofp)
+                        except OSError, e:
+                            logger.error("os.link failed on {}".format(ifp))
                     else:
                         shutil.copy2(ifp,ofp)
                     

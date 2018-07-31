@@ -60,6 +60,7 @@ class SetsmDem(object):
         self.ortho = os.path.join(self.srcdir,self.stripid+"_ortho.tif")
         self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
         self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
+        self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
         self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
         self.reg_files = [
             os.path.join(self.srcdir,self.stripid+"_reg.txt"),
@@ -271,9 +272,9 @@ class SetsmDem(object):
             if 'Strip creation date' in metad:
                 self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
             else:
-                raise RuntimeError('Key "Strip Creation" not found in meta dict from {}'.format(self.metapath))
+                raise RuntimeError('Key "Strip creation date" not found in meta dict from {}'.format(self.metapath))
             
-            # get ersion    
+            # get version    
             values = []
             for x in range(len(self.scenes)):
                 if 'SETSM Version' in self.scenes[x]:
@@ -419,7 +420,7 @@ class SetsmDem(object):
         else:
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
 
-    def write_mdf_file(self):
+    def write_mdf_file(self,lsf_flag=False):
         
         if self.exact_geom:
         
@@ -474,7 +475,8 @@ class SetsmDem(object):
                 ('verticalCoordSysUnits','"meters"'),
                 ('minElevValue',self.stats[0]),
                 ('maxElevValue',self.stats[1]),
-                ('matchtagDensity',self.density)
+                ('matchtagDensity',self.density),
+                ('lsfApplied',str(lsf_flag))
             ]
             
             mdf_contents3 = []
@@ -581,6 +583,7 @@ class SetsmDem(object):
             ('demFilename','{}'.format(self.srcfn)),
             ('metadataFilename','{}'.format(os.path.basename(self.mdf))),
             ('matchtagFilename','{}'.format(os.path.basename(self.matchtag))),
+            ('browseFilename','{}'.format(os.path.basename(self.browse))),
             ('readmeFilename','{}'.format(os.path.basename(self.readme))),
             ('END_GROUP','PRODUCT_1'),
         ]
@@ -856,6 +859,8 @@ class SetsmTile(object):
         else:
             self.tileid = self.srcfn[:-8]
             self.matchtag = os.path.join(self.srcdir,self.tileid + '_matchtag.tif')
+            self.err = os.path.join(self.srcdir,self.tileid + '_err.tif')
+            self.day = os.path.join(self.srcdir,self.tileid + '_day.tif')
             self.ortho = os.path.join(self.srcdir,self.tileid + '_ortho.tif')
         #self.archive = os.path.join(self.srcdir,self.tileid+".tar")
         self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
@@ -973,32 +978,29 @@ class SetsmTile(object):
         if self.metapath:
             self.get_metafile_info()
             
-            #### If matchtag exists, get matchtag density within data boundary
-            if not os.path.isfile(self.matchtag):
-                raise RuntimeError("Matchtag file does not exist for DEM: {}".format(self.srcfp))
+            #### If dem exists, get dem density within data boundary
+            geom_area = self.geom.Area()
+            ds = gdal.Open(self.srcfp)
+            b = ds.GetRasterBand(1)
+            gtf = ds.GetGeoTransform()
+            res_x = gtf[1]
+            res_y = gtf[5]
+            ndv = b.GetNoDataValue()
+            data = b.ReadAsArray()
+            err = gdal.GetLastErrorNo()
+            if err <> 0:
+                raise RuntimeError("DEM dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
             else:
-                geom_area = self.geom.Area()
-                ds = gdal.Open(self.matchtag)
-                b = ds.GetRasterBand(1)
-                gtf = ds.GetGeoTransform()
-                matchtag_res_x = gtf[1]
-                matchtag_res_y = gtf[5]
-                matchtag_ndv = b.GetNoDataValue()
-                data = b.ReadAsArray()
-                err = gdal.GetLastErrorNo()
-                if err <> 0:
-                    raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
-                else:
-                    data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
-                    data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
-                    #logger.info("matchtag res: x = {}, y = {}".format(matchtag_res_x,matchtag_res_y))
-                    #logger.info("pixel count = {}".format(data_pixel_count))
-                    #logger.info("data area = {}".format(data_area))
-                    #logger.info("geom area = {}".format(geom_area))
-                    self.density = data_area / geom_area
-                    #logger.info("matchtag density = {}".format(self.density))
-                    data = None
-                    ds = None
+                data_pixel_count = numpy.count_nonzero(data != ndv)
+                data_area = abs(data_pixel_count * res_x * res_y)
+                #logger.info("matchtag res: x = {}, y = {}".format(matchtag_res_x,matchtag_res_y))
+                #logger.info("pixel count = {}".format(data_pixel_count))
+                #logger.info("data area = {}".format(data_area))
+                #logger.info("geom area = {}".format(geom_area))
+                self.density = data_area / geom_area
+                #logger.info("matchtag density = {}".format(self.density))
+                data = None
+                ds = None
 
 
     def get_geom(self):
