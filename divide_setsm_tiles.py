@@ -8,10 +8,6 @@ from lib import utils, dem, taskhandler
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
 
-tile_res = 5
-tile_rows = 1
-tile_cols = 1
-
 components = (
     'dem',
     'matchtag',
@@ -35,6 +31,8 @@ def main():
                         help="number of subtile rows")
     parser.add_argument('--num-cols', type=int, default=1,
                         help="number of subtile columns")
+    parser.add_argument('--res', type=int, default=2,
+                        help="resolution in meters")
     parser.add_argument('--tiles', help="list of tiles to process, comma delimited")
     parser.add_argument("--version", help="version string (ex: v1.2)")
     parser.add_argument("--cutline-loc", help="directory containing cutline shps indicating areas of bad data")
@@ -107,9 +105,9 @@ def main():
             logger.error( e )
         else:
             if src.endswith('reg_dem.tif'):
-                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], tile_res, version_str))
+                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], args.res, version_str))
             else:
-                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], tile_res, version_str))
+                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], args.res, version_str))
             
             #### verify that cutlines can be found if requested
             if args.cutline_loc:
@@ -150,9 +148,9 @@ def main():
                             logger.error( e )
                         else:
                             if srcfp.endswith('reg_dem.tif'):
-                                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(srcfp[:-15], tile_res, version_str))
+                                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(srcfp[:-15], args.res, version_str))
                             else:
-                                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], tile_res, version_str))
+                                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], args.res, version_str))
                             if len(dstfp_list) == 0:
                                 logger.info("computing tile: {}".format(srcfp))
                                 
@@ -244,8 +242,8 @@ def divide_tile(src, args):
         
         src_metapath = '{}_dem_meta.txt'.format(tile_base)
         src_regmetapath = '{}_reg.txt'.format(tile_base)
-        dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], tile_res, version_str)
-        dst_regmetapath = '{}_{}m{}_reg.txt'.format(tile_base[:-3], tile_res, version_str)
+        dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], args.res, version_str)
+        dst_regmetapath = '{}_{}m{}_reg.txt'.format(tile_base[:-3], args.res, version_str)
         
         shutil.copy2(src_metapath, dst_metapath)
         if os.path.isfile(src_regmetapath):
@@ -255,12 +253,12 @@ def divide_tile(src, args):
         if args.cutline_loc:
             tile = '_'.join(os.path.basename(src).split('_')[:2])
             cutline_shp = os.path.join(args.cutline_loc, tile + '_cut.shp')
-            mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], tile_res, version_str)
+            mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], args.res, version_str)
             if not os.path.isfile(cutline_shp):
                 logger.info('No cutline file found for src tile: {}'.format(cutline_shp))
             else:
                 if not os.path.isfile(mask):
-                    cmd = 'gdal_rasterize -burn -9999 -init 0 -ot Int16 -a_nodata 0 -tr {0} {0} {1} {2}'.format(tile_res, cutline_shp, mask)
+                    cmd = 'gdal_rasterize -burn -9999 -init 0 -ot Int16 -a_nodata 0 -tr {0} {0} {1} {2}'.format(args.res, cutline_shp, mask)
                     logger.info(cmd)
                     subprocess.call(cmd, shell=True)
         else:
@@ -274,10 +272,10 @@ def divide_tile(src, args):
                 else:
                     resample = 'bilinear'
                 srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
-                dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], tile_res, version_str, reg_str, component)
+                dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, version_str, reg_str, component)
                 logger.info("Building {}".format(dstfp))
                 if not os.path.isfile(dstfp):
-                    cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=if_safer -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, tile_res, minx, maxy, maxx, miny, resample)
+                    cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=if_safer -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, minx, maxy, maxx, miny, resample)
                     logger.info(cmd)
                     subprocess.call(cmd, shell=True)
                     
@@ -310,10 +308,10 @@ def divide_tile(src, args):
                         else:
                             resample = 'bilinear'
                         srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
-                        dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, tile_res, version_str, reg_str, component)
+                        dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, version_str, reg_str, component)
                         logger.info("Building {}".format(dstfp))
                         if not os.path.isfile(dstfp):
-                            cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=if_safer -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, tile_res, xorigin, yorigin+tilesizey, xorigin+tilesizex, yorigin, resample)
+                            cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=if_safer -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, xorigin, yorigin+tilesizey, xorigin+tilesizex, yorigin, resample)
                             logger.info(cmd)
                             subprocess.call(cmd, shell=True)
                             

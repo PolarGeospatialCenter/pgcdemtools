@@ -77,9 +77,9 @@ def main():
         if path.endswith('{}.tif'.format(args.component)):
             dem = path
             if args.dstdir:
-                low_res_dem = "{}_browse_{}m.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), args.resolution, ext)
+                low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
             else:
-                low_res_dem = "{}_browse_{}m.{}".format(os.path.splitext(dem)[0], args.resolution, ext)
+                low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0], ext)
             if not os.path.isfile(low_res_dem):
                 i+=1
                 task = taskhandler.Task(
@@ -98,9 +98,9 @@ def main():
                 if f.endswith('{}.tif'.format(args.component)):
                     dem = os.path.join(root,f)
                     if args.dstdir:
-                        low_res_dem = "{}_browse_{}m.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), args.resolution, ext)
+                        low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
                     else:
-                        low_res_dem = "{}_browse_{}m.{}".format(os.path.splitext(dem)[0], args.resolution, ext)
+                        low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0], ext)
                     if not os.path.isfile(low_res_dem):
                         i+=1
                         task = taskhandler.Task(
@@ -153,10 +153,10 @@ def resample_setsm(dem, args):
     ext = get_extension(args.format)
     if args.dstdir:
         tempfile = "{}_temp.tif".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])))
-        low_res_dem = "{}_browse_{}m.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), args.resolution, ext)
+        low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
     else:
         tempfile = "{}_temp.tif".format(os.path.splitext(dem)[0])
-        low_res_dem = "{}_browse_{}m.{}".format(os.path.splitext(dem)[0], args.resolution, ext)
+        low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0], ext)
             
     deletables = []
     deletables.append(tempfile)
