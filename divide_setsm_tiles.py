@@ -10,7 +10,7 @@ logger.setLevel(logging.DEBUG)
 
 components = (
     'dem',
-    'matchtag',
+    #'matchtag',
     #'ortho',
 )
 
@@ -38,6 +38,7 @@ def main():
     parser.add_argument("--cutline-loc", help="directory containing cutline shps indicating areas of bad data")
     parser.add_argument('--build-ovr', action='store_true', default=False,
                         help="build overviews")
+    parser.add_argument('--resample', default="bilinear", help="dem_resampling strategy (default=bilinear). matchtag resampling is always nearest neighbor")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
     parser.add_argument("--pbs", action='store_true', default=False,
@@ -270,7 +271,7 @@ def divide_tile(src, args):
                 if component == 'matchtag':
                     resample = 'near'
                 else:
-                    resample = 'bilinear'
+                    resample = args.resample
                 srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
                 dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, version_str, reg_str, component)
                 logger.info("Building {}".format(dstfp))
@@ -306,7 +307,7 @@ def divide_tile(src, args):
                         if component == 'matchtag':
                             resample = 'near'
                         else:
-                            resample = 'bilinear'
+                            resample = args.resample
                         srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
                         dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, version_str, reg_str, component)
                         logger.info("Building {}".format(dstfp))

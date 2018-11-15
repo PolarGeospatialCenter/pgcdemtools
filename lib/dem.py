@@ -42,7 +42,7 @@ for x in range(6,8):
 #### Strip DEM name pattern
 setsm_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z][A-Z\d]{2}\d)_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>[SEG\d]+)_(?P<res>\d+m)_?(?P<crdate>\d{8})?(?P<version>v[\d/.]+)?_dem.(tif|jpg)\Z", re.I)
 asp_strip_pattern = re.compile("(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_?(?P<res>\d+m)?-DEM.(tif|jpg)\Z", re.I)
-setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>[258]m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
+setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>\d+m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
 
 class SetsmDem(object):
     def __init__(self,filepath):
@@ -858,12 +858,17 @@ class SetsmTile(object):
             self.ortho = os.path.join(self.srcdir,self.srcfn[:-8] + '_ortho.tif')
             self.err = os.path.join(self.srcdir,self.srcfn[:-8] + '_err.tif')
             self.day = os.path.join(self.srcdir,self.srcfn[:-8] + '_day.tif')
+            self.browse = os.path.join(self.srcdir,self.srcfn[:-8] + '_dem_browse.tif')
+            self.density_file = os.path.join(self.srcdir,self.srcfn[:-8] + '_density.txt')
         else:
             self.tileid = self.srcfn[:-8]
             self.matchtag = os.path.join(self.srcdir,self.tileid + '_matchtag.tif')
             self.err = os.path.join(self.srcdir,self.tileid + '_err.tif')
             self.day = os.path.join(self.srcdir,self.tileid + '_day.tif')
             self.ortho = os.path.join(self.srcdir,self.tileid + '_ortho.tif')
+            self.browse = os.path.join(self.srcdir,self.tileid + '_dem_browse.tif')
+            self.density_file = os.path.join(self.srcdir,self.tileid + '_density.txt')
+
         #self.archive = os.path.join(self.srcdir,self.tileid+".tar")
         self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
         
@@ -884,7 +889,7 @@ class SetsmTile(object):
                 self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
                 
         else:
-            raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
+            raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
     
     def get_dem_info(self):
@@ -980,6 +985,21 @@ class SetsmTile(object):
         if self.metapath:
             self.get_metafile_info()
             
+        #### If density file exists, get density from there
+        self.density = None
+        if os.path.isfile(self.density_file):
+            fh = open(self.density_file,'r')
+            lines = fh.readlines()
+            density = lines[0].strip()
+            self.density = float(density)
+            fh.close()
+    
+    
+    def compute_density_and_statistics(self):
+        #### If no density file, compute
+        if not os.path.isfile(self.density_file):
+            self.density = None
+        
             #### If dem exists, get dem density within data boundary
             geom_area = self.geom.Area()
             ds = gdal.Open(self.srcfp)
@@ -1003,7 +1023,11 @@ class SetsmTile(object):
                 #logger.info("matchtag density = {}".format(self.density))
                 data = None
                 ds = None
-
+            
+            fh = open(self.density_file, 'w')
+            fh.write('{}\n'.format(self.density))
+            fh.close()
+            
 
     def get_geom(self):
         

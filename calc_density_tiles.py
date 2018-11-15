@@ -18,7 +18,7 @@ def main():
     
     #### Set Up Arguments 
     parser = argparse.ArgumentParser(
-        description="calculate density for setsm strip DEMS and save to a density.txt file"
+        description="calculate density for setsm tile or subtile DEMS and save to a density.txt file"
         )
     
     #### Positional Arguments
@@ -87,7 +87,7 @@ def main():
     if os.path.isfile(src) and src.endswith('.tif'):
         logger.debug(src)
         try:
-            raster = dem.SetsmDem(src)
+            raster = dem.SetsmTile(src)
         except RuntimeError, e:
             logger.error( e )
         else:
@@ -101,7 +101,7 @@ def main():
             sceneid = line.strip()
             
             try:
-                raster = dem.SetsmDem(sceneid)
+                raster = dem.SetsmTile(sceneid)
             except RuntimeError, e:
                 logger.error( e )
             else:
@@ -116,7 +116,7 @@ def main():
                     srcfp = os.path.join(root,f)
                     logger.debug(srcfp)
                     try:
-                        raster = dem.SetsmDem(srcfp)
+                        raster = dem.SetsmTile(srcfp)
                     except RuntimeError, e:
                         logger.error( e )
                     else:
@@ -210,7 +210,7 @@ def main():
 def build_archive(src,scratch,args):
 
     logger.info("Calculating density of raster: {}".format(src))
-    raster = dem.SetsmDem(src)
+    raster = dem.SetsmTile(src)
     
     try:
         raster.get_dem_info()

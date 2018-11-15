@@ -1,30 +1,26 @@
 import os, string, sys, re, glob, argparse, subprocess, logging
 from osgeo import gdal, gdalconst
-from lib import taskhandler
+from lib import dem, utils, taskhandler
 
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.INFO)
 
+#setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>2m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
 default_res = 16
-default_format = 'JPEG'
-suffixes = ('ortho', 'matchtag', 'dem')
-formats = ('JPEG', 'GTiff')
+suffixes = ('matchtag', 'dem')
 
 def main():
     parser = argparse.ArgumentParser()
     
     #### Set Up Options
     parser.add_argument("srcdir", help="source directory or image")
-    parser.add_argument("--dstdir", help="dstination directory")
     parser.add_argument("-c", "--component",  choices=suffixes, default='dem',
-                help="SETSM DEM component to resample (default=dem")
+                      help="SETSM DEM component to resample")
     parser.add_argument("-r", "--resolution",  default=default_res, type=int,
-                help="output resolution (default={})".format(default_res))
-    parser.add_argument("-f", "--format",  default='JPEG', choices=formats,
-                help="output format (default={})".format(default_format))
+                      help="output resolution (default={})".format(default_res))
     parser.add_argument("-o", "--overwrite", action="store_true", default=False,
-                help="overwrite existing files if present")
+                      help="overwrite existing files if present")
     parser.add_argument("--pbs", action='store_true', default=False,
                 help="submit tasks to PBS")
     parser.add_argument("--parallel-processes", type=int, default=1,
@@ -32,7 +28,7 @@ def main():
     parser.add_argument("--qsubscript",
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
     parser.add_argument("--dryrun", action="store_true", default=False,
-                help="print actions without executing")
+                      help="print actions without executing")
     pos_arg_keys = ['srcdir']
     
     
@@ -43,7 +39,7 @@ def main():
     
     #### Validate Required Arguments
     if not os.path.isdir(path) and not os.path.isfile(path):
-        parser.error('src must be avalid directory or file')
+        parser.error('src must be a valid directory or file')
         
     ## Verify qsubscript
     if args.qsubscript is None:
@@ -68,23 +64,19 @@ def main():
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
     
-    ext = get_extension(args.format)
-    
     task_queue = []
     i=0
     logger.info("Searching for SETSM rasters")
     if os.path.isfile(path):
         if path.endswith('{}.tif'.format(args.component)):
             dem = path
-            if args.dstdir:
-                low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
-            else:
-                low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0], ext)
-            if not os.path.isfile(low_res_dem):
+            low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
+            low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
+            if dem <> low_res_dem and not os.path.isfile(low_res_dem):
                 i+=1
                 task = taskhandler.Task(
                     os.path.basename(dem),
-                    'Browse{:04g}'.format(i),
+                    'Resample{:04g}'.format(i),
                     'python',
                     '{} {} {}'.format(scriptpath, arg_str_base, dem),
                     resample_setsm,
@@ -97,15 +89,13 @@ def main():
             for f in files:
                 if f.endswith('{}.tif'.format(args.component)):
                     dem = os.path.join(root,f)
-                    if args.dstdir:
-                        low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
-                    else:
-                        low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0], ext)
-                    if not os.path.isfile(low_res_dem):
+                    low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
+                    low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
+                    if dem <> low_res_dem and not os.path.isfile(low_res_dem):
                         i+=1
                         task = taskhandler.Task(
                             f,
-                            'Browse{:04g}'.format(i),
+                            'Resample{:04g}'.format(i),
                             'python',
                             '{} {} {}'.format(scriptpath, arg_str_base, dem),
                             resample_setsm,
@@ -150,53 +140,19 @@ def main():
     
     
 def resample_setsm(dem, args):
-    ext = get_extension(args.format)
-    if args.dstdir:
-        tempfile = "{}_temp.tif".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])))
-        low_res_dem = "{}_browse.{}".format(os.path.join(args.dstdir, os.path.basename(os.path.splitext(dem)[0])), ext)
-    else:
-        tempfile = "{}_temp.tif".format(os.path.splitext(dem)[0])
-        low_res_dem = "{}_browse.{}".format(os.path.splitext(dem)[0], ext)
-            
-    deletables = []
-    deletables.append(tempfile)
-    
+    low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
+    low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
+                    
     if not os.path.isfile(low_res_dem) or args.overwrite is True:
         logger.info("Resampling {}".format(dem))
         #print low_res_dem
-        if args.component == 'dem':
-            cmd = 'gdalwarp -tap -q -tr {0} {0} -r bilinear -dstnodata -9999 "{1}" "{2}"'.format(args.resolution, dem, tempfile)
-            cmd2 = 'gdaldem hillshade -q -z 3 -compute_edges -of {2} -co TILED=YES -co BIGTIFF=IF_SAFER -co COMPRESS=LZW "{0}" "{1}"'.format(tempfile, low_res_dem, args.format)
-            
-        elif args.component == 'matchtag':
-            cmd = 'gdal_translate -q -tr {0} {0} -of {3} -r near -a_nodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
-            cmd2 = None
-            
-        else:
-            cmd = 'gdal_translate -tap -q -ot Byte -scale -tr {0} {0} -of {3} -r cubic -a_nodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
-            cmd2 = None
-            
+        resampling_method = 'bilinear' if args.component == 'dem' else 'near'
+        cmd = 'gdalwarp -q -co tiled=yes -co compress=lzw -r {3} -tr {0} {0} "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, resampling_method)
         #print cmd
         if not args.dryrun:
             taskhandler.exec_cmd(cmd)
-            if cmd2:
-                taskhandler.exec_cmd(cmd2)
-    
-        if not args.dryrun:
-            for f in deletables:
-                if os.path.isfile(f):
-                    try:
-                        os.remove(f)
-                    except:
-                        print "Cannot remove %s" %f
-    
-def get_extension(image_format):
-    if image_format == 'GTiff':
-        return 'tif'
-    elif image_format == 'JPEG':
-        return 'jpg'
-    
-    
+            
+        
 if __name__ == '__main__':
     main()
 

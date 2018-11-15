@@ -2,7 +2,7 @@ import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
 from datetime import *
 import gdal, osr, ogr, gdalconst
 import argparse
-from lib import utils, dem
+from lib import utils, dem, taskhandler
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -28,8 +28,15 @@ def main():
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
+    parser.add_argument("--pbs", action='store_true', default=False,
+                        help="submit tasks to PBS")
+    parser.add_argument("--parallel-processes", type=int, default=1,
+                        help="number of parallel processes to spawn (default 1)")
+    parser.add_argument("--qsubscript",
+                        help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
+    
     
     #### Parse Arguments
     args = parser.parse_args()
@@ -40,8 +47,21 @@ def main():
     if not os.path.isdir(args.scratch) and not os.path.isfile(args.scratch):
         parser.error("Source directory or file does not exist: %s" %args.scratch)
     
+    scriptpath = os.path.abspath(sys.argv[0])
     src = os.path.abspath(args.src)
     scratch = os.path.abspath(args.scratch)
+    
+    ## Verify qsubscript
+    if args.qsubscript is None:
+        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_package.sh')
+    else:
+        qsubpath = os.path.abspath(args.qsubscript)
+    if not os.path.isfile(qsubpath):
+        parser.error("qsub script path is not valid: %s" %qsubpath)
+     
+    ## Verify processing options do not conflict
+    if args.pbs and args.parallel_processes > 1:
+        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
     
     if args.v:
         log_level = logging.DEBUG
@@ -53,6 +73,11 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
+    
+    #### Get args ready to pass to task handler
+    pos_arg_keys = ['src','scratch']
+    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
+    arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
     
     if args.log:
         if os.path.isdir(args.log):
@@ -68,9 +93,11 @@ def main():
         logger.addHandler(lfh)
     
     rasters = []
+    j=0
     #### ID rasters
     logger.info('Identifying DEMs')
     if os.path.isfile(src):
+        j+=1
         logger.debug(src)
         try:
             raster = dem.SetsmTile(os.path.join(src))
@@ -84,6 +111,7 @@ def main():
         for root,dirs,files in os.walk(src):
             for f in files:
                 if f.endswith("_dem.tif"):
+                    j+=1
                     logger.debug(os.path.join(root,f))
                     try:
                         raster = dem.SetsmTile(os.path.join(root,f))
@@ -92,22 +120,54 @@ def main():
                     else:
                         if not os.path.isfile(raster.archive) or args.overwrite:
                             rasters.append(raster)
-                                
-    i=0
-    total = len(rasters)
+                            
+    rasters = list(set(rasters))
+    logger.info('Number of src rasters: {}'.format(j))
+    logger.info('Number of incomplete tasks: {}'.format(len(rasters)))
+      
+    task_queue = []                          
     logger.info('Packaging DEMs')
-    if total > 0:
-        for raster in rasters:
-            i+=1
-            logger.info("[{}/{}] {}".format(i,total,raster.srcfp))
-            build_archive(raster,scratch,args)
+    for raster in rasters:
+        # logger.info("[{}/{}] {}".format(i,total,raster.srcfp))
+        task = taskhandler.Task(
+            raster.srcfn,
+            'Pkg_{}'.format(raster.tileid),
+            'python',
+            '{} {} {} {}'.format(scriptpath, arg_str_base, raster.srcfp, scratch),
+            build_archive,
+            [raster, scratch, args]
+        )
+        task_queue.append(task)
+
+
+    if len(task_queue) > 0:
+        logger.info("Submitting Tasks")
+        if args.pbs:
+            task_handler = taskhandler.PBSTaskHandler(qsubpath)
+            if not args.dryrun:
+                task_handler.run_tasks(task_queue)
+            
+        elif args.parallel_processes > 1:
+            task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
+            logger.info("Number of child processes to spawn: {0}".format(task_handler.num_processes))
+            if not args.dryrun:
+                task_handler.run_tasks(task_queue)
+    
+        else:         
+            for task in task_queue:
+                raster, scratch, task_arg_obj = task.method_arg_list
+                
+                if not args.dryrun:
+                    task.method(raster, scratch, task_arg_obj)
+    
     else:
-        logger.info("No DEMs found requiring processing")
+        logger.info("No tasks found to process")
+        
         
 def build_archive(raster,scratch,args):
 
+    logger.info("Packaging tile {}".format(raster.srcfn))
     #### create archive
-    
     dstfp = raster.archive
     dstdir, dstfn = os.path.split(raster.archive)
     #print dstfn
@@ -118,6 +178,13 @@ def build_archive(raster,scratch,args):
     except RuntimeError, e:
         logger.error(e)
     else:
+        
+        ## get raster density if not precomputed
+        if raster.density is None:
+            try:
+                raster.compute_density_and_statistics()
+            except RuntimeError, e:
+                logger.warning(e)
         
         #### Build Archive
         if os.path.isfile(dstfp) and args.overwrite is True:
@@ -131,7 +198,7 @@ def build_archive(raster,scratch,args):
         
             components = (
                 os.path.basename(raster.srcfp), # dem
-                os.path.basename(raster.metapath), # mdf
+                os.path.basename(raster.metapath), # meta
                 # index shp files
             )
 
@@ -139,6 +206,7 @@ def build_archive(raster,scratch,args):
                 os.path.basename(raster.regmetapath), #reg
                 os.path.basename(raster.err), # err
                 os.path.basename(raster.day), # day
+                os.path.basename(raster.browse)
                 ] 
             
             os.chdir(dstdir)
