@@ -306,7 +306,7 @@ class SetsmDem(object):
         self.srcfp = filepath
         self.srcdir, self.srcfn = os.path.split(self.srcfp)
         if self.srcfn.endswith("lsf_dem.tif"):
-            self.stripid = self.srcfn[:-12]
+            self.stripid = self.srcfn[:-8]
             self.is_lsf = True
         else:
             self.stripid = self.srcfn[:-8]
