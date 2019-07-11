@@ -67,7 +67,7 @@ StandardAttribute = namedtuple("StandardAttribute", ("fname", "ftype", "fwidth",
 
 # Attributes
 DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
-    
+
     ## Overlap attributes
     StandardAttribute("DEM_ID", ogr.OFTString, 254, 0),
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
@@ -81,7 +81,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
     StandardAttribute("GEOCELL", ogr.OFTString, 10, 0),
     #StandardAttribute("EXT_AREA", ogr.OFTReal, 0, 0),
-    
+
     ## Result DEM attributes
     #StandardAttribute("ND_AREA", ogr.OFTReal, 0, 0),
     #StandardAttribute("ND_PERC", ogr.OFTReal, 0, 0),
@@ -91,6 +91,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
+    StandardAttribute("IS_LSF", ogr.OFTInteger, 8, 8),
     StandardAttribute("REL_VER", ogr.OFTString, 32, 0),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
@@ -99,7 +100,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("DZ", ogr.OFTReal, 0, 0),
     StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
     StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
-    
+
     ## File attributes
     StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0),
 ]
@@ -107,10 +108,51 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
     StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
+    StandardAttribute("FILE_SZ_DEM", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILE_SZ_MT", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILE_SZ_OR", ogr.OFTReal, 0, 0),
+]
+
+SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
+
+    ## Overlap attributes
+    StandardAttribute("SCENE_ID", ogr.OFTString, 254, 0),
+    StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
+    StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
+    StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
+    StandardAttribute("ACQDATE1", ogr.OFTString, 32, 0),
+    StandardAttribute("ACQDATE2", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
+    StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
+    StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
+
+    ## Result DEM attributes
+    StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
+    StandardAttribute("PROJ4", ogr.OFTString, 100, 0),
+    StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
+    StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
+    StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
+    StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
+    StandardAttribute("HAS_LSF", ogr.OFTInteger, 8, 8),
+    StandardAttribute("HAS_NONLSF", ogr.OFTInteger, 8, 8),
+
+    ## File attributes
+    StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0),
+]
+
+SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
+    StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
+    StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
+    StandardAttribute("FILE_SZ_DEM", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILE_SZ_LSF", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILE_SZ_MT", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILE_SZ_OR", ogr.OFTReal, 0, 0),
+
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
-    
+
     ## Overlap attributes
     StandardAttribute("DEM_ID", ogr.OFTString, 80, 0),
     StandardAttribute("TILE", ogr.OFTString, 10, 0),
@@ -123,7 +165,7 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
     StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
     StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
-    
+
     ## File attributes
     StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0),
 ]
@@ -131,16 +173,18 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 TILE_DEM_ATTRIBUTE_DEFINITIONS = TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
     StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
+    StandardAttribute("FILE_SZ", ogr.OFTReal, 0, 0),
+
 ]
 
 OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS = [
-    
+
     ## Overlap attributes, written on overlap submission
     StandardAttribute("OVERLAP", ogr.OFTString, 254, 0),
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
     StandardAttribute("STATUS", ogr.OFTInteger, 2, 0)
     ]
-    
+
 OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
 
     StandardAttribute("MODE", ogr.OFTString, 16, 0),
@@ -150,14 +194,14 @@ OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
     StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
     StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
     StandardAttribute("EXT_AREA", ogr.OFTReal, 0, 0),
-    
+
     ## Result DEM attributes, written after process finishes
     StandardAttribute("ND_AREA", ogr.OFTReal, 0, 0),
     StandardAttribute("ND_PERC", ogr.OFTReal, 0, 0),
     StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
     StandardAttribute("PC_RES", ogr.OFTReal, 0, 0),
-    
+
     ## Process atributes, written after process finishes
     StandardAttribute("ASPVERSION", ogr.OFTString, 64, 0),
     StandardAttribute("ASPBUILDID", ogr.OFTString, 16, 0),
@@ -204,7 +248,7 @@ class SpatialRef(object):
                 self.srs = srs
                 self.proj4 = proj4_string
                 self.epsg = epsgcode
-                
+
 
 def check_file_inclusion(f, pairname, overlap_prefix, args):
     move_file = False
