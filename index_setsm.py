@@ -198,9 +198,9 @@ def main():
                         res = (raster.xres + raster.yres) / 2.0
                         feat.SetField("DEM_RES",res)
                         feat.SetField("GEOCELL",raster.geocell)
-                        feat.SetField("FILE_SZ_DEM",raster.filesz_dem)
-                        feat.SetField("FILE_SZ_MT",raster.filesz_mt)
-                        feat.SetField("FILE_SZ_OR",raster.filesz_or)
+                        feat.SetField("FILESZ_DEM",raster.filesz_dem)
+                        feat.SetField("FILESZ_MT",raster.filesz_mt)
+                        feat.SetField("FILESZ_OR",raster.filesz_or)
 
                         if raster.density is None:
                             density = -9999

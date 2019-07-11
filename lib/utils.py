@@ -108,9 +108,9 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
     StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
-    StandardAttribute("FILE_SZ_DEM", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILE_SZ_MT", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILE_SZ_OR", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
@@ -144,10 +144,10 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
 SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
     StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
-    StandardAttribute("FILE_SZ_DEM", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILE_SZ_LSF", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILE_SZ_MT", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILE_SZ_OR", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_LSF", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
 
 ]
 
