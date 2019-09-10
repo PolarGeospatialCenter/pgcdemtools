@@ -247,7 +247,7 @@ class SetsmScene(object):
                 raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
 
             if 'setsm_version' in metad:
-                self.algm_version = metad['setsm_version']
+                self.algm_version = "SETSM {}".format(metad['setsm_version'])
             else:
                 raise RuntimeError('Key "SETSM Version" not found in meta dict from {}'.format(self.metapath))
 
