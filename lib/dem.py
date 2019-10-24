@@ -59,10 +59,21 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<catid1>[A-Z0-9]{16})_
                                     (?P<catid2>[A-Z0-9]{16})
                                     )_
+                                    (?P<res>\d+m)_
+                                    (lsf_)?
                                     (?P<partnum>[SEG\d]+)_
-                                    (?P<res>\d+m)_?
-                                    (?P<crdate>\d{8})?
-                                    (?P<version>v[\d/.]+)?_
+                                    ((?P<version>v[\d/.]+)_)?
+                                    dem.(tif|jpg)\Z""", re.I | re.X)
+
+setsm_strip_pattern2 = re.compile("""(?P<pairname>
+                                    (?P<sensor>[A-Z][A-Z\d]{2}\d)_
+                                    (?P<timestamp>\d{8})_
+                                    (?P<catid1>[A-Z0-9]{16})_
+                                    (?P<catid2>[A-Z0-9]{16})
+                                    )_
+                                    (?P<partnum>[SEG\d]+)_
+                                    (?P<res>\d+m)_
+                                    ((?P<version>v[\d/.]+)_)?
                                     (lsf_)?
                                     dem.(tif|jpg)\Z""", re.I | re.X)
 
@@ -73,49 +84,77 @@ asp_strip_pattern = re.compile("""(?P<pairname>
                                   (?P<catid2>[A-Z0-9]{16}))_?
                                   (?P<res>\d+m)?-DEM.(tif|jpg)\Z""", re.I | re.X)
 
-setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)
-                                   (_(?P<subtile>\d+_\d+))?_
-                                   (?P<res>\d+m)
-                                   (_(?P<version>v[\d/.]+))?
-                                   (_reg)?_dem.tif\Z""", re.I)
+setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
+                                   ((?P<subtile>\d+_\d+)_)?
+                                   (?P<res>\d+m)_
+                                   ((?P<version>v[\d/.]+)_)?
+                                   (reg_)?
+                                   dem.tif\Z""", re.I| re.X)
 
 
 class SetsmScene(object):
-    def __init__(self,metapath):
+    def __init__(self,metapath,md=None):
 
-        self.srcdir, self.srcfn = os.path.split(metapath)
-        self.sceneid = self.srcfn[:-9]
-
-        self.metapath = metapath
-        self.lsf_dem = os.path.join(self.srcdir,self.sceneid+"_dem_smooth.tif")
-        self.dem = os.path.join(self.srcdir,self.sceneid+"_dem.tif")
-        self.matchtag = os.path.join(self.srcdir,self.sceneid+"_matchtag.tif")
-        self.ortho = os.path.join(self.srcdir,self.sceneid+"_ortho.tif")
-
-        if not os.path.isfile(self.ortho) \
-        or not os.path.isfile(self.matchtag) \
-        or not os.path.isfile(self.metapath) \
-        or not (os.path.isfile(self.dem) or os.path.isfile(self.lsf_dem)):
-            raise RuntimeError("DEM is part of an incomplete set: {}".format(self.sceneid))
-
-        #### parse name
-        match = setsm_scene_pattern.match(self.srcfn)
-        if match:
-            groups = match.groupdict()
-            self.pairname = groups['pairname']
-            self.catid1 = groups['catid1']
-            self.catid2 = groups['catid2']
-            self.acqdate1 = datetime.strptime(groups['timestamp'], '%Y%m%d') # if present, the metadata file value will overwrite this
-            self.acqdate2 = self.acqdate1
-            self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
-            self.sensor2 = self.sensor1
-            self.res = groups['res']
-            self.creation_date = None
-            self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
-            self.exact_geom = None
+        ## If md dictionary is passed in, recreate object from dict instead of from file location
+        if md:
+            self._rebuild_scene_from_dict(md)
 
         else:
-            raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
+            self.srcdir, self.srcfn = os.path.split(metapath)
+            self.sceneid = self.srcfn[:-9]
+
+            self.metapath = metapath
+            self.lsf_dem = os.path.join(self.srcdir,self.sceneid+"_dem_smooth.tif")
+            self.dem = os.path.join(self.srcdir,self.sceneid+"_dem.tif")
+            self.matchtag = os.path.join(self.srcdir,self.sceneid+"_matchtag.tif")
+            self.ortho = os.path.join(self.srcdir,self.sceneid+"_ortho.tif")
+
+            # set shared attributes
+            self.id = self.sceneid
+            self.srcfp = self.metapath
+
+            if not os.path.isfile(self.ortho) \
+            or not os.path.isfile(self.matchtag) \
+            or not os.path.isfile(self.metapath) \
+            or not (os.path.isfile(self.dem) or os.path.isfile(self.lsf_dem)):
+                raise RuntimeError("DEM is part of an incomplete set: {}".format(self.sceneid))
+
+            #### parse name
+            match = setsm_scene_pattern.match(self.srcfn)
+            if match:
+                groups = match.groupdict()
+                self.pairname = groups['pairname']
+                self.catid1 = groups['catid1']
+                self.catid2 = groups['catid2']
+                self.acqdate1 = datetime.strptime(groups['timestamp'], '%Y%m%d') # if present, the metadata file value will overwrite this
+                self.acqdate2 = self.acqdate1
+                self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
+                self.sensor2 = self.sensor1
+                self.res = groups['res']
+                self.creation_date = None
+                self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
+                self.geom = None
+            else:
+                raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
+
+            ## Read metadata file
+            self.get_metafile_info()
+
+            ## Build res_str
+            try:
+                res_int = int(self.res)
+            except ValueError as e:
+                res_str = self.res
+            else:
+                if res_int > 0:
+                    self.res_str = "{}m".format(self.res)
+                elif res_int == 0:
+                    self.res_str = "50cm"
+                else:
+                    raise RuntimeError("Scene has invalid resolution value in name: {}".format(scene.sceneid))
+
+            ## Make strip ID
+            self.stripid = '{}_{}_v{}'.format(self.pairname,self.res_str,self.version.replace('.',''))
 
     def get_dem_info(self):
 
@@ -228,15 +267,13 @@ class SetsmScene(object):
 
         ds = None
 
-        self.get_metafile_info()
-
     def get_metafile_info(self):
 
         ## If metafile exists
         if self.metapath:
             metad = self._parse_metadata_file()
 
-            if 'creation_date' in metad:
+            if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
             else:
                 raise RuntimeError('Key "Output Projection" not found in meta dict from {}'.format(self.metapath))
@@ -248,6 +285,7 @@ class SetsmScene(object):
 
             if 'setsm_version' in metad:
                 self.algm_version = "SETSM {}".format(metad['setsm_version'])
+                self.version = metad['setsm_version']
             else:
                 raise RuntimeError('Key "SETSM Version" not found in meta dict from {}'.format(self.metapath))
 
@@ -258,10 +296,10 @@ class SetsmScene(object):
                 self.acqdate2 = datetime.strptime(metad["image_2_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
             if 'image_1_satid' in metad:
-                self.satid1 = metad['image_1_satid']
+                self.sensor1 = metad['image_1_satid']
 
             if 'image_2_satid' in metad:
-                self.satid2 = metad['image_2_satid']
+                self.sensor2 = metad['image_2_satid']
 
         else:
             raise RuntimeError("meta.txt file does not exist for DEM")
@@ -300,63 +338,128 @@ class SetsmScene(object):
         else: #if len(creation_date) <= 36:  #2016-01-11 11:49:50.835182735 -0500
             return datetime.strptime(creation_date[:26],"%Y-%m-%d %H:%M:%S.%f")
 
+    def _rebuild_scene_from_dict(self, md):
+
+        ## Loop over dict, adding attributes to scene object
+        for k in md:
+            setattr(self,k,md[k])
+
+        ## Verify presence of key attributes
+        for k in self.key_attribs:
+            try:
+                if getattr(self,k) is None:
+                    raise RuntimeError("Scene object is missing key attribute: {}".format(k))
+            except AttributeError as e:
+                raise RuntimeError("Scene object is missing key attribute: {}".format(k))
+
+    key_attribs = (
+        'acqdate1',
+        'acqdate2',
+        'algm_version',
+        'bands',
+        'catid1',
+        'catid2',
+        'creation_date',
+        'dem',
+        'epsg',
+        'id',
+        'filesz_dem',
+        'filesz_lsf',
+        'filesz_mt',
+        'filesz_or',
+        'geom',
+        'lsf_dem',
+        'matchtag',
+        'metapath',
+        'ndv',
+        'ortho',
+        'pairname',
+        'proj',
+        'proj4',
+        'proj4_meta',
+        'res',
+        'res_str',
+        'sceneid',
+        'sensor1',
+        'sensor2',
+        'srcdir',
+        'srcfn',
+        'srcfp',
+        'srs',
+        'stripid',
+        'wkt_esri',
+        'xres',
+        'xsize',
+        'yres',
+        'ysize',
+    )
+
 
 class SetsmDem(object):
-    def __init__(self,filepath):
-        self.srcfp = filepath
-        self.srcdir, self.srcfn = os.path.split(self.srcfp)
-        if self.srcfn.endswith("lsf_dem.tif"):
-            self.stripid = self.srcfn[:-8]
-            self.is_lsf = True
+
+    def __init__(self, filepath, md=None):
+
+        ## If md dictionary is passed in, recreate object from dict instead of from file location
+        if md:
+            self._rebuild_scene_from_dict(md)
+
         else:
+            self.srcfp = filepath
+            self.srcdir, self.srcfn = os.path.split(self.srcfp)
             self.stripid = self.srcfn[:-8]
-            self.is_lsf = False
-
-        metapath = os.path.join(self.srcdir,self.stripid+"_meta.txt")
-        if os.path.isfile(metapath):
-            self.metapath = metapath
-        else:
-            self.metapath = None
-
-        self.matchtag = os.path.join(self.srcdir,self.stripid+"_matchtag.tif")
-        self.ortho = os.path.join(self.srcdir,self.stripid+"_ortho.tif")
-        self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
-        self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
-        self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
-        self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
-        self.reg_files = [
-            os.path.join(self.srcdir,self.stripid+"_reg.txt"),
-            os.path.join(self.srcdir,self.stripid+"_oibreg.txt"),
-            os.path.join(self.srcdir,self.stripid+"_ngareg.txt")
-        ]
-        self.archive = os.path.join(self.srcdir,self.stripid+".tar.gz")
-        #self.archive = os.path.join(self.srcdir,self.stripid+".tar")
-
-        #### parse name
-        match = setsm_strip_pattern.search(self.srcfn)
-        if match:
-            groups = match.groupdict()
-            self.pairname = groups['pairname']
-            self.catid1 = groups['catid1']
-            self.catid2 = groups['catid2']
-            self.acqdate1 = datetime.strptime(groups['timestamp'], '%Y%m%d') # if present, the metadata file value will overwrite this
-            self.acqdate2 = self.acqdate1
-            self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
-            self.sensor2 = self.sensor1
-            self.res = groups['res']
-            self.creation_date = None
-            self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
-            self.exact_geom = None
-            if 'version' in groups:
-                self.version = groups['version']
+            self.id = self.stripid
+            if 'lsf' in self.srcfn:
+                self.is_lsf = True
             else:
-                self.version = None
-        else:
-            raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
+                self.is_lsf = False
+
+            metapath = os.path.join(self.srcdir,self.stripid+"_meta.txt")
+            if os.path.isfile(metapath):
+                self.metapath = metapath
+            else:
+                self.metapath = None
+
+            self.matchtag = os.path.join(self.srcdir,self.stripid+"_matchtag.tif")
+            self.ortho = os.path.join(self.srcdir,self.stripid+"_ortho.tif")
+            self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
+            self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
+            self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
+            self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
+            self.reg_files = [
+                os.path.join(self.srcdir,self.stripid+"_reg.txt"),
+                os.path.join(self.srcdir,self.stripid+"_oibreg.txt"),
+                os.path.join(self.srcdir,self.stripid+"_ngareg.txt")
+            ]
+            self.archive = os.path.join(self.srcdir,self.stripid+".tar.gz")
+            #self.archive = os.path.join(self.srcdir,self.stripid+".tar")
+
+            #### parse name
+            for pattern in setsm_strip_pattern, setsm_strip_pattern2:
+                match = pattern.search(self.srcfn)
+                if match:
+                    groups = match.groupdict()
+                    self.pairname = groups['pairname']
+                    self.catid1 = groups['catid1']
+                    self.catid2 = groups['catid2']
+                    self.acqdate1 = datetime.strptime(groups['timestamp'], '%Y%m%d') # if present, the metadata file value will overwrite this
+                    self.acqdate2 = self.acqdate1
+                    self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
+                    self.sensor2 = self.sensor1
+                    self.res = groups['res']
+                    self.creation_date = None
+                    self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
+                    self.geom = None
+                    if 'version' in groups:
+                        self.version = groups['version']
+                    else:
+                        self.version = None
+                    break
+            if not match:
+                raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
     def get_geocell(self):
 
-        centroid = self.exact_geom.Centroid()
+        centroid = self.geom.Centroid()
 
         ## Convert to wgs84
         srs = osr.SpatialReference()
@@ -471,6 +574,7 @@ class SetsmDem(object):
         ds = None
 
         self.get_metafile_info()
+        self.get_geocell()
 
     def compute_density_and_statistics(self):
         #### If no mdf or mdf does not contain valid density key, compute
@@ -481,7 +585,7 @@ class SetsmDem(object):
             if not os.path.isfile(self.matchtag):
                 raise RuntimeError("Matchtag file does not exist for DEM: {}".format(self.srcfp))
             else:
-                geom_area = self.exact_geom.Area()
+                geom_area = self.geom.Area()
                 ds = gdal.Open(self.matchtag)
                 b = ds.GetRasterBand(1)
                 gtf = ds.GetGeoTransform()
@@ -532,7 +636,7 @@ class SetsmDem(object):
 
             if pts == [('NaN', 'NaN')]:
                 logger.error("No valid vertices found: {}".format(self.metapath))
-                self.exact_geom = None
+                self.geom = None
             else:
                 poly_vts = []
                 for pt in pts:
@@ -542,7 +646,7 @@ class SetsmDem(object):
 
                 if len(poly_vts) > 0:
                     poly_wkt = 'POLYGON (( {} ))'.format(", ".join(poly_vts))
-                    self.exact_geom = ogr.CreateGeometryFromWkt(poly_wkt)
+                    self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
 
             self.proj4_meta = metad['Strip projection (proj4)'].replace("'","")
 
@@ -631,7 +735,6 @@ class SetsmDem(object):
             metad = self._read_mdf_file()
 
             ## populate attribs
-            ## exact_geom
             keys = metad.keys()
             x_keys = [int(k[11:]) for k in keys if k.startswith("STRIP_DEM_X") ]
             y_keys = [int(k[11:]) for k in keys if k.startswith("STRIP_DEM_Y") ]
@@ -647,7 +750,7 @@ class SetsmDem(object):
             if len(poly_vts) > 0:
                 poly_vts.append("{} {}".format(metad["STRIP_DEM_X1"],metad["STRIP_DEM_Y1"]))
                 poly_wkt = 'POLYGON (( {} ))'.format(", ".join(poly_vts))
-                self.exact_geom = ogr.CreateGeometryFromWkt(poly_wkt)
+                self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
 
             ## density, stats, proj4, creation date, version
             try:
@@ -699,7 +802,7 @@ class SetsmDem(object):
 
     def write_mdf_file(self,lsf_flag=False):
 
-        if self.exact_geom:
+        if self.geom:
 
             tm = datetime.now()
 
@@ -730,10 +833,10 @@ class SetsmDem(object):
             #### make list of points
             pnt_list = []
 
-            if self.exact_geom.GetGeometryCount() <> 1:
+            if self.geom.GetGeometryCount() <> 1:
                 raise RuntimeError("Geometry has multiple parts: {}, {}".format(self.geom.ExportToWkt(),self.srcfp))
 
-            g1 = self.exact_geom.GetGeometryRef(0)
+            g1 = self.geom.GetGeometryRef(0)
             for i in range(0,g1.GetPointCount()):
                 pnt = g1.GetPoint(i)
                 x_tuple = ('X{}'.format(i+1),pnt[0])
@@ -974,6 +1077,71 @@ class SetsmDem(object):
         else: #if len(creation_date) <= 36:  #2016-01-11 11:49:50.835182735 -0500
             return datetime.strptime(creation_date[:26],"%Y-%m-%d %H:%M:%S.%f").strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
+    def _rebuild_scene_from_dict(self, md):
+
+        ## Loop over dict, adding attributes to scene object
+        for k in md:
+            setattr(self,k,md[k])
+
+        ## Verify presence of key attributes
+        for k in self.key_attribs:
+            try:
+                if getattr(self,k) is None:
+                    raise RuntimeError("Strip object is missing key attribute: {}".format(k))
+            except AttributeError as e:
+                raise RuntimeError("Strip object is missing key attribute: {}".format(k))
+
+    key_attribs = (
+        'acqdate1',
+        'acqdate2',
+        'algm_version',
+        'alignment_dct',
+        'archive',
+        'bands',
+        'browse',
+        'catid1',
+        'catid2',
+        'creation_date',
+        'datatype',
+        'datatype_readable',
+        'epsg',
+        'filesz_dem',
+        'filesz_mt',
+        'filesz_or',
+        'geocell',
+        'geom',
+        'gtf',
+        'id',
+        'is_lsf',
+        'matchtag',
+        'mdf',
+        'metapath',
+        'ndv',
+        'ortho',
+        'pairname',
+        'proj',
+        'proj4',
+        'proj4_meta',
+        'readme',
+        'reg_files',
+        'reginfo_list',
+        'res',
+        'scenes',
+        'sensor1',
+        'sensor2',
+        'srcdir',
+        'srcfn',
+        'srcfp',
+        'srs',
+        'stats',
+        'stripid',
+        'wkt_esri',
+        'xres',
+        'xsize',
+        'yres',
+        'ysize'
+    )
+
 
 class AspDem(object):
     def __init__(self,filepath):
@@ -1002,7 +1170,7 @@ class AspDem(object):
             self.sensor = groups['sensor']
             self.creation_date = None
             self.algm_version = 'ASP'
-            self.exact_geom = None
+            self.geom = None
         else:
             raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
@@ -1119,57 +1287,68 @@ class AspDem(object):
 
 
                         #### transfrom and write geom
-                        self.exact_geom = feat2.GetGeometryRef().Clone()
+                        self.geom = feat2.GetGeometryRef().Clone()
 
             ds2 = None
 
 
 class SetsmTile(object):
 
-    def __init__(self, srcfp):
-        self.srcfp = srcfp
-        self.srcdir, self.srcfn = os.path.split(self.srcfp)
-        if 'reg' in self.srcfn:
-            self.tileid = self.srcfn[:-12]
-            self.matchtag = os.path.join(self.srcdir,self.srcfn[:-8] + '_matchtag.tif')
-            self.ortho = os.path.join(self.srcdir,self.srcfn[:-8] + '_ortho.tif')
-            self.err = os.path.join(self.srcdir,self.srcfn[:-8] + '_err.tif')
-            self.day = os.path.join(self.srcdir,self.srcfn[:-8] + '_day.tif')
-            self.browse = os.path.join(self.srcdir,self.srcfn[:-8] + '_dem_browse.tif')
-            self.density_file = os.path.join(self.srcdir,self.srcfn[:-8] + '_density.txt')
+    def __init__(self, srcfp, md=None):
+
+        ## If md dictionary is passed in, recreate object from dict instead of from file location
+        if md:
+            self._rebuild_scene_from_dict(md)
+
         else:
-            self.tileid = self.srcfn[:-8]
-            self.matchtag = os.path.join(self.srcdir,self.tileid + '_matchtag.tif')
-            self.err = os.path.join(self.srcdir,self.tileid + '_err.tif')
-            self.day = os.path.join(self.srcdir,self.tileid + '_day.tif')
-            self.ortho = os.path.join(self.srcdir,self.tileid + '_ortho.tif')
-            self.browse = os.path.join(self.srcdir,self.tileid + '_dem_browse.tif')
-            self.density_file = os.path.join(self.srcdir,self.tileid + '_density.txt')
-
-        #self.archive = os.path.join(self.srcdir,self.tileid+".tar")
-        self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
-
-        match = setsm_tile_pattern.match(self.srcfn)
-        if match:
-            groups = match.groupdict()
-            self.tilename = groups['tile']
-            self.res = groups['res']
-            self.version = groups['version']
-            self.subtile = groups['subtile']
-
-            if self.subtile:
-                metabase = self.tileid.replace('_'+self.subtile,'')
-                self.metapath = os.path.join(self.srcdir,metabase + '_dem_meta.txt')
-                self.regmetapath = os.path.join(self.srcdir, metabase + '_reg.txt')
+            self.srcfp = srcfp
+            self.srcdir, self.srcfn = os.path.split(self.srcfp)
+            if 'reg' in self.srcfn:
+                self.tileid = self.srcfn[:-12]
+                name_base = self.srcfn[:-8]
             else:
-                self.metapath = os.path.join(self.srcdir, self.tileid + '_dem_meta.txt')
-                self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
+                self.tileid = self.srcfn[:-8]
+                name_base = self.tileid
 
-        else:
-            raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
+            self.id = self.tileid
+
+            self.matchtag = os.path.join(self.srcdir,name_base + '_matchtag.tif')
+            self.err = os.path.join(self.srcdir,name_base + '_err.tif')
+            self.day = os.path.join(self.srcdir,name_base + '_day.tif')
+            self.ortho = os.path.join(self.srcdir,name_base + '_ortho.tif')
+            self.browse = os.path.join(self.srcdir,name_base + '_dem_browse.tif')
+            self.density_file = os.path.join(self.srcdir,name_base + '_density.txt')
+
+            self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
+
+            match = setsm_tile_pattern.match(self.srcfn)
+            if match:
+                groups = match.groupdict()
+                self.tilename = groups['tile']
+                self.res = groups['res']
+                self.version = groups['version']
+                self.subtile = groups['subtile']
+
+                if self.subtile:
+                    metabase = self.tileid.replace('_'+self.subtile,'')
+                    self.metapath = os.path.join(self.srcdir,metabase + '_dem_meta.txt')
+                    self.regmetapath = os.path.join(self.srcdir, metabase + '_reg.txt')
+                else:
+                    self.metapath = os.path.join(self.srcdir, self.tileid + '_dem_meta.txt')
+                    self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
+
+                self.supertile_id = '{}_{}'.format(self.tilename,self.res)
+
+            else:
+                raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
 
     def get_dem_info(self):
+
+        try:
+            self.filesz_dem = os.path.getsize(self.srcfp) / 1024 / 1024 / 1024.0
+        except OSError:
+            self.filesz_dem = 0
 
         ds = gdal.Open(self.srcfp)
         if ds is not None:
@@ -1271,7 +1450,6 @@ class SetsmTile(object):
             self.density = float(density)
             fh.close()
 
-
     def compute_density_and_statistics(self):
         #### If no density file, compute
         if not os.path.isfile(self.density_file):
@@ -1304,7 +1482,6 @@ class SetsmTile(object):
             fh = open(self.density_file, 'w')
             fh.write('{}\n'.format(self.density))
             fh.close()
-
 
     def get_geom(self):
 
@@ -1390,7 +1567,6 @@ class SetsmTile(object):
 
         ds = None
 
-
     def get_metafile_info(self):
 
         metad = self._parse_metadata_file()
@@ -1422,7 +1598,6 @@ class SetsmTile(object):
                 self.reg_src = 'ICESat'
             elif reg_src =='Neighbor Align':
                 self.reg_src = reg_src
-
 
     def _parse_metadata_file(self):
         metad = {}
@@ -1475,6 +1650,61 @@ class SetsmTile(object):
 
         return metad
 
+    def _rebuild_scene_from_dict(self, md):
+
+        ## Loop over dict, adding attributes to scene object
+        for k in md:
+            setattr(self,k,md[k])
+
+        ## Verify presence of key attributes
+        for k in self.key_attribs:
+            try:
+                if getattr(self,k) is None:
+                    raise RuntimeError("Tile object is missing key attribute: {}".format(k))
+            except AttributeError as e:
+                raise RuntimeError("Tile object is missing key attribute: {}".format(k))
+
+    key_attribs = (
+        'alignment_dct',
+        'archive',
+        'bands',
+        'browse',
+        'creation_date',
+        'datatype',
+        'datatype_readable',
+        'day',
+        'epsg',
+        'err',
+        'filesz_dem',
+        'geom',
+        'gtf',
+        'id',
+        'matchtag',
+        'mean_resid_z',
+        'metapath',
+        'ndv',
+        'num_components',
+        'num_gcps',
+        'ortho',
+        'proj',
+        'proj4',
+        'reg_src',
+        'regmetapath',
+        'res',
+        'srcdir',
+        'srcfn',
+        'srcfp',
+        'srs',
+        'stats',
+        'sum_gcps',
+        'tileid',
+        'tilename',
+        'wkt_esri',
+        'xres',
+        'xsize',
+        'yres',
+        'ysize',
+    )
 
 class RegInfo(object):
 

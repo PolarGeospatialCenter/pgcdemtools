@@ -36,30 +36,30 @@ deliv_suffixes = (
 archive_suffix = ".tar"
 
 shp_suffixes = (
-                  '.shp',
-                  '.shx',
-                  '.prj',
-                  '.dbf'
+'.shp',
+'.shx',
+'.prj',
+'.dbf'
 )
 
 pc_suffixes = (
-                  '-PC.tif',
-                  '-PC-center.txt'
+'-PC.tif',
+'-PC-center.txt'
 )
 
 fltr_suffixes = (
-                  '_fltr-DEM.tif',
-                  '_fltr-DEM.prj'
+'_fltr-DEM.tif',
+'_fltr-DEM.prj'
 )
 
 
 log_suffixes = (
-                  '-log-point2dem',
-                  '-log-stereo_corr',
-                   '-log-stereo_pprc',
-                  '-log-stereo_fltr',
-                  '-log-stereo_rfne',
-                  '-log-stereo_tri'
+'-log-point2dem',
+'-log-stereo_corr',
+ '-log-stereo_pprc',
+'-log-stereo_fltr',
+'-log-stereo_rfne',
+'-log-stereo_tri',
 )
 
 # common name id, attribute field name, storage type, field width, field precision
@@ -80,11 +80,9 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
     StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
     StandardAttribute("GEOCELL", ogr.OFTString, 10, 0),
-    #StandardAttribute("EXT_AREA", ogr.OFTReal, 0, 0),
+    StandardAttribute("REGION", ogr.OFTString, 64, 0),
 
     ## Result DEM attributes
-    #StandardAttribute("ND_AREA", ogr.OFTReal, 0, 0),
-    #StandardAttribute("ND_PERC", ogr.OFTReal, 0, 0),
     StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
     StandardAttribute("PROJ4", ogr.OFTString, 100, 0),
     StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
@@ -100,17 +98,14 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("DZ", ogr.OFTReal, 0, 0),
     StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
     StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
-
-    ## File attributes
-    StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
-    StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
+    StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
@@ -126,6 +121,7 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
     StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
     StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
+    StandardAttribute("REGION", ogr.OFTString, 64, 0),
 
     ## Result DEM attributes
     StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
@@ -136,19 +132,15 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
     StandardAttribute("HAS_LSF", ogr.OFTInteger, 8, 8),
     StandardAttribute("HAS_NONLSF", ogr.OFTInteger, 8, 8),
-
-    ## File attributes
-    StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
-    StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_LSF", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
-
+    StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
@@ -165,16 +157,12 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
     StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
     StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
-
-    ## File attributes
-    StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS = TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("FILEPATH", ogr.OFTString, 254, 0),
-    StandardAttribute("WIN_PATH", ogr.OFTString, 254, 0),
-    StandardAttribute("FILE_SZ", ogr.OFTReal, 0, 0),
-
+    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
+    StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
 OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS = [
@@ -317,6 +305,35 @@ def get_source_names(src_fp):
         raise RuntimeError(msg)
 
     return (_src_fp, src_lyr)
+
+
+def get_source_names2(src_str):
+    """Get the source data format type, dataset connection str, and layer name"""
+
+    src_str_abs = os.path.abspath(src_str)
+
+    if src_str.lower().endswith(".shp"):
+        driver = "ESRI Shapefile"
+        src_ds = src_str_abs
+        src_lyr = os.path.splitext(os.path.basename(src_str_abs))[0]
+
+    elif ".gdb" in src_str.lower():
+        driver = "FileGDB"
+        if not src_str_abs.lower().endswith(".gdb"):
+            src_ds, src_lyr = re.split(r"(?<=\.gdb)/", src_str_abs, re.I)
+        else:
+            src_ds = src_str
+            src_lyr = os.path.splitext(os.path.basename(src_str))[0]
+
+    elif src_str.lower().startswith("pg:"):
+        driver = "PostgreSQL"
+        pfx, src_ds, src_lyr = src_str.split(":")
+
+    else:
+        msg = "The source {} does not appear to be a Shapefile, File GDB, or PostgreSQL connection -- quitting".format(src_str)
+        raise RuntimeError(msg)
+
+    return (driver, src_ds, src_lyr)
 
 
 def drange(start, stop, step):

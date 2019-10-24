@@ -1,5 +1,5 @@
-import os, sys, string, shutil, glob, re, logging
-from datetime import *
+import os, sys, string, shutil, glob, re, logging, ConfigParser, json
+import datetime
 import gdal, osr, ogr, gdalconst
 import argparse
 import numpy
@@ -10,7 +10,25 @@ from lib import utils, dem
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
 
+FORMAT_OPTIONS = {
+    'SHP':'ESRI Shapefile',
+    'GDB':'ESRI Geodatabase',
+    'PG':'PostgreSQL Database (PG:<config.ini section with conneciton info>:<layer name>}',
+}
+FORMAT_HELP = ['{}:{},'.format(k,v) for k, v in FORMAT_OPTIONS.items()]
 
+PROJECTS = (
+    'arcticdem',
+    'rema',
+    'earthdem'
+)
+
+MODES = {
+    ## mode : (class, suffix, groupid_fld, field_def)
+    'scene' : (dem.SetsmScene, '_meta.txt', 'stripid', utils.SCENE_ATTRIBUTE_DEFINITIONS),
+    'strip' : (dem.SetsmDem, '_dem.tif', 'stripid', utils.DEM_ATTRIBUTE_DEFINITIONS),
+    'tile'  : (dem.SetsmTile, '_dem.tif', 'supertile_id', utils.TILE_DEM_ATTRIBUTE_DEFINITIONS),
+}
 
 def main():
 
@@ -21,14 +39,29 @@ def main():
 
     #### Positional Arguments
     parser.add_argument('src', help="source directory or image")
-    parser.add_argument('dst', help="destination index feature class")
+    parser.add_argument('dst', help="destination index dataset (use PG:<config.ini section name>:<layer name> for a postgresql DB")
 
-    #### Optionsl Arguments
+    #### Optional Arguments
+    parser.add_argument('--mode', choices=MODES.keys(), default='scene',
+                        help="type of items to index {} default=scene".format(MODES.keys()))
+    parser.add_argument('--config', default=os.path.join(os.path.dirname(sys.argv[0]),'config.ini'),
+                        help="config file (default is config.ini in script dir")
     parser.add_argument('--epsg', type=int, default=4326,
-                        help="egsg code for output index projection (default wgs85 geographic epgs:4326)")
+                        help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
+    parser.add_argument('--read-json', action='store_true', default=False,
+                        help='search for json files instead of images to populate the index')
+    parser.add_argument('--write-json', action='store_true', default=False,
+                        help='write results to json files in dst folder')
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
+    parser.add_argument('--append', action='store_true', default=False,
+                        help="append records to existing index")
+    parser.add_argument('--skip-region-lookup', action='store_true', default=False,
+                        help="skip region lookup on danco (used for testing)")
+    parser.add_argument('--project', choices=PROJECTS, help='project name (required when writing tiles to a DB table with "prefix" in your config)')
+    parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
+
 
     #### Parse Arguments
     args = parser.parse_args()
@@ -38,26 +71,19 @@ def main():
         parser.error("Source directory or file does not exist: %s" %args.src)
 
     src = os.path.abspath(args.src)
-    dst = os.path.abspath(args.dst)
+    dst = args.dst
 
-    try:
-        dst_dir, dst_lyr = utils.get_source_names(dst)
-    except RuntimeError, e:
-        parser.error(e)
+    if args.overwrite and args.append:
+        parser.error('--append and --overwrite are mutually exclusive')
 
-    print (dst_dir,dst_lyr)
+    if args.write_json and args.append:
+        parser.error('--append cannot be used with the --write-json option')
 
-    ogr_driver_str = "ESRI Shapefile" if dst.lower().endswith(".shp") else "FileGDB"
-    ogrDriver = ogr.GetDriverByName(ogr_driver_str)
-    if ogrDriver is None:
-        parser.error("GDAL FileGDB driver is not available")
+    ## Check project
+    if args.mode == 'tile' and not args.project:
+        parser.error("--project option is required if when mode=tile")
 
-    #### Test epsg
-    try:
-        spatial_ref = utils.SpatialRef(args.epsg)
-    except RuntimeError, e:
-        parser.error(e)
-
+    #### Set up loggers
     lsh = logging.StreamHandler()
     lsh.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
@@ -77,48 +103,112 @@ def main():
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
 
-    rasters = []
+    ## Check path if --write-json is invoked
+    if args.write_json:
+        if not os.path.isdir(dst):
+            parser.error("Destination must be an existing directory with --write-json option")
+        ogr_driver_str = None
 
-    #### ID rasters
-    logger.info('Identifying DEMs')
-    if os.path.isfile(src):
-        logger.info(src)
-        try:
-            raster = dem.SetsmDem(os.path.join(src))
-        except RuntimeError, e:
-            logger.error( e )
-        else:
-            rasters.append(raster)
+        if args.epsg:
+            logger.warning('--epsg will be ignored with the --write-json option')
 
+    ## If not writing to JSON, get OGR driver, ds name, and layer name
     else:
-        for root,dirs,files in os.walk(src):
-            for f in files:
-                if f.endswith("dem.tif") and "m_" in f:
-                    logger.debug(os.path.join(root,f))
-                    try:
-                        raster = dem.SetsmDem(os.path.join(root,f))
-                    except RuntimeError, e:
-                        logger.error( e )
-                    else:
-                        rasters.append(raster)
+        try:
+            ogr_driver_str, dst_dsp, dst_lyr = utils.get_source_names2(dst)
+        except RuntimeError, e:
+            parser.error(e)
 
-    total = len(rasters)
+        ogrDriver = ogr.GetDriverByName(ogr_driver_str)
+        if ogrDriver is None:
+            parser.error("Driver is not available: {}".format(ogr_driver_str))
 
-    if total > 0:
-        #### Write index
-        #### delete old index if shp,  delete layer if GDB?
-        if dst.endswith('.shp') and os.path.isfile(dst):
-            if args.overwrite:
-                logger.info("Removing old index... %s" %os.path.basename(dst))
-                ogrDriver.DeleteDataSource(dst)
+        #### Get Config file contents
+        try:
+            config = ConfigParser.SafeConfigParser()
+        except NameError:
+            config = ConfigParser.ConfigParser()  # ConfigParser() replaces SafeConfigParser() in Python >=3.2
+        config.read(args.config)
+
+        #### Get output DB connection if specified
+        db_path_prefix = None
+        if ogr_driver_str in ("PostgreSQL"):
+
+            section = dst_dsp
+            if section in config.sections():
+                conn_info = {
+                    'host':config.get(section,'host'),
+                    'port':config.getint(section,'port'),
+                    'name':config.get(section,'name'),
+                    'schema':config.get(section,'schema'),
+                    'user':config.get(section,'user'),
+                    'pw':config.get(section,'pw'),
+                }
+                ## TODO add logic if no prefix specified
+                try:
+                    db_path_prefix = config.get(section,'prefix')
+                except:
+                    logger.info('Config file parameter "prefix" not found. Output location field will be absolute filepaths')
+                    db_path_prefix = None
+
+                dst_ds = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
+
             else:
+                logger.error('Config.ini file must contain credentials to connect to {}'.format(section))
+                sys.exit(-1)
+
+        #### Set dataset path is SHP or GDB
+        elif ogr_driver_str in ("ESRI Shapefile","FileGDB"):
+            dst_ds = dst_dsp
+
+        else:
+            logger.error("Format {} is not supported".format(ogr_driver_str))
+
+
+        #### Get Danco connection if available
+        section = 'danco'
+        if section in config.sections():
+            danco_conn_info = {
+                'host':config.get(section,'host'),
+                'port':config.getint(section,'port'),
+                'name':config.get(section,'name'),
+                'schema':config.get(section,'schema'),
+                'user':config.get(section,'user'),
+                'pw':config.get(section,'pw'),
+            }
+
+            if args.skip_region_lookup or args.mode == 'tile':
+                pairs = {}
+            else:
+                logger.info("Fetching region lookup from Danco")
+                pairs = get_pair_region_dict(danco_conn_info)
+                if len(pairs) == 0:
+                    logger.warning("Cannot access Danco table")
+
+        else:
+            logger.warning('Config file does not contain credentials to connect to Danco. EarthDEM region cannot be determined.')
+
+
+        #### Test epsg
+        try:
+            spatial_ref = utils.SpatialRef(args.epsg)
+        except RuntimeError, e:
+            parser.error(e)
+
+        #### Test if dst table exists
+        if ogr_driver_str == 'ESRI Shapefile' and os.path.isfile(dst_ds):
+            if args.overwrite:
+                logger.info("Removing old index... %s" %os.path.basename(dst_ds))
+                if not args.dryrun:
+                    ogrDriver.DeleteDataSource(dst_ds)
+            elif not args.append:
                 logger.error("Dst shapefile exists.  Use the --overwrite flag to overwrite.")
                 sys.exit()
 
-        if dst_dir.endswith('.gdb') and os.path.isdir(dst_dir):
-            ds = ogrDriver.Open(dst_dir,1)
-            if ds is not None:
-                #logger.info(ds.TestCapability(ogr.ODsCDeleteLayer))
+
+        if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
+            ds = ogrDriver.Open(dst_ds,1)
+            if ds:
                 for i in range(ds.GetLayerCount()):
                     lyr = ds.GetLayer(i)
                     if lyr.GetName() == dst_lyr:
@@ -127,160 +217,426 @@ def main():
                             del lyr
                             ds.DeleteLayer(i)
                             break
-                        else:
+                        elif not args.append:
                             logger.error("Dst GDB layer exists.  Use the --overwrite flag to overwrite.")
                             sys.exit()
                 ds = None
 
-        if dst.endswith('.shp'):
-            if not os.path.isfile(dst):
-                ds = ogrDriver.CreateDataSource(dst)
-            else:
+        ## Postgres check - do not overwrite
+        if ogr_driver_str == 'PostgreSQL':
+            ds = ogrDriver.Open(dst_ds,1)
+            if ds:
+                for i in range(ds.GetLayerCount()):
+                    lyr = ds.GetLayer(i)
+                    if lyr.GetName() == dst_lyr:
+                        if args.overwrite:
+                            logger.info("Removing old index layer: {}".format(dst_lyr))
+                            del lyr
+                            ds.DeleteLayer(i)
+                            break
+                        elif not args.append:
+                            logger.error("Dst DB layer exists.  Use the --overwrite flag to overwrite.")
+                            sys.exit()
                 ds = None
 
+
+    #### ID records
+    dem_class, suffix, groupid_fld, fld_defs = MODES[args.mode]
+    src_fps = []
+    records = []
+    logger.info('Identifying DEMs')
+    if os.path.isfile(src):
+        logger.info(src)
+        src_fps.append(src)
+    else:
+        for root,dirs,files in os.walk(src):
+            for f in files:
+                if (f.endswith('.json') and args.read_json) or (f.endswith(suffix)):
+                    logger.debug(os.path.join(root,f))
+                    src_fps.append(os.path.join(root,f))
+
+    for src_fp in src_fps:
+        if args.read_json:
+            temp_records = read_json(os.path.join(src_fp),args.mode)
+            records.extend(temp_records)
         else:
-            if os.path.isdir(dst_dir):
-                ds = ogrDriver.Open(dst_dir,1)
+            try:
+                record = dem_class(src_fp)
+                record.get_dem_info()
+            except RuntimeError, e:
+                logger.error( e )
             else:
-                ds = ogrDriver.CreateDataSource(dst_dir)
+                records.append(record)
 
-        if ds is not None:
+    total = len(records)
 
-            logger.info("Building index...")
-            #### build new index
-            tgt_srs = osr.SpatialReference()
-            tgt_srs.ImportFromEPSG(args.epsg)
+    if total == 0:
+        logger.info("No valid records found")
 
-            layer = ds.CreateLayer(dst_lyr, tgt_srs, ogr.wkbPolygon)
+    else:
+        ## Group into strips or tiles for json writing
+        groups = {}
+        for record in records:
+            groupid = getattr(record,groupid_fld)
+            if groupid in groups:
+                groups[groupid].append(record)
+            else:
+                groups[groupid] = [record]
 
-            if layer is not None:
+        #### Write index
+        if args.write_json:
+            write_to_json(dst, groups, total, args)
+        else:
+            write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
 
-                for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS:
 
+def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args):
+
+    ## Create dataset if it does not exist
+    if ogr_driver_str == 'ESRI Shapefile':
+        if os.path.isfile(dst_ds):
+            ds = ogrDriver.Open(dst_ds,1)
+        else:
+            ds = ogrDriver.CreateDataSource(dst_ds)
+
+    elif ogr_driver_str == 'FileGDB':
+        if os.path.isdir(dst_ds):
+            ds = ogrDriver.Open(dst_ds,1)
+        else:
+            ds = ogrDriver.CreateDataSource(dst_ds)
+
+    elif ogr_driver_str == 'PostgreSQL':
+        # DB must already exist
+        ds = ogrDriver.Open(dst_ds,1)
+
+    else:
+        logger.error("Format {} is not supported".format(ogr_driver_str))
+
+    if ds is not None:
+
+        ## Create table if it does not exist
+        layer = ds.GetLayerByName(dst_lyr)
+        fld_list = [f.fname for f in fld_defs]
+
+        tgt_srs = osr.SpatialReference()
+        tgt_srs.ImportFromEPSG(args.epsg)
+
+        if not layer:
+            logger.info("Creating table...")
+
+            layer = ds.CreateLayer(dst_lyr, tgt_srs, ogr.wkbMultiPolygon)
+            if layer:
+                for field_def in fld_defs:
                     field = ogr.FieldDefn(field_def.fname, field_def.ftype)
                     field.SetWidth(field_def.fwidth)
                     field.SetPrecision(field_def.fprecision)
                     layer.CreateField(field)
 
-                #### loop through rasters and add features
-                i=0
-                for raster in rasters:
+        ## Append Records
+        if layer:
+            logger.info("Appending records...")
+            #### loop through records and add features
+            i=0
+            for groupid in groups:
+                for record in groups[groupid]:
                     i+=1
                     progress(i,total,"features written")
-                    #print raster.stripid
-                    try:
-                        raster.get_dem_info()
-                        raster.get_geocell()
-                    except RuntimeError, e:
-                        logger.error( e )
-                    else:
+                    if not args.dryrun:
+
                         feat = ogr.Feature(layer.GetLayerDefn())
+                        valid_record = True
 
-                        ## Set fields
-                        feat.SetField("DEM_ID",raster.stripid)
-                        feat.SetField("PAIRNAME",raster.pairname)
-                        feat.SetField("SENSOR1",raster.sensor1)
-                        feat.SetField("SENSOR2",raster.sensor2)
-                        feat.SetField("ACQDATE1",raster.acqdate1.strftime("%Y-%m-%d"))
-                        feat.SetField("ACQDATE2",raster.acqdate2.strftime("%Y-%m-%d"))
-                        feat.SetField("CATALOGID1",raster.catid1)
-                        feat.SetField("CATALOGID2",raster.catid2)
-                        feat.SetField("ND_VALUE",raster.ndv)
-                        feat.SetField("DEM_NAME",raster.srcfn)
-                        feat.SetField("FILEPATH",raster.srcdir)
-                        feat.SetField("ALGM_VER",raster.algm_version)
-                        feat.SetField("IS_LSF",int(raster.is_lsf))
-                        if raster.version:
-                            feat.SetField("REL_VER",raster.version)
-                        if raster.srcdir.startswith(r'/mnt/pgc'):
-                            winpath = raster.srcdir.replace(r'/mnt/pgc',r'V:/pgc')
-                            feat.SetField("WIN_PATH",winpath)
-                        res = (raster.xres + raster.yres) / 2.0
-                        feat.SetField("DEM_RES",res)
-                        feat.SetField("GEOCELL",raster.geocell)
-                        feat.SetField("FILESZ_DEM",raster.filesz_dem)
-                        feat.SetField("FILESZ_MT",raster.filesz_mt)
-                        feat.SetField("FILESZ_OR",raster.filesz_or)
+                        ## Set attributes
+                        ## Fields for scene DEM
+                        if args.mode == 'scene':
 
-                        if raster.density is None:
-                            density = -9999
-                        else:
-                            density = raster.density
-                        feat.SetField("DENSITY",density)
+                            attrib_map = {
+                                'SCENE_ID': record.sceneid,
+                                'STRIP_ID': record.stripid,
+                                'PAIRNAME': record.pairname,
+                                'SENSOR1': record.sensor1,
+                                'SENSOR2': record.sensor2,
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
+                                'CATALOGID1': record.catid1,
+                                'CATALOGID2': record.catid2,
+                                'HAS_LSF': int(os.path.isfile(record.lsf_dem)),
+                                'HAS_NONLSF': int(os.path.isfile(record.dem)),
+                                'ALGM_VER': record.algm_version,
+                                'FILESZ_DEM': record.filesz_dem,
+                                'FILESZ_LSF': record.filesz_lsf,
+                                'FILESZ_MT': record.filesz_mt,
+                                'FILESZ_OR': record.filesz_or,
+                                'PROJ4': record.proj4,
+                                'EPSG': record.epsg,
+                            }
 
-                        if len(raster.reginfo_list) > 0:
-                            for reginfo in raster.reginfo_list:
-                                if reginfo.name == 'ICESat':
-                                    feat.SetField("DX",reginfo.dx)
-                                    feat.SetField("DY",reginfo.dy)
-                                    feat.SetField("DZ",reginfo.dz)
-                                    feat.SetField("REG_SRC",'ICESat')
-                                    feat.SetField("NUM_GCPS",reginfo.num_gcps)
-                                    feat.SetField("MEANRESZ",reginfo.mean_resid_z)
-
-                        #### Set fields if populated (will not be populated if metadata file is not found)
-                        if raster.creation_date:
-                            feat.SetField("CR_DATE",raster.creation_date.strftime("%Y-%m-%d"))
-
-                        ## transfrom and write geom
-                        feat.SetField("PROJ4",raster.proj4)
-                        feat.SetField("EPSG",raster.epsg)
-
-                        src_srs = osr.SpatialReference()
-                        src_srs.ImportFromWkt(raster.proj)
-
-                        if raster.exact_geom:
-                            geom = raster.exact_geom.Clone()
-                            transform = osr.CoordinateTransformation(src_srs,tgt_srs)
-                            geom.Transform(transform)
-
-                            centroid = geom.Centroid()
-                            feat.SetField("CENT_LAT",centroid.GetY())
-                            feat.SetField("CENT_LON",centroid.GetX())
-
-                            ## if srs is geographic and geom crosses 180, split geom into 2 parts
-                            if tgt_srs.IsGeographic:
-
-                                #### Get Lat and Lon coords in arrays
-                                lons = []
-                                lats = []
-                                #print extent_geom.GetGeometryCount()
-                                ring  = geom.GetGeometryRef(0)  #### assumes a 1 part polygon
-                                for j in range(0, ring.GetPointCount()):
-                                    pt = ring.GetPoint(j)
-                                    lons.append(pt[0])
-                                    lats.append(pt[1])
-
-                                #### Test if image crosses 180
-                                if max(lons) - min(lons) > 180:
-                                    split_geom = wrap_180(geom)
-                                    feat.SetGeometry(split_geom)
-                                else:
-                                    feat.SetGeometry(geom)
-
+                            ## Set region
+                            try:
+                                region = pairs[record.pairname]
+                            except KeyError as e:
+                                pass
                             else:
-                                feat.SetGeometry(geom)
-                            #### add new feature to layer
-                            layer.CreateFeature(feat)
+                                attrib_map['REGION'] = region
 
+                            ## Set path folders within bucket for use if db_path_prefix specified
+                            path_prefix_dirs = "{}/{}/{}".format(
+                                record.pairname[:4],   # sensor
+                                record.pairname[5:9],  # year
+                                record.pairname[9:11], # month"
+                            )
+
+                        ## Fields for strip DEM
+                        if args.mode == 'strip':
+                            attrib_map = {
+                                'DEM_ID': record.stripid,
+                                'PAIRNAME': record.pairname,
+                                'SENSOR1': record.sensor1,
+                                'SENSOR2': record.sensor2,
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
+                                'CATALOGID1': record.catid1,
+                                'CATALOGID2': record.catid2,
+                                'IS_LSF': int(record.is_lsf),
+                                'ALGM_VER': record.algm_version,
+                                'FILESZ_DEM': record.filesz_dem,
+                                'FILESZ_MT': record.filesz_mt,
+                                'FILESZ_OR': record.filesz_or,
+                                'PROJ4': record.proj4,
+                                'EPSG': record.epsg,
+                                'GEOCELL': record.geocell,
+                            }
+
+                            if record.version:
+                                attrib_map['REL_VER'] = record.version
+                            if record.density:
+                                attrib_map['DENSITY'] = record.density
+                            else:
+                                attrib_map['DENSITY'] = -9999
+
+                            ## If registration info exists
+                            if len(record.reginfo_list) > 0:
+                                for reginfo in record.reginfo_list:
+                                    if reginfo.name == 'ICESat':
+                                        atttrib_map["DX"] = reginfo.dx
+                                        atttrib_map["DY"] = reginfo.dy
+                                        atttrib_map["DZ"] = reginfo.dz
+                                        atttrib_map["REG_SRC"] = 'ICESat'
+                                        atttrib_map["NUM_GCPS"] = reginfo.num_gcps
+                                        atttrib_map["MEANRESZ"] = reginfo.mean_resid_z
+
+                            ## Set path folders within bucket for use if db_path_prefix specified
+                            path_prefix_dirs = "{}/{}/{}".format(
+                                record.pairname[:4],   # sensor
+                                record.pairname[5:9],  # year
+                                record.pairname[9:11], # month"
+                            )
+
+                        ## Fields for tile DEM
+                        if args.mode == 'tile':
+                            attrib_map = {
+                                'DEM_ID': record.tileid,
+                                'TILE': record.tilename,
+                                'NUM_COMP': record.num_components,
+                                'FILESZ_DEM': record.filesz_dem,
+                            }
+
+                            ## Optional attributes
+                            if record.version:
+                                attrib_map['REL_VER'] = record.version
+                                version = record.version
+                            else:
+                                version = 'novers'
+                            if record.density:
+                                attrib_map['DENSITY'] = record.density
+                            else:
+                                attrib_map['DENSITY'] = -9999
+                            if record.reg_src:
+                                attrib_map["REG_SRC"] = record.reg_src
+                                attrib_map["NUM_GCPS"] = record.num_gcps
+                            if record.mean_resid_z:
+                                attrib_map["MEANRESZ"] = record.mean_resid_z
+
+                            ## Set path folders within bucket for use if db_path_prefix specified
+                            if db_path_prefix:
+                                path_prefix_dirs = "{}/{}/{}".format(
+                                    args.project.lower(),    # project
+                                    record.res,              # resolution
+                                    version                  # version
+                                )
+
+                        ## Common Attributes accross all modes
+                        attrib_map['INDEX_DATE'] = datetime.datetime.today().strftime('%Y-%m-%d')
+                        attrib_map['CR_DATE'] = record.creation_date.strftime('%Y-%m-%d')
+                        attrib_map['ND_VALUE'] = record.ndv
+                        attrib_map['DEM_RES'] = (record.xres + record.yres) / 2.0
+
+                        ## Set location
+                        if db_path_prefix:
+                            location = '{}/setsm/{}/{}/{}.tar'.format(
+                                db_path_prefix,
+                                args.mode,             # mode (scene, strip, tile)
+                                path_prefix_dirs,      # mode-specific path prefix
+                                groupid                # mode-specific group ID
+                            )
                         else:
-                            logger.error('No valid geom found, feature skipped: {}'.format(raster.srcfp))
+                            location = record.srcfp
+                        attrib_map['LOCATION'] = location
+
+                        ## Transfrom and write geom
+                        src_srs = osr.SpatialReference()
+                        src_srs.ImportFromWkt(record.proj)
+
+                        if not record.geom:
+                            logger.error('No valid geom found, feature skipped: {}'.format(record.sceneid))
+                            valid_record = False
+                        else:
+                            temp_geom = record.geom.Clone()
+                            transform = osr.CoordinateTransformation(src_srs,tgt_srs)
+                            try:
+                                temp_geom.Transform(transform)
+                            except TypeError as e:
+                                logger.error('Geom transformation failed, feature skipped: {}'.format(record.sceneid))
+                                valid_record = False
+                            else:
+
+                                ## Get centroid coordinates
+                                centroid = temp_geom.Centroid()
+                                if 'CENT_LAT' in fld_list:
+                                    attrib_map['CENT_LAT'] = centroid.GetY()
+                                    attrib_map['CENT_LON'] = centroid.GetX()
+
+                                ## If srs is geographic and geom crosses 180, split geom into 2 parts
+                                if tgt_srs.IsGeographic:
+
+                                    ## Get Lat and Lon coords in arrays
+                                    lons = []
+                                    lats = []
+                                    ring  = temp_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
+                                    for j in range(0, ring.GetPointCount()):
+                                        pt = ring.GetPoint(j)
+                                        lons.append(pt[0])
+                                        lats.append(pt[1])
+
+                                    ## Test if image crosses 180
+                                    if max(lons) - min(lons) > 180:
+                                        split_geom = wrap_180(temp_geom)
+                                        feat_geom = split_geom
+                                    else:
+                                        mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                        feat_geom = mp_geom
+
+                                else:
+                                    mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                    feat_geom = mp_geom
 
 
-            else:
-                logger.error('Cannot create layer: {}'.format(dst_lyr))
+                        ## Write feature
+                        if valid_record:
+                            for fld,val in attrib_map.items():
+                                feat.SetField(fld,val)
+                            feat.SetGeometry(feat_geom)
 
-            ds = None
+                            ## Add new feature to layer
+                            if ogr_driver_str in ('PostgreSQL'):
+                                layer.StartTransaction()
+                                layer.CreateFeature(feat)
+                                layer.CommitTransaction()
+                            else:
+                                layer.CreateFeature(feat)
 
         else:
-            logger.info("Cannot open/create dataset: %s" %dst)
+            logger.error('Cannot open layer: {}'.format(dst_lyr))
+
+        ds = None
 
     else:
-        logger.info("No valid rasters found")
+        logger.info("Cannot open dataset: {}".format(dst_ds))
 
     logger.info("Done")
 
 
+def read_json(json_fp, mode):
+
+    json_fh = open(json_fp,'r')
+    records = []
+    try:
+        md = json.load(json_fh, object_hook=decode_json)
+    except ValueError as e:
+        logger.error("Cannot decode json in {}: {}".format(json_fp,e))
+    else:
+        dem_class = MODES[mode][0]
+
+        for k in md:
+            try:
+                record = dem_class(k,md[k])
+            except RuntimeError as e:
+                logger.error("Record {}: {}".format(k,e))
+            else:
+                records.append(record)
+
+    return records
+
+
+def write_to_json(json_fd, groups, total, args):
+
+    i=0
+    for groupid, items in groups.items():
+
+        md = {}
+        if args.mode == 'tile':
+            json_fn = "{}_{}".format(args.project,groupid)
+            json_fp = "{}.json".format(os.path.join(json_fd,json_fn))
+        else:
+            json_fp = "{}.json".format(os.path.join(json_fd,groupid))
+
+        if os.path.isfile(json_fp) and args.overwrite:
+            os.remove(json_fp)
+
+        if not os.path.isfile(json_fp):
+
+            if not args.dryrun:
+                # open json
+                json_fh = open(json_fp,'w')
+
+            for item in items:
+                i+=1
+                progress(i,total,"records written")
+
+                # organize scene obj into dict and write to json
+                md[item.id] = item.__dict__
+
+            json_txt = json.dumps(md, default=encode_json)
+            #print json_txt
+
+            if not args.dryrun:
+                json_fh.write(json_txt)
+                json_fh.close()
+
+        else:
+            logger.info("Json file already exists {}. Use --overwrite to overwrite".format(json_fp))
+
+
+def get_pair_region_dict(conn_info):
+    """Fetches a pairname-region lookup dictionary from Danco's footprint DB
+    pairnames_with_earthdem_region table
+    """
+
+    pairs = {}
+    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
+    stereo_ds = ogr.Open(conn_str)
+
+    if stereo_ds is None:
+        logger.warning("Could not connect to footprint db")
+    else:
+        stereo_lyr = stereo_ds.GetLayer("public.pairname_with_earthdem_region")
+        if stereo_lyr is None:
+            logger.warning("Could not obtain public.pairname_with_earthdem_region layer")
+            stereo_ds = None
+        else:
+            pairs = {f["pairname"]:f["region_id"] for f in stereo_lyr}
+
+    return pairs
 
 
 def progress(count, total, suffix=''):
@@ -384,6 +740,36 @@ def calc_y_intersection_180(pt1, pt2):
     #print "y_intersect", pt3_y
 
     return pt3_y
+
+
+def encode_json(o):
+    if isinstance(o,datetime.datetime):
+        return {
+            '__datetime__': True,
+            'value': o.__repr__(),
+        }
+    if isinstance(o,ogr.Geometry):
+        return {
+            '__geometry__': True,
+            'value': o.__str__(),
+        }
+    if isinstance(o,osr.SpatialReference):
+        return {
+            '__srs__': True,
+            'value': o.__str__(),
+        }
+
+
+def decode_json(d):
+    if '__datetime__' in d:
+        return eval(d['value'])
+    if '__geometry__' in d:
+        return ogr.CreateGeometryFromWkt(d['value'])
+    if '__srs__' in d:
+        srs = osr.SpatialReference()
+        srs.ImportFromWkt(d['value'])
+        return srs
+    return d
 
 
 

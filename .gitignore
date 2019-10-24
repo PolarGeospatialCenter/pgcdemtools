@@ -1,2 +1,3 @@
 *.pyc
 tests/testdata
+config.ini
