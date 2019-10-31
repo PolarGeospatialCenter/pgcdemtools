@@ -134,6 +134,7 @@ class SetsmScene(object):
                 self.creation_date = None
                 self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                 self.geom = None
+                self.group_version = None
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -153,8 +154,19 @@ class SetsmScene(object):
                 else:
                     raise RuntimeError("Scene has invalid resolution value in name: {}".format(scene.sceneid))
 
+            ## Get version str with ability to handle 1-3 parts of semantic version
+            if self.group_version:
+                vp = self.group_version.split('.')
+            else:
+                vp = self.version.split('.')
+
+            vl = [0,0,0]
+            for i in range(len(vp)):
+                vl[i] = int(vp[i])
+            version_str = '{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
+
             ## Make strip ID
-            self.stripid = '{}_{}_v{}'.format(self.pairname,self.res_str,self.version.replace('.',''))
+            self.stripid = '{}_{}_v{}'.format(self.pairname,self.res_str,version_str)
 
     def get_dem_info(self):
 
@@ -288,6 +300,9 @@ class SetsmScene(object):
                 self.version = metad['setsm_version']
             else:
                 raise RuntimeError('Key "SETSM Version" not found in meta dict from {}'.format(self.metapath))
+
+            if 'group_version' in metad:
+                self.group_version = metad['group_version']
 
             if 'image_1_acquisition_time' in metad:
                 self.acqdate1 = datetime.strptime(metad["image_1_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")

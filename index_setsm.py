@@ -59,7 +59,7 @@ def main():
                         help="append records to existing index")
     parser.add_argument('--skip-region-lookup', action='store_true', default=False,
                         help="skip region lookup on danco (used for testing)")
-    parser.add_argument('--project', choices=PROJECTS, help='project name (required when writing tiles to a DB table with "prefix" in your config)')
+    parser.add_argument('--project', choices=PROJECTS, help='project name (required when writing tiles)')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
 
 
