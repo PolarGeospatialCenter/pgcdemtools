@@ -1,4 +1,4 @@
-import os, sys, string, shutil, glob, re, logging, ConfigParser, json
+import os, sys, string, shutil, glob, re, logging, ConfigParser, json, pickle
 import datetime
 import gdal, osr, ogr, gdalconst
 import argparse
@@ -30,6 +30,8 @@ MODES = {
     'tile'  : (dem.SetsmTile, '_dem.tif', 'supertile_id', utils.TILE_DEM_ATTRIBUTE_DEFINITIONS),
 }
 
+BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dem/setsm'
+
 def main():
 
     #### Set Up Arguments
@@ -59,6 +61,9 @@ def main():
                         help="append records to existing index")
     parser.add_argument('--skip-region-lookup', action='store_true', default=False,
                         help="skip region lookup on danco (used for testing)")
+    parser.add_argument("--write-pickle", help="store region lookup in a pickle file. skipped if --write-json is used")
+    parser.add_argument("--read-pickle", help='read region lookup from a pickle file. skipped if --write-json is used')
+    parser.add_argument("--bp-paths", action='store_true', default=False, help='Use BlackPearl path schema')
     parser.add_argument('--project', choices=PROJECTS, help='project name (required when writing tiles)')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
 
@@ -83,6 +88,18 @@ def main():
     if args.mode == 'tile' and not args.project:
         parser.error("--project option is required if when mode=tile")
 
+    if args.write_pickle:
+        if not os.path.isdir(os.path.dirname(args.write_pickle)):
+            parser.error("Pickle file must be in an existing directory")
+    if args.read_pickle:
+        if not os.path.isfile(args.read_pickle):
+            parser.error("Pickle file must be an existing file")
+
+    if args.bp_paths:
+        db_path_prefix = BP_PATH_PREFIX
+    else:
+        db_path_prefix = None
+
     #### Set up loggers
     lsh = logging.StreamHandler()
     lsh.setLevel(logging.INFO)
@@ -92,7 +109,7 @@ def main():
 
     if args.log:
         if os.path.isdir(args.log):
-            tm = datetime.now()
+            tm = datetime.datetime.now()
             logfile = os.path.join(args.log,"index_setsm_{}.log".format(tm.strftime("%Y%m%d%H%M%S")))
         else:
             parser.error('log folder does not exist: {}'.format(args.log))
@@ -131,7 +148,6 @@ def main():
         config.read(args.config)
 
         #### Get output DB connection if specified
-        db_path_prefix = None
         if ogr_driver_str in ("PostgreSQL"):
 
             section = dst_dsp
@@ -144,13 +160,6 @@ def main():
                     'user':config.get(section,'user'),
                     'pw':config.get(section,'pw'),
                 }
-                ## TODO add logic if no prefix specified
-                try:
-                    db_path_prefix = config.get(section,'prefix')
-                except:
-                    logger.info('Config file parameter "prefix" not found. Output location field will be absolute filepaths')
-                    db_path_prefix = None
-
                 dst_ds = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
 
             else:
@@ -164,30 +173,40 @@ def main():
         else:
             logger.error("Format {} is not supported".format(ogr_driver_str))
 
-
-        #### Get Danco connection if available
-        section = 'danco'
-        if section in config.sections():
-            danco_conn_info = {
-                'host':config.get(section,'host'),
-                'port':config.getint(section,'port'),
-                'name':config.get(section,'name'),
-                'schema':config.get(section,'schema'),
-                'user':config.get(section,'user'),
-                'pw':config.get(section,'pw'),
-            }
-
-            if args.skip_region_lookup or args.mode == 'tile':
-                pairs = {}
-            else:
-                logger.info("Fetching region lookup from Danco")
-                pairs = get_pair_region_dict(danco_conn_info)
-                if len(pairs) == 0:
-                    logger.warning("Cannot access Danco table")
-
+        ## Get pairname-region dict
+        if args.skip_region_lookup or args.mode == 'tile':
+            pairs = {}
         else:
-            logger.warning('Config file does not contain credentials to connect to Danco. EarthDEM region cannot be determined.')
+            if args.read_pickle:
+                logger.info("Fetching region lookup from pickle file")
+                pairs = pickle.load(open(args.read_pickle, "rb"))
 
+            else:
+                #### Get Danco connection if available
+                section = 'danco'
+                if section in config.sections():
+                    danco_conn_info = {
+                        'host':config.get(section,'host'),
+                        'port':config.getint(section,'port'),
+                        'name':config.get(section,'name'),
+                        'schema':config.get(section,'schema'),
+                        'user':config.get(section,'user'),
+                        'pw':config.get(section,'pw'),
+                    }
+
+                    logger.info("Fetching region lookup from Danco")
+                    pairs = get_pair_region_dict(danco_conn_info)
+                else:
+                    logger.warning('Config file does not contain credentials to connect to Danco. Region cannot be determined.')
+                    pairs = {}
+
+            if len(pairs) == 0:
+                logger.warning("Cannot get region-pair lookup")
+
+        ## Save pickle if selected
+        if args.write_pickle:
+            logger.info("Pickling region lookup")
+            pickle.dump(pairs, open(args.write_pickle, "wb"))
 
         #### Test epsg
         try:
@@ -202,7 +221,7 @@ def main():
                 if not args.dryrun:
                     ogrDriver.DeleteDataSource(dst_ds)
             elif not args.append:
-                logger.error("Dst shapefile exists.  Use the --overwrite flag to overwrite.")
+                logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
                 sys.exit()
 
 
@@ -218,7 +237,7 @@ def main():
                             ds.DeleteLayer(i)
                             break
                         elif not args.append:
-                            logger.error("Dst GDB layer exists.  Use the --overwrite flag to overwrite.")
+                            logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
                             sys.exit()
                 ds = None
 
@@ -235,7 +254,7 @@ def main():
                             ds.DeleteLayer(i)
                             break
                         elif not args.append:
-                            logger.error("Dst DB layer exists.  Use the --overwrite flag to overwrite.")
+                            logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
                             sys.exit()
                 ds = None
 
@@ -473,7 +492,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Set location
                         if db_path_prefix:
-                            location = '{}/setsm/{}/{}/{}.tar'.format(
+                            location = '{}/{}/{}/{}.tar'.format(
                                 db_path_prefix,
                                 args.mode,             # mode (scene, strip, tile)
                                 path_prefix_dirs,      # mode-specific path prefix

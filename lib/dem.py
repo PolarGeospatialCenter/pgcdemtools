@@ -1331,8 +1331,15 @@ class SetsmTile(object):
             self.err = os.path.join(self.srcdir,name_base + '_err.tif')
             self.day = os.path.join(self.srcdir,name_base + '_day.tif')
             self.ortho = os.path.join(self.srcdir,name_base + '_ortho.tif')
-            self.browse = os.path.join(self.srcdir,name_base + '_dem_browse.tif')
             self.density_file = os.path.join(self.srcdir,name_base + '_density.txt')
+            self.count = os.path.join(self.srcdir,name_base + '_count.tif')
+            self.mad = os.path.join(self.srcdir,name_base + '_mad.tif')
+            self.mindate = os.path.join(self.srcdir,name_base + '_mindate.tif')
+            self.maxdate = os.path.join(self.srcdir,name_base + '_maxdate.tif')
+
+            self.browse = os.path.join(self.srcdir,name_base + '_dem_browse.tif')
+            if not os.path.isfile(self.browse):
+                self.browse = os.path.join(self.srcdir,name_base + '_browse.tif')
 
             self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
 
@@ -1347,9 +1354,13 @@ class SetsmTile(object):
                 if self.subtile:
                     metabase = self.tileid.replace('_'+self.subtile,'')
                     self.metapath = os.path.join(self.srcdir,metabase + '_dem_meta.txt')
+                    if not os.path.isfile(self.metapath):
+                        self.metapath = os.path.join(self.srcdir, self.tileid + '_meta.txt')
                     self.regmetapath = os.path.join(self.srcdir, metabase + '_reg.txt')
                 else:
                     self.metapath = os.path.join(self.srcdir, self.tileid + '_dem_meta.txt')
+                    if not os.path.isfile(self.metapath):
+                        self.metapath = os.path.join(self.srcdir, self.tileid + '_meta.txt')
                     self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
 
                 self.supertile_id = '{}_{}'.format(self.tilename,self.res)
