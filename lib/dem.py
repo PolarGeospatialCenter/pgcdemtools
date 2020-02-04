@@ -1333,6 +1333,7 @@ class SetsmTile(object):
             self.ortho = os.path.join(self.srcdir,name_base + '_ortho.tif')
             self.density_file = os.path.join(self.srcdir,name_base + '_density.txt')
             self.count = os.path.join(self.srcdir,name_base + '_count.tif')
+            self.countmt = os.path.join(self.srcdir,name_base + '_countmt.tif')
             self.mad = os.path.join(self.srcdir,name_base + '_mad.tif')
             self.mindate = os.path.join(self.srcdir,name_base + '_mindate.tif')
             self.maxdate = os.path.join(self.srcdir,name_base + '_maxdate.tif')
@@ -1356,11 +1357,15 @@ class SetsmTile(object):
                     self.metapath = os.path.join(self.srcdir,metabase + '_dem_meta.txt')
                     if not os.path.isfile(self.metapath):
                         self.metapath = os.path.join(self.srcdir, self.tileid + '_meta.txt')
+                    if not os.path.isfile(self.metapath):
+                        raise RuntimeError("Meta file not found for {}".format(self.srcfp))
                     self.regmetapath = os.path.join(self.srcdir, metabase + '_reg.txt')
                 else:
                     self.metapath = os.path.join(self.srcdir, self.tileid + '_dem_meta.txt')
                     if not os.path.isfile(self.metapath):
                         self.metapath = os.path.join(self.srcdir, self.tileid + '_meta.txt')
+                    if not os.path.isfile(self.metapath):
+                        raise RuntimeError("Meta file not found for {}".format(self.srcfp))
                     self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
 
                 self.supertile_id = '{}_{}'.format(self.tilename,self.res)

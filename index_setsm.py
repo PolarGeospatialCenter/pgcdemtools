@@ -331,6 +331,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
     else:
         logger.error("Format {} is not supported".format(ogr_driver_str))
 
+    if args.bp_paths:
+        status = 'tape'
+    else:
+        status = 'online'
+
     if ds is not None:
 
         ## Create table if it does not exist
@@ -370,8 +375,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         if args.mode == 'scene':
 
                             attrib_map = {
-                                'SCENE_ID': record.sceneid,
-                                'STRIP_ID': record.stripid,
+                                'SCENEDEMID': record.sceneid,
+                                'STRIPDEMID': record.stripid,
+                                'STATUS': status,
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
                                 'SENSOR2': record.sensor2,

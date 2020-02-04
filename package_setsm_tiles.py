@@ -209,6 +209,7 @@ def build_archive(raster,scratch,args):
                 os.path.basename(raster.day), # day
                 os.path.basename(raster.browse), # browse
                 os.path.basename(raster.count),
+                os.path.basename(raster.countmt)
                 os.path.basename(raster.mad),
                 os.path.basename(raster.mindate),
                 os.path.basename(raster.maxdate),
@@ -258,7 +259,6 @@ def build_archive(raster,scratch,args):
                             ## Set fields
                             feat.SetField("DEM_ID",raster.tileid)
                             feat.SetField("TILE",raster.tilename)
-                            print raster.ndv
                             feat.SetField("ND_VALUE",raster.ndv)
                             feat.SetField("DEM_NAME",raster.srcfn)
                             res = (raster.xres + raster.yres) / 2.0

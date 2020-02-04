@@ -111,7 +111,9 @@ DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
 SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
-    StandardAttribute("SCENE_ID", ogr.OFTString, 254, 0),
+    StandardAttribute("SCENEDEMID", ogr.OFTString, 254, 0),
+    StandardAttribute("STRIPDEMID", ogr.OFTString, 254, 0),
+    StandardAttribute("STATUS", ogr.OFTString, 8, 0),
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
     StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
     StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),

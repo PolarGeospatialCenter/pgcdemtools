@@ -174,7 +174,7 @@ def main():
                                 #print '{} {} {}'.format(scriptpath, arg_str_base, raster.srcfp)
                                 task_queue.append(task)
                             else:
-                                logger.info("output tile(s) already exist: {}".format(srcfp))
+                                logger.info("output tile(s) already exist: {}".format(','.join(dstfp_list)))
 
     logger.info('Number of incomplete tasks: {}'.format(i))
 
