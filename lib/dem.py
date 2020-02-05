@@ -59,7 +59,7 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<catid1>[A-Z0-9]{16})_
                                     (?P<catid2>[A-Z0-9]{16})
                                     )_
-                                    (?P<res>\d+m)_
+                                    (?P<res>(\d+|0\.\d+)c?m)_
                                     (lsf_)?
                                     (?P<partnum>[SEG\d]+)_
                                     ((?P<version>v[\d/.]+)_)?
@@ -72,7 +72,7 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     (?P<catid2>[A-Z0-9]{16})
                                     )_
                                     (?P<partnum>[SEG\d]+)_
-                                    (?P<res>\d+m)_
+                                    (?P<res>(\d+|0\.\d+)c?m)_
                                     ((?P<version>v[\d/.]+)_)?
                                     (lsf_)?
                                     dem.(tif|jpg)\Z""", re.I | re.X)
@@ -86,7 +86,7 @@ asp_strip_pattern = re.compile("""(?P<pairname>
 
 setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    ((?P<subtile>\d+_\d+)_)?
-                                   (?P<res>\d+m)_
+                                   (?P<res>(\d+|0\.\d+)c?m)_
                                    ((?P<version>v[\d/.]+)_)?
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
