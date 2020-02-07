@@ -30,7 +30,7 @@ MODES = {
     'tile'  : (dem.SetsmTile, '_dem.tif', 'supertile_id', utils.TILE_DEM_ATTRIBUTE_DEFINITIONS),
 }
 
-BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dem/setsm'
+BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dems/setsm'
 
 def main():
 
@@ -133,7 +133,7 @@ def main():
     else:
         try:
             ogr_driver_str, dst_dsp, dst_lyr = utils.get_source_names2(dst)
-        except RuntimeError, e:
+        except RuntimeError as e:
             parser.error(e)
 
         ogrDriver = ogr.GetDriverByName(ogr_driver_str)
