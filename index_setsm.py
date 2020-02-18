@@ -342,7 +342,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         layer = ds.GetLayerByName(dst_lyr)
         fld_list = [f.fname for f in fld_defs]
 
-        tgt_srs = osr.SpatialReference()
+        tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         tgt_srs.ImportFromEPSG(args.epsg)
 
         if not layer:
@@ -443,12 +443,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             if len(record.reginfo_list) > 0:
                                 for reginfo in record.reginfo_list:
                                     if reginfo.name == 'ICESat':
-                                        atttrib_map["DX"] = reginfo.dx
-                                        atttrib_map["DY"] = reginfo.dy
-                                        atttrib_map["DZ"] = reginfo.dz
-                                        atttrib_map["REG_SRC"] = 'ICESat'
-                                        atttrib_map["NUM_GCPS"] = reginfo.num_gcps
-                                        atttrib_map["MEANRESZ"] = reginfo.mean_resid_z
+                                        attrib_map["DX"] = reginfo.dx
+                                        attrib_map["DY"] = reginfo.dy
+                                        attrib_map["DZ"] = reginfo.dz
+                                        attrib_map["REG_SRC"] = 'ICESat'
+                                        attrib_map["NUM_GCPS"] = reginfo.num_gcps
+                                        attrib_map["MEANRESZ"] = reginfo.mean_resid_z
 
                             ## Set path folders within bucket for use if db_path_prefix specified
                             path_prefix_dirs = "{}/{}/{}".format(
@@ -509,7 +509,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         attrib_map['LOCATION'] = location
 
                         ## Transfrom and write geom
-                        src_srs = osr.SpatialReference()
+                        src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                         src_srs.ImportFromWkt(record.proj)
 
                         if not record.geom:

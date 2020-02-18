@@ -209,10 +209,18 @@ OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
 OVERLAP_FILE_ATTRIBUTE_DEFINITIONS = OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS + OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS
 
 
+def osr_srs_preserve_axis_order(osr_srs):
+    try:
+        osr_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    except AttributeError:
+        pass
+    return osr_srs
+
+
 class SpatialRef(object):
 
     def __init__(self,epsg):
-        srs = osr.SpatialReference()
+        srs = osr_srs_preserve_axis_order(osr.SpatialReference())
         try:
             epsgcode = int(epsg)
 

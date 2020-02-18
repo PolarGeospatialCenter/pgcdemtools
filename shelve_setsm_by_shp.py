@@ -138,7 +138,7 @@ def main():
             ## Convert geom to match shp srs and get centroid
             raster.get_metafile_info()
             geom_copy = raster.exact_geom.Clone()
-            srs = osr.SpatialReference()
+            srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
             srs.ImportFromProj4(raster.proj4_meta)
             if not shp_srs.IsSame(srs):
                 ctf = osr.CoordinateTransformation(srs, shp_srs)
