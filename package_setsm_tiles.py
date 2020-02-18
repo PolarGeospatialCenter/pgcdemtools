@@ -280,7 +280,7 @@ def build_archive(raster,scratch,args):
                                 feat.SetField("CR_DATE",raster.creation_date.strftime("%Y-%m-%d"))
 
                             ## transfrom and write geom
-                            src_srs = osr.SpatialReference()
+                            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                             src_srs.ImportFromWkt(raster.proj)
 
                             if raster.geom:

@@ -342,7 +342,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         layer = ds.GetLayerByName(dst_lyr)
         fld_list = [f.fname for f in fld_defs]
 
-        tgt_srs = osr.SpatialReference()
+        tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         tgt_srs.ImportFromEPSG(args.epsg)
 
         if not layer:
@@ -509,7 +509,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         attrib_map['LOCATION'] = location
 
                         ## Transfrom and write geom
-                        src_srs = osr.SpatialReference()
+                        src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                         src_srs.ImportFromWkt(record.proj)
 
                         if not record.geom:
