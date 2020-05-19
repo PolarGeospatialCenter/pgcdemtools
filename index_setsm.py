@@ -576,13 +576,17 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
+            ds = None
+            return False
 
         ds = None
 
     else:
         logger.info("Cannot open dataset: {}".format(dst_ds))
+        return False
 
     logger.info("Done")
+    return True
 
 
 def read_json(json_fp, mode):
