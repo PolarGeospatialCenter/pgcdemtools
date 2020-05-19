@@ -698,7 +698,7 @@ def wrap_180(src_geom):
             east_points.append(pt1)
 
         ## test if segment to next point crosses 180 (x is opposite sign)
-        if cmp(pt1[0],0) <> cmp(pt2[0],0):
+        if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
 
             ## if segment crosses,calculate interesection point y value
             pt3_y = calc_y_intersection_180(pt1, pt2)
