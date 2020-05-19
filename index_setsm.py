@@ -1,10 +1,14 @@
-import os, sys, string, shutil, glob, re, logging, ConfigParser, json, pickle
+import os, sys, string, shutil, glob, re, logging, json, pickle
 import datetime
 import gdal, osr, ogr, gdalconst
 import argparse
 import numpy
 from numpy import flatnonzero
 from lib import utils, dem
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -211,7 +215,7 @@ def main():
         #### Test epsg
         try:
             spatial_ref = utils.SpatialRef(args.epsg)
-        except RuntimeError, e:
+        except RuntimeError as e:
             parser.error(e)
 
         #### Test if dst table exists
@@ -282,7 +286,7 @@ def main():
             try:
                 record = dem_class(src_fp)
                 record.get_dem_info()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error( e )
             else:
                 records.append(record)
