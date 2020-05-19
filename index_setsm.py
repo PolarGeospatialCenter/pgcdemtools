@@ -1,10 +1,14 @@
-import os, sys, string, shutil, glob, re, logging, ConfigParser, json, pickle
+import os, sys, string, shutil, glob, re, logging, json, pickle
 import datetime
 import gdal, osr, ogr, gdalconst
 import argparse
 import numpy
 from numpy import flatnonzero
 from lib import utils, dem
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -211,7 +215,7 @@ def main():
         #### Test epsg
         try:
             spatial_ref = utils.SpatialRef(args.epsg)
-        except RuntimeError, e:
+        except RuntimeError as e:
             parser.error(e)
 
         #### Test if dst table exists
@@ -282,7 +286,7 @@ def main():
             try:
                 record = dem_class(src_fp)
                 record.get_dem_info()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error( e )
             else:
                 records.append(record)
@@ -572,13 +576,17 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
+            ds = None
+            return False
 
         ds = None
 
     else:
         logger.info("Cannot open dataset: {}".format(dst_ds))
+        return False
 
     logger.info("Done")
+    return True
 
 
 def read_json(json_fp, mode):
@@ -694,7 +702,7 @@ def wrap_180(src_geom):
             east_points.append(pt1)
 
         ## test if segment to next point crosses 180 (x is opposite sign)
-        if cmp(pt1[0],0) <> cmp(pt2[0],0):
+        if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
 
             ## if segment crosses,calculate interesection point y value
             pt3_y = calc_y_intersection_180(pt1, pt2)
