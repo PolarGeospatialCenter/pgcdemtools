@@ -310,7 +310,11 @@ def main():
         if args.write_json:
             write_to_json(dst, groups, total, args)
         else:
-            write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
+            write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
+            if write_result:
+                return True
+            else:
+                return False
 
 
 def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args):
