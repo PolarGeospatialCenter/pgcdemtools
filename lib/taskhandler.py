@@ -32,7 +32,7 @@ class PBSTaskHandler(object):
             cmd = "pbsnodes"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             so, se = p.communicate()
-        except OSError,e:
+        except OSError as e:
             raise RuntimeError("PBS job submission is not available on this system")
 
         self.qsubscript = qsubscript
@@ -64,7 +64,7 @@ class PBSTaskGenerator(object):
             cmd = "pbsnodes"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             so, se = p.communicate()
-        except OSError,e:
+        except OSError as e:
             raise RuntimeError("PBS job submission is not available on this system")
 
         self.qsubscript = qsubscript
@@ -98,7 +98,7 @@ class SLURMTaskHandler(object):
             cmd = "sinfo"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             so, se = p.communicate()
-        except OSError,e:
+        except OSError as e:
             raise RuntimeError("SLURM job submission is not available on this system")
 
         self.qsubscript = qsubscript
@@ -184,7 +184,7 @@ def convert_optional_args_to_string(args, positional_arg_keys, arg_keys_to_remov
     arg_list = []
 
     ## Add optional args to arg_list
-    for k,v in args_dict.iteritems():
+    for k,v in args_dict.items():
         if k not in positional_arg_keys and k not in arg_keys_to_remove and v is not None:
             k = k.replace('_','-')
             if isinstance(v,list) or isinstance(v,tuple):
