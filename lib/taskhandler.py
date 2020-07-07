@@ -4,7 +4,7 @@
 task handler classes and methods
 """
 
-import os, sys, string, shutil, glob, re, logging, subprocess
+import os, sys, string, shutil, signal, glob, re, logging, subprocess
 import multiprocessing as mp
 
 #### Create Logger
@@ -32,7 +32,7 @@ class PBSTaskHandler(object):
             cmd = "pbsnodes"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             so, se = p.communicate()
-        except OSError,e:
+        except OSError as e:
             raise RuntimeError("PBS job submission is not available on this system")
 
         self.qsubscript = qsubscript
@@ -64,7 +64,7 @@ class PBSTaskGenerator(object):
             cmd = "pbsnodes"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             so, se = p.communicate()
-        except OSError,e:
+        except OSError as e:
             raise RuntimeError("PBS job submission is not available on this system")
 
         self.qsubscript = qsubscript
@@ -98,7 +98,7 @@ class SLURMTaskHandler(object):
             cmd = "sinfo"
             p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             so, se = p.communicate()
-        except OSError,e:
+        except OSError as e:
             raise RuntimeError("SLURM job submission is not available on this system")
 
         self.qsubscript = qsubscript
@@ -125,9 +125,9 @@ class ParallelTaskHandler(object):
     def __init__(self, num_processes=1):
         self.num_processes = num_processes
         if mp.cpu_count() < num_processes:
-            raise RuntimeError("Specified number of processes ({0}) is higher than the system cpu count ({1})".format(num_proceses,mp.count_cpu()))
+            raise RuntimeError("Specified number of processes ({0}) is higher than the system cpu count ({1})".format(self.num_proceses,mp.count_cpu()))
         elif num_processes < 1:
-            raise RuntimeError("Specified number of processes ({0}) must be greater than 0, using default".format(num_proceses,mp.count_cpu()))
+            raise RuntimeError("Specified number of processes ({0}) must be greater than 0, using default".format(self.num_proceses,mp.count_cpu()))
 
     def run_tasks(self, tasks):
 
@@ -184,7 +184,7 @@ def convert_optional_args_to_string(args, positional_arg_keys, arg_keys_to_remov
     arg_list = []
 
     ## Add optional args to arg_list
-    for k,v in args_dict.iteritems():
+    for k,v in args_dict.items():
         if k not in positional_arg_keys and k not in arg_keys_to_remove and v is not None:
             k = k.replace('_','-')
             if isinstance(v,list) or isinstance(v,tuple):
