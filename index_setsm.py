@@ -226,7 +226,7 @@ def main():
                     ogrDriver.DeleteDataSource(dst_ds)
             elif not args.append:
                 logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
-                sys.exit()
+                sys.exit(-1)
 
 
         if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
@@ -242,7 +242,7 @@ def main():
                             break
                         elif not args.append:
                             logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit()
+                            sys.exit(-1)
                 ds = None
 
         ## Postgres check - do not overwrite
@@ -259,7 +259,7 @@ def main():
                             break
                         elif not args.append:
                             logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit()
+                            sys.exit(-1)
                 ds = None
 
 
@@ -312,9 +312,9 @@ def main():
         else:
             write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
             if write_result:
-                return True
+                sys.exit(0)
             else:
-                return False
+                sys.exit(-1)
 
 
 def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args):
@@ -581,16 +581,16 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
             ds = None
-            return False
+            sys.exit(-1)
 
         ds = None
 
     else:
         logger.info("Cannot open dataset: {}".format(dst_ds))
-        return False
+        sys.exit(-1)
 
     logger.info("Done")
-    return True
+    sys.exit(0)
 
 
 def read_json(json_fp, mode):
