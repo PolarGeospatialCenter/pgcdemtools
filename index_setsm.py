@@ -13,7 +13,7 @@ logger.setLevel(logging.DEBUG)
 FORMAT_OPTIONS = {
     'SHP':'ESRI Shapefile',
     'GDB':'ESRI Geodatabase',
-    'PG':'PostgreSQL Database (PG:<config.ini section with conneciton info>:<layer name>}',
+    'PG':'PostgreSQL Database (PG:<config.ini section with connection info>:<layer name>}',
 }
 FORMAT_HELP = ['{}:{},'.format(k,v) for k, v in FORMAT_OPTIONS.items()]
 
@@ -431,6 +431,14 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'EPSG': record.epsg,
                                 'GEOCELL': record.geocell,
                             }
+
+                            ## Set region
+                            try:
+                                region = pairs[record.pairname]
+                            except KeyError as e:
+                                pass
+                            else:
+                                attrib_map['REGION'] = region
 
                             if record.version:
                                 attrib_map['REL_VER'] = record.version

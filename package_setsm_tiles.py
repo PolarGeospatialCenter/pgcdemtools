@@ -209,7 +209,7 @@ def build_archive(raster,scratch,args):
                 os.path.basename(raster.day), # day
                 os.path.basename(raster.browse), # browse
                 os.path.basename(raster.count),
-                os.path.basename(raster.countmt)
+                os.path.basename(raster.countmt),
                 os.path.basename(raster.mad),
                 os.path.basename(raster.mindate),
                 os.path.basename(raster.maxdate),

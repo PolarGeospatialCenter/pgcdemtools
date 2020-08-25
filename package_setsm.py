@@ -263,8 +263,7 @@ def build_archive(src,scratch,args):
         if args.filter_dems or args.force_filter_dems:
             # filter dems with area < 5.5 sqkm and density < .1
             
-            area = raster.exact_geom.Area()
-            # logger.info(raster.exact_geom.Area())
+            area = raster.geom.Area()
             # logger.info(raster.density)
             if area < 5500000:
                 logger.info("Raster area {} falls below threshold: {}".format(area,raster.srcfp))
@@ -402,8 +401,8 @@ def build_archive(src,scratch,args):
                                     src_srs = osr.SpatialReference()
                                     src_srs.ImportFromWkt(raster.proj)
                                     
-                                    if raster.exact_geom:
-                                        geom = raster.exact_geom.Clone()
+                                    if raster.geom:
+                                        geom = raster.geom.Clone()
                                         transform = osr.CoordinateTransformation(src_srs,tgt_srs)
                                         geom.Transform(transform)
                                         
