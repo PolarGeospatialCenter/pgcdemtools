@@ -1,10 +1,14 @@
-import os, sys, string, shutil, glob, re, logging, ConfigParser, json, pickle
+import os, sys, string, shutil, glob, re, logging, json, pickle
 import datetime
 import gdal, osr, ogr, gdalconst
 import argparse
 import numpy
 from numpy import flatnonzero
 from lib import utils, dem
+try:
+    import ConfigParser
+except ImportError:
+    import configparser as ConfigParser
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -211,7 +215,7 @@ def main():
         #### Test epsg
         try:
             spatial_ref = utils.SpatialRef(args.epsg)
-        except RuntimeError, e:
+        except RuntimeError as e:
             parser.error(e)
 
         #### Test if dst table exists
@@ -222,7 +226,7 @@ def main():
                     ogrDriver.DeleteDataSource(dst_ds)
             elif not args.append:
                 logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
-                sys.exit()
+                sys.exit(-1)
 
 
         if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
@@ -238,7 +242,7 @@ def main():
                             break
                         elif not args.append:
                             logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit()
+                            sys.exit(-1)
                 ds = None
 
         ## Postgres check - do not overwrite
@@ -255,7 +259,7 @@ def main():
                             break
                         elif not args.append:
                             logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit()
+                            sys.exit(-1)
                 ds = None
 
 
@@ -282,7 +286,7 @@ def main():
             try:
                 record = dem_class(src_fp)
                 record.get_dem_info()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error( e )
             else:
                 records.append(record)
@@ -306,7 +310,11 @@ def main():
         if args.write_json:
             write_to_json(dst, groups, total, args)
         else:
-            write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
+            write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
+            if write_result:
+                sys.exit(0)
+            else:
+                sys.exit(-1)
 
 
 def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args):
@@ -342,7 +350,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         layer = ds.GetLayerByName(dst_lyr)
         fld_list = [f.fname for f in fld_defs]
 
-        tgt_srs = osr.SpatialReference()
+        tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         tgt_srs.ImportFromEPSG(args.epsg)
 
         if not layer:
@@ -451,12 +459,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             if len(record.reginfo_list) > 0:
                                 for reginfo in record.reginfo_list:
                                     if reginfo.name == 'ICESat':
-                                        atttrib_map["DX"] = reginfo.dx
-                                        atttrib_map["DY"] = reginfo.dy
-                                        atttrib_map["DZ"] = reginfo.dz
-                                        atttrib_map["REG_SRC"] = 'ICESat'
-                                        atttrib_map["NUM_GCPS"] = reginfo.num_gcps
-                                        atttrib_map["MEANRESZ"] = reginfo.mean_resid_z
+                                        attrib_map["DX"] = reginfo.dx
+                                        attrib_map["DY"] = reginfo.dy
+                                        attrib_map["DZ"] = reginfo.dz
+                                        attrib_map["REG_SRC"] = 'ICESat'
+                                        attrib_map["NUM_GCPS"] = reginfo.num_gcps
+                                        attrib_map["MEANRESZ"] = reginfo.mean_resid_z
 
                             ## Set path folders within bucket for use if db_path_prefix specified
                             path_prefix_dirs = "{}/{}/{}".format(
@@ -517,7 +525,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         attrib_map['LOCATION'] = location
 
                         ## Transfrom and write geom
-                        src_srs = osr.SpatialReference()
+                        src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                         src_srs.ImportFromWkt(record.proj)
 
                         if not record.geom:
@@ -580,13 +588,17 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
+            ds = None
+            sys.exit(-1)
 
         ds = None
 
     else:
         logger.info("Cannot open dataset: {}".format(dst_ds))
+        sys.exit(-1)
 
     logger.info("Done")
+    sys.exit(0)
 
 
 def read_json(json_fp, mode):
@@ -702,7 +714,7 @@ def wrap_180(src_geom):
             east_points.append(pt1)
 
         ## test if segment to next point crosses 180 (x is opposite sign)
-        if cmp(pt1[0],0) <> cmp(pt2[0],0):
+        if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
 
             ## if segment crosses,calculate interesection point y value
             pt3_y = calc_y_intersection_180(pt1, pt2)

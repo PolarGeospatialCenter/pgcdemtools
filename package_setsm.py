@@ -398,7 +398,7 @@ def build_archive(src,scratch,args):
                                     feat.SetField("PROJ4",raster.proj4)
                                     feat.SetField("EPSG",raster.epsg)
                                     
-                                    src_srs = osr.SpatialReference()
+                                    src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                                     src_srs.ImportFromWkt(raster.proj)
                                     
                                     if raster.geom:
@@ -484,7 +484,6 @@ if __name__ == '__main__':
         
             
             
-        
         
         
         

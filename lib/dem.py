@@ -30,7 +30,7 @@ epsgs = [
     3413,
 ]
 
-srs_wgs84 = osr.SpatialReference()
+srs_wgs84 = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
 srs_wgs84.ImportFromEPSG(4326)
 
 ### build wgs84 utm epsgs
@@ -477,7 +477,7 @@ class SetsmDem(object):
         centroid = self.geom.Centroid()
 
         ## Convert to wgs84
-        srs = osr.SpatialReference()
+        srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         rc = srs.ImportFromProj4(self.proj4_meta)
         if not srs_wgs84.IsSame(srs):
             ctf = osr.CoordinateTransformation(srs, srs_wgs84)
