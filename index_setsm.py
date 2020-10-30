@@ -10,6 +10,22 @@ try:
 except ImportError:
     import configparser as ConfigParser
 
+class GdalErrorHandler(object):
+    def __init__(self):
+        self.err_level=gdal.CE_None
+        self.err_no=0
+        self.err_msg=''
+
+    def handler(self, err_level, err_no, err_msg):
+        self.err_level=err_level
+        self.err_no=err_no
+        self.err_msg=err_msg
+
+err=GdalErrorHandler()
+handler=err.handler # Note don't pass class method directly or python segfaults
+gdal.PushErrorHandler(handler)
+gdal.UseExceptions() #Exceptions will get raised on anything >= gdal.CE_Failure
+
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -321,18 +337,21 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     ## Create dataset if it does not exist
     if ogr_driver_str == 'ESRI Shapefile':
+        max_fld_width = 524
         if os.path.isfile(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
         else:
             ds = ogrDriver.CreateDataSource(dst_ds)
 
     elif ogr_driver_str == 'FileGDB':
+        max_fld_width = 1024
         if os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
         else:
             ds = ogrDriver.CreateDataSource(dst_ds)
 
     elif ogr_driver_str == 'PostgreSQL':
+        max_fld_width = 1024
         # DB must already exist
         ds = ogrDriver.Open(dst_ds,1)
 
@@ -360,12 +379,16 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             if layer:
                 for field_def in fld_defs:
                     field = ogr.FieldDefn(field_def.fname, field_def.ftype)
-                    field.SetWidth(field_def.fwidth)
+                    field.SetWidth(min(max_fld_width, field_def.fwidth))
                     field.SetPrecision(field_def.fprecision)
                     layer.CreateField(field)
 
         ## Append Records
         if layer:
+            # Get field widths
+            lyr_def = layer.GetLayerDefn()
+            fwidths = {lyr_def.GetFieldDefn(i).GetName(): lyr_def.GetFieldDefn(i).GetWidth() for i in range(lyr_def.GetFieldCount())}
+
             logger.info("Appending records...")
             #### loop through records and add features
             i=0
@@ -575,16 +598,32 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         ## Write feature
                         if valid_record:
                             for fld,val in attrib_map.items():
+                                if isinstance(val, str) and len(val) > fwidths[fld]:
+                                    logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
+                                        val, fld, fwidths[fld]
+                                    ))
+                                    valid_record = False
                                 feat.SetField(fld,val)
                             feat.SetGeometry(feat_geom)
 
                             ## Add new feature to layer
-                            if ogr_driver_str in ('PostgreSQL'):
-                                layer.StartTransaction()
-                                layer.CreateFeature(feat)
-                                layer.CommitTransaction()
-                            else:
-                                layer.CreateFeature(feat)
+                            if valid_record:
+                                try:
+                                    if ogr_driver_str in ('PostgreSQL'):
+                                        layer.StartTransaction()
+                                        layer.CreateFeature(feat)
+                                        layer.CommitTransaction()
+                                    else:
+                                        layer.CreateFeature(feat)
+                                except Exception as e:
+                                    raise e
+                                else:
+                                    print('No exception')
+                                    if err.err_level >= gdal.CE_Warning:
+                                        raise RuntimeError(err.err_level, err.err_no, err.err_msg)
+                                finally:
+                                    gdal.PopErrorHandler()
+
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))

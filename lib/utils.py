@@ -101,7 +101,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
@@ -137,7 +137,7 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_LSF", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
@@ -162,7 +162,7 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS = TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
@@ -200,7 +200,7 @@ OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
     StandardAttribute("REFN_MTHD", ogr.OFTInteger, 8, 0),
     StandardAttribute("ALIGN_MTHD", ogr.OFTString, 64, 0),
     StandardAttribute("HOST", ogr.OFTString, 32, 0),
-    StandardAttribute("SEED_DEM", ogr.OFTString, 254, 0),
+    StandardAttribute("SEED_DEM", ogr.OFTString, 512, 0),
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
     StandardAttribute("RUNTIME", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0)
