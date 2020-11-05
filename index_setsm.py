@@ -337,7 +337,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     ## Create dataset if it does not exist
     if ogr_driver_str == 'ESRI Shapefile':
-        max_fld_width = 524
+        max_fld_width = 254
         if os.path.isfile(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
         else:
