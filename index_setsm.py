@@ -618,7 +618,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 except Exception as e:
                                     raise e
                                 else:
-                                    print('No exception')
                                     if err.err_level >= gdal.CE_Warning:
                                         raise RuntimeError(err.err_level, err.err_no, err.err_msg)
                                 finally:
