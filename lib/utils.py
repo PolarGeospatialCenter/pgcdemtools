@@ -142,6 +142,7 @@ SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILESZ_LSF", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
@@ -224,7 +225,7 @@ class SpatialRef(object):
         try:
             epsgcode = int(epsg)
 
-        except ValueError, e:
+        except ValueError as e:
             raise RuntimeError("EPSG value must be an integer: %s" %epsg)
         else:
 

@@ -39,6 +39,7 @@ for x in range(6,8):
         epsg = 32000 + x*100 + y
         epsgs.append(epsg)
 
+
 #### Strip DEM name pattern
 setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
@@ -92,6 +93,7 @@ setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    dem.tif\Z""", re.I| re.X)
 
 
+
 class SetsmScene(object):
     def __init__(self,metapath,md=None):
 
@@ -108,6 +110,16 @@ class SetsmScene(object):
             self.dem = os.path.join(self.srcdir,self.sceneid+"_dem.tif")
             self.matchtag = os.path.join(self.srcdir,self.sceneid+"_matchtag.tif")
             self.ortho = os.path.join(self.srcdir,self.sceneid+"_ortho.tif")
+            self.ortho2 = os.path.join(self.srcdir, self.sceneid + "_ortho2.tif")
+            self.dspinfo = os.path.join(self.srcdir, self.sceneid + "_info50cm.txt")
+
+            self.filesz_attrib_map = {
+                'filesz_dem': self.dem,
+                'filesz_lsf': self.lsf_dem,
+                'filesz_mt': self.matchtag,
+                'filesz_or': self.ortho,
+                'filesz_or2': self.ortho2,
+            }
 
             # set shared attributes
             self.id = self.sceneid
@@ -135,6 +147,7 @@ class SetsmScene(object):
                 self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                 self.geom = None
                 self.group_version = None
+                self.is_dsp = None
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -170,25 +183,12 @@ class SetsmScene(object):
 
     def get_dem_info(self):
 
-        try:
-            self.filesz_dem = os.path.getsize(self.dem) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_dem = 0
-
-        try:
-            self.filesz_lsf = os.path.getsize(self.lsf_dem) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_lsf = 0
-
-        try:
-            self.filesz_mt = os.path.getsize(self.matchtag) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_mt = 0
-
-        try:
-            self.filesz_or = os.path.getsize(self.ortho) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_or = 0
+        for k,v in self.filesz_attrib_map.items():
+            try:
+                fz = os.path.getsize(v) / 1024 / 1024 / 1024.0
+            except OSError:
+                fz = 0
+            setattr(self, k, fz)
 
         if os.path.isfile(self.lsf_dem):
             dsp = self.lsf_dem
@@ -283,7 +283,17 @@ class SetsmScene(object):
 
         ## If metafile exists
         if self.metapath:
-            metad = self._parse_metadata_file()
+            metad = self._parse_metadata_file(self.metapath)
+
+            simple_attrib_map = {
+                'group_version': 'group_version',
+                'image_1_satid': 'sensor1',
+                'image_2_satid': 'sensor2',
+            }
+
+            for k, v in simple_attrib_map.items():
+                if k in metad:
+                    setattr(self, v, metad[k])
 
             if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
@@ -301,28 +311,44 @@ class SetsmScene(object):
             else:
                 raise RuntimeError('Key "SETSM Version" not found in meta dict from {}'.format(self.metapath))
 
-            if 'group_version' in metad:
-                self.group_version = metad['group_version']
-
             if 'image_1_acquisition_time' in metad:
                 self.acqdate1 = datetime.strptime(metad["image_1_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
             if 'image_2_acquisition_time' in metad:
                 self.acqdate2 = datetime.strptime(metad["image_2_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
-            if 'image_1_satid' in metad:
-                self.sensor1 = metad['image_1_satid']
+            if 'downsample_method_dem' in metad:
+                self.is_dsp = True
+            else:
+                self.is_dsp = False
 
-            if 'image_2_satid' in metad:
-                self.sensor2 = metad['image_2_satid']
+            if 'original_resolution' in metad:
+                try:
+                    self.dsp_dem_res = float(metad['original_resolution'])
+                except ValueError:
+                    if 'original_dem' in metad:
+                        self.dsp_dem_res = float(metad['original_dem'])
 
         else:
             raise RuntimeError("meta.txt file does not exist for DEM")
 
-    def _parse_metadata_file(self):
+        # Read dsp file if present
+        if os.path.isfile(self.dspinfo):
+            dspmetad = self._parse_metadata_file(self.dspinfo)
+            if len(dspmetad) != 7:
+                raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(len(self.dspmetad)))
+            for k in self.filesz_attrib_map:
+                k2 = "dsp_{}".format(k)
+                setattr(self,k2,dspmetad[k])
+        else:
+            for k in self.filesz_attrib_map:
+                k2 = "dsp_{}".format(k)
+                setattr(self,k2,None)
+
+    def _parse_metadata_file(self,metapath):
         metad = {}
 
-        mdf = open(self.metapath,'r')
+        mdf = open(metapath,'r')
         for line in mdf.readlines():
             l = line.strip()
             if '=' in l:
@@ -333,8 +359,8 @@ class SetsmScene(object):
                 else:
                     try:
                         key,val = l.split('=')
-                    except ValueError, e:
-                        logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,self.metapath))
+                    except ValueError as e:
+                        logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,metapath))
                     else:
                         key = key.strip().replace(" ","_").lower()
                         metad[key] = val.strip()
@@ -382,6 +408,7 @@ class SetsmScene(object):
         'filesz_lsf',
         'filesz_mt',
         'filesz_or',
+        'filesz_or2',
         'geom',
         'lsf_dem',
         'matchtag',

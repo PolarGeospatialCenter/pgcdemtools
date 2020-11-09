@@ -70,6 +70,9 @@ def main():
                         help="config file (default is config.ini in script dir")
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
+    parser.add_argument('--dsp-original-res', action='store_true', default=False,
+                        help='write index of downsampled product (dsp) scenes as original resolution (mode=scene only)')
+    parser.add_argument('--status', help='custom value for status field')
     parser.add_argument('--read-json', action='store_true', default=False,
                         help='search for json files instead of images to populate the index')
     parser.add_argument('--write-json', action='store_true', default=False,
@@ -114,6 +117,12 @@ def main():
     if args.read_pickle:
         if not os.path.isfile(args.read_pickle):
             parser.error("Pickle file must be an existing file")
+
+    if args.status and args.bp_paths:
+        parser.error("--bp-paths sets status field to 'tape' and cannot be used with --status")
+
+    if args.mode != 'scene' and args.dsp_original_res:
+        parser.error("--dsp-original-res is applicable only when mode = scene")
 
     if args.bp_paths:
         db_path_prefix = BP_PATH_PREFIX
@@ -244,7 +253,6 @@ def main():
                 logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
                 sys.exit(-1)
 
-
         if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
             if ds:
@@ -305,7 +313,10 @@ def main():
             except RuntimeError as e:
                 logger.error( e )
             else:
-                records.append(record)
+                if args.mode == 'scene' and not os.path.isfile(record.dspinfo) and args.dsp_original_res:
+                    logger.error("Record {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
+                else:
+                    records.append(record)
 
     total = len(records)
 
@@ -358,7 +369,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
     else:
         logger.error("Format {} is not supported".format(ogr_driver_str))
 
-    if args.bp_paths:
+    if args.status:
+        status = args.status
+    elif args.bp_paths:
         status = 'tape'
     else:
         status = 'online'
@@ -419,15 +432,19 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'HAS_LSF': int(os.path.isfile(record.lsf_dem)),
                                 'HAS_NONLSF': int(os.path.isfile(record.dem)),
                                 'ALGM_VER': record.algm_version,
-                                'FILESZ_DEM': record.filesz_dem,
-                                'FILESZ_LSF': record.filesz_lsf,
-                                'FILESZ_MT': record.filesz_mt,
-                                'FILESZ_OR': record.filesz_or,
                                 'PROJ4': record.proj4,
                                 'EPSG': record.epsg,
                             }
 
-                            ## Set region
+                            if args.dsp_original_res:
+                                attr_pfx = 'dsp_'
+                            else:
+                                attr_pfx = ''
+
+                            for k in record.filesz_attrib_map:
+                                attrib_map[k.upper()] = getattr(record,'{}{}'.format(attr_pfx,k))
+
+                            # Set region
                             try:
                                 region = pairs[record.pairname]
                             except KeyError as e:
@@ -529,11 +546,15 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     version                  # version
                                 )
 
-                        ## Common Attributes accross all modes
+                        ## Common Attributes across all modes
                         attrib_map['INDEX_DATE'] = datetime.datetime.today().strftime('%Y-%m-%d')
                         attrib_map['CR_DATE'] = record.creation_date.strftime('%Y-%m-%d')
                         attrib_map['ND_VALUE'] = record.ndv
-                        attrib_map['DEM_RES'] = (record.xres + record.yres) / 2.0
+                        if args.dsp_original_res:
+                            res = record.dsp_dem_res
+                        else:
+                            res = (record.xres + record.yres) / 2.0
+                        attrib_map['DEM_RES'] = res
 
                         ## Set location
                         if db_path_prefix:
@@ -547,7 +568,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             location = record.srcfp
                         attrib_map['LOCATION'] = location
 
-                        ## Transfrom and write geom
+                        ## Transform and write geom
                         src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                         src_srs.ImportFromWkt(record.proj)
 
@@ -576,7 +597,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     ## Get Lat and Lon coords in arrays
                                     lons = []
                                     lats = []
-                                    ring  = temp_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
+                                    ring = temp_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
                                     for j in range(0, ring.GetPointCount()):
                                         pt = ring.GetPoint(j)
                                         lons.append(pt[0])
@@ -608,6 +629,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             ## Add new feature to layer
                             if valid_record:
+                                err.err_level = gdal.CE_None
                                 try:
                                     if ogr_driver_str in ('PostgreSQL'):
                                         layer.StartTransaction()
