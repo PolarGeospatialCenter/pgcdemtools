@@ -37,20 +37,24 @@ FORMAT_OPTIONS = {
 }
 FORMAT_HELP = ['{}:{},'.format(k,v) for k, v in FORMAT_OPTIONS.items()]
 
-PROJECTS = (
-    'arcticdem',
-    'rema',
-    'earthdem'
-)
+PROJECTS = {
+    'arcticdem': 'ArcticDEM',
+    'rema': 'REMA',
+    'earthdem': 'EarthDEM',
+}
 
 MODES = {
     ## mode : (class, suffix, groupid_fld, field_def)
-    'scene' : (dem.SetsmScene, '_meta.txt', 'stripid', utils.SCENE_ATTRIBUTE_DEFINITIONS),
-    'strip' : (dem.SetsmDem, '_dem.tif', 'stripid', utils.DEM_ATTRIBUTE_DEFINITIONS),
-    'tile'  : (dem.SetsmTile, '_dem.tif', 'supertile_id', utils.TILE_DEM_ATTRIBUTE_DEFINITIONS),
+    'scene' : (dem.SetsmScene, '_meta.txt', 'stripid',
+               utils.SCENE_ATTRIBUTE_DEFINITIONS, utils.SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION),
+    'strip' : (dem.SetsmDem, ('_dem.tif','_dem_masked.tif','dem_edgemasked.tif'), 'stripdemid',
+               utils.DEM_ATTRIBUTE_DEFINITIONS, utils.DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
+    'tile'  : (dem.SetsmTile, '_dem.tif', 'supertile_id',
+               utils.TILE_DEM_ATTRIBUTE_DEFINITIONS, utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
 }
 
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dems/setsm'
+TNVA_PATH_PREFEX = '/mnt/pgc/data/elev/dem/setsm'
 
 def main():
 
@@ -73,6 +77,8 @@ def main():
     parser.add_argument('--dsp-original-res', action='store_true', default=False,
                         help='write index of downsampled product (dsp) scenes as original resolution (mode=scene only)')
     parser.add_argument('--status', help='custom value for status field')
+    parser.add_argument('--include-registration', action='store_true', default=False,
+                        help='include registration info if present (mode=strip and tile only)')
     parser.add_argument('--read-json', action='store_true', default=False,
                         help='search for json files instead of images to populate the index')
     parser.add_argument('--write-json', action='store_true', default=False,
@@ -87,7 +93,8 @@ def main():
     parser.add_argument("--write-pickle", help="store region lookup in a pickle file. skipped if --write-json is used")
     parser.add_argument("--read-pickle", help='read region lookup from a pickle file. skipped if --write-json is used')
     parser.add_argument("--bp-paths", action='store_true', default=False, help='Use BlackPearl path schema')
-    parser.add_argument('--project', choices=PROJECTS, help='project name (required when writing tiles)')
+    parser.add_argument("--tnva-paths", action='store_true', default=False, help='Use Terranova path schema')
+    parser.add_argument('--project', choices=PROJECTS.keys(), help='project name (required when writing tiles)')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
 
 
@@ -98,7 +105,8 @@ def main():
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
 
-    src = os.path.abspath(args.src)
+    #src = os.path.abspath(args.src)
+    src = args.src
     dst = args.dst
 
     if args.overwrite and args.append:
@@ -121,11 +129,16 @@ def main():
     if args.status and args.bp_paths:
         parser.error("--bp-paths sets status field to 'tape' and cannot be used with --status")
 
+    if args.tnva_paths and args.bp_paths:
+        parser.error("--bp-paths and --tnva-paths are incompatible options")
+
     if args.mode != 'scene' and args.dsp_original_res:
         parser.error("--dsp-original-res is applicable only when mode = scene")
 
     if args.bp_paths:
         db_path_prefix = BP_PATH_PREFIX
+    elif args.tnva_paths:
+        db_path_prefix = TNVA_PATH_PREFIX
     else:
         db_path_prefix = None
 
@@ -232,6 +245,10 @@ def main():
             if len(pairs) == 0:
                 logger.warning("Cannot get region-pair lookup")
 
+                if args.tnva_paths:
+                    logger.error("Region-pair lookup required for --tnva-paths option")
+                    sys.exit()
+
         ## Save pickle if selected
         if args.write_pickle:
             logger.info("Pickling region lookup")
@@ -288,7 +305,8 @@ def main():
 
 
     #### ID records
-    dem_class, suffix, groupid_fld, fld_defs = MODES[args.mode]
+    dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
+    fld_defs = fld_defs_base if args.include_registration else fld_defs_base + reg_fld_defs
     src_fps = []
     records = []
     logger.info('Identifying DEMs')
@@ -337,7 +355,8 @@ def main():
         if args.write_json:
             write_to_json(dst, groups, total, args)
         else:
-            write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, db_path_prefix, fld_defs, args)
+            write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
+                                                pairs, total, db_path_prefix, fld_defs, args)
             if write_result:
                 sys.exit(0)
             else:
@@ -420,7 +439,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             attrib_map = {
                                 'SCENEDEMID': record.sceneid,
-                                'STRIPDEMID': record.stripid,
+                                'STRIPDEMID': record.stripdemid,
                                 'STATUS': status,
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
@@ -448,21 +467,48 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             try:
                                 region = pairs[record.pairname]
                             except KeyError as e:
-                                pass
+                                region = None
                             else:
                                 attrib_map['REGION'] = region
 
-                            ## Set path folders within bucket for use if db_path_prefix specified
-                            path_prefix_dirs = "{}/{}/{}".format(
-                                record.pairname[:4],   # sensor
-                                record.pairname[5:9],  # year
-                                record.pairname[9:11], # month"
-                            )
+                            if args.bp_paths:
+                                # https://blackpearl-data2.pgc.umn.edu/dem/setsm/scene/WV02/2015/05/
+                                # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
+                                path_prefix_dirs = "{}/{}/{}/{}/{}.tar".format(
+                                    args.mode,               # mode (scene, strip, tile)
+                                    record.pairname[:4],     # sensor
+                                    record.pairname[5:9],    # year
+                                    record.pairname[9:11],   # month
+                                    groupid                  # mode-specific group ID
+                                )
+
+                            elif args.tnva_paths:
+                                # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
+                                # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
+                                # WV01_20200630_10200100991E2C00_102001009A862700_504471479080_01_P001_504471481090_01_P001_2_meta.txt
+
+                                if not region:
+                                    raise RuntimeError("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+
+                                pretty_project = PROJECTS[region.split('_')[0]]
+                                res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
+
+                                custom_path = "{}/{}/region/{}/scenes/{}".format(
+                                    db_path_prefix,
+                                    pretty_project,         # project (e.g. ArcticDEM)
+                                    region,                 # region
+                                    res_dir,                # e.g. 2m, 50cm, 2m_dsp
+                                    groupid,                # strip ID
+                                    record.srcfn            # file name (meta.txt)
+                                )
+                            else:
+                                logger.error("Mode {} does not support the specified custom path option".format(args.mode))
 
                         ## Fields for strip DEM
                         if args.mode == 'strip':
                             attrib_map = {
                                 'DEM_ID': record.stripid,
+                                'STRIPDEMID': record.stripdemid,
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
                                 'SENSOR2': record.sensor2,
@@ -471,10 +517,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
                                 'IS_LSF': int(record.is_lsf),
+                                'IS_XTRACK': int(record.is_lsf),
                                 'ALGM_VER': record.algm_version,
                                 'FILESZ_DEM': record.filesz_dem,
                                 'FILESZ_MT': record.filesz_mt,
                                 'FILESZ_OR': record.filesz_or,
+                                'FILESZ_OR2': record.filesz_or2,
                                 'PROJ4': record.proj4,
                                 'EPSG': record.epsg,
                                 'GEOCELL': record.geocell,
@@ -496,22 +544,29 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 attrib_map['DENSITY'] = -9999
 
                             ## If registration info exists
-                            if len(record.reginfo_list) > 0:
-                                for reginfo in record.reginfo_list:
-                                    if reginfo.name == 'ICESat':
-                                        attrib_map["DX"] = reginfo.dx
-                                        attrib_map["DY"] = reginfo.dy
-                                        attrib_map["DZ"] = reginfo.dz
-                                        attrib_map["REG_SRC"] = 'ICESat'
-                                        attrib_map["NUM_GCPS"] = reginfo.num_gcps
-                                        attrib_map["MEANRESZ"] = reginfo.mean_resid_z
+                            if args.include_registration:
+                                if len(record.reginfo_list) > 0:
+                                    for reginfo in record.reginfo_list:
+                                        if reginfo.name == 'ICESat':
+                                            attrib_map["DX"] = reginfo.dx
+                                            attrib_map["DY"] = reginfo.dy
+                                            attrib_map["DZ"] = reginfo.dz
+                                            attrib_map["REG_SRC"] = 'ICESat'
+                                            attrib_map["NUM_GCPS"] = reginfo.num_gcps
+                                            attrib_map["MEANRESZ"] = reginfo.mean_resid_z
 
-                            ## Set path folders within bucket for use if db_path_prefix specified
-                            path_prefix_dirs = "{}/{}/{}".format(
-                                record.pairname[:4],   # sensor
-                                record.pairname[5:9],  # year
-                                record.pairname[9:11], # month"
-                            )
+                            ## Set path folders for use if db_path_prefix specified
+                            if args.bp_paths:
+                               custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
+                                    db_path_prefix,
+                                    args.mode,               # mode (scene, strip, tile)
+                                    record.pairname[:4],     # sensor
+                                    record.pairname[5:9],    # year
+                                    record.pairname[9:11],   # month
+                                    groupid                  # mode-specific group ID
+                                )
+                            else:
+                                logger.error("Mode {} does not support the specified custom path option".format(args.mode))
 
                         ## Fields for tile DEM
                         if args.mode == 'tile':
@@ -532,19 +587,26 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 attrib_map['DENSITY'] = record.density
                             else:
                                 attrib_map['DENSITY'] = -9999
-                            if record.reg_src:
-                                attrib_map["REG_SRC"] = record.reg_src
-                                attrib_map["NUM_GCPS"] = record.num_gcps
-                            if record.mean_resid_z:
-                                attrib_map["MEANRESZ"] = record.mean_resid_z
 
-                            ## Set path folders within bucket for use if db_path_prefix specified
-                            if db_path_prefix:
-                                path_prefix_dirs = "{}/{}/{}".format(
+                            if args.include_registration:
+                                if record.reg_src:
+                                    attrib_map["REG_SRC"] = record.reg_src
+                                    attrib_map["NUM_GCPS"] = record.num_gcps
+                                if record.mean_resid_z:
+                                    attrib_map["MEANRESZ"] = record.mean_resid_z
+
+                            ## Set path folders for use if db_path_prefix specified
+                            if args.bp_paths:
+                                custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
+                                    db_path_prefix,
+                                    record.mode,               # mode (scene, strip, tile)
                                     args.project.lower(),    # project
                                     record.res,              # resolution
-                                    version                  # version
+                                    version,                 # version
+                                    groupid                  # mode-specific group ID
                                 )
+                            else:
+                                logger.error("Mode {} does not supports the specified custom path option".format(args.mode))
 
                         ## Common Attributes across all modes
                         attrib_map['INDEX_DATE'] = datetime.datetime.today().strftime('%Y-%m-%d')
@@ -558,12 +620,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Set location
                         if db_path_prefix:
-                            location = '{}/{}/{}/{}.tar'.format(
-                                db_path_prefix,
-                                args.mode,             # mode (scene, strip, tile)
-                                path_prefix_dirs,      # mode-specific path prefix
-                                groupid                # mode-specific group ID
-                            )
+                            location = custom_path
                         else:
                             location = record.srcfp
                         attrib_map['LOCATION'] = location

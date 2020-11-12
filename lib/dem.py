@@ -4,12 +4,10 @@
 dem raster information class and methods
 """
 
-import os, sys, string, shutil, glob, re, logging,math
+import os, re, logging,math
 from datetime import *
 import gdal, osr, ogr, gdalconst
-from collections import namedtuple
 import numpy
-from numpy import flatnonzero
 import utils
 
 gdal.UseExceptions()
@@ -20,6 +18,7 @@ logger.setLevel(logging.DEBUG)
 
 __all__ = [
     "SetsmDem",
+    "SetsmSceneDem",
     "AspDem",
     "SetsmTile",
     "RegInfo"
@@ -93,7 +92,6 @@ setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    dem.tif\Z""", re.I| re.X)
 
 
-
 class SetsmScene(object):
     def __init__(self,metapath,md=None):
 
@@ -148,6 +146,7 @@ class SetsmScene(object):
                 self.geom = None
                 self.group_version = None
                 self.is_dsp = None
+                self.is_xtrack = None
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -179,7 +178,7 @@ class SetsmScene(object):
             version_str = '{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
 
             ## Make strip ID
-            self.stripid = '{}_{}_v{}'.format(self.pairname,self.res_str,version_str)
+            self.stripdemid = '{}_{}_v{}'.format(self.pairname, self.res_str, version_str)
 
     def get_dem_info(self):
 
@@ -294,6 +293,9 @@ class SetsmScene(object):
             for k, v in simple_attrib_map.items():
                 if k in metad:
                     setattr(self, v, metad[k])
+
+            if self.sensor1 != self.sensor2:
+                self.is_xtrack = True
 
             if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
@@ -454,6 +456,7 @@ class SetsmDem(object):
                 self.is_lsf = True
             else:
                 self.is_lsf = False
+            self.is_xtrack = None
 
             metapath = os.path.join(self.srcdir,self.stripid+"_meta.txt")
             if os.path.isfile(metapath):
@@ -461,8 +464,10 @@ class SetsmDem(object):
             else:
                 self.metapath = None
 
+            self.dem = os.path.join(self.srcdir, self.stripid + "_dem.tif")
             self.matchtag = os.path.join(self.srcdir,self.stripid+"_matchtag.tif")
             self.ortho = os.path.join(self.srcdir,self.stripid+"_ortho.tif")
+            self.ortho2 = os.path.join(self.srcdir, self.stripid + "_ortho2.tif")
             self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
             self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
             self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
@@ -474,6 +479,13 @@ class SetsmDem(object):
             ]
             self.archive = os.path.join(self.srcdir,self.stripid+".tar.gz")
             #self.archive = os.path.join(self.srcdir,self.stripid+".tar")
+
+            self.filesz_attrib_map = {
+                'filesz_dem': self.dem,
+                'filesz_mt': self.matchtag,
+                'filesz_or': self.ortho,
+                'filesz_or2': self.ortho2,
+            }
 
             #### parse name
             for pattern in setsm_strip_pattern, setsm_strip_pattern2:
@@ -488,6 +500,7 @@ class SetsmDem(object):
                     self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
                     self.sensor2 = self.sensor1
                     self.res = groups['res']
+                    self.res_str = groups['res']
                     self.creation_date = None
                     self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                     self.geom = None
@@ -520,21 +533,12 @@ class SetsmDem(object):
 
     def get_dem_info(self):
 
-        ## get size of non-ortho deliverable files in GB
-        try:
-            self.filesz_dem = os.path.getsize(self.srcfp) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_dem = 0
-
-        try:
-            self.filesz_mt = os.path.getsize(self.matchtag) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_mt = 0
-
-        try:
-            self.filesz_or = os.path.getsize(self.ortho) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_or = 0
+        for k, v in self.filesz_attrib_map.items():
+            try:
+                fz = os.path.getsize(v) / 1024 / 1024 / 1024.0
+            except OSError:
+                fz = 0
+            setattr(self, k, fz)
 
         ds = gdal.Open(self.srcfp)
         if ds is not None:
@@ -618,6 +622,19 @@ class SetsmDem(object):
         self.get_metafile_info()
         self.get_geocell()
 
+        ## Get version str with ability to handle 1-3 parts of semantic version
+        if len(self.algm_version) > 6:
+            vp = self.algm_version[6:].split('.')
+
+            vl = [0, 0, 0]
+            for i in range(len(vp)):
+                vl[i] = int(vp[i])
+            version_str = '{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
+
+            ## Make strip ID
+            self.stripdemid = '{}_{}_v{}'.format(self.pairname, self.res_str, version_str)
+
+
     def compute_density_and_statistics(self):
         #### If no mdf or mdf does not contain valid density key, compute
         if self.density is None or self.density == 'None':
@@ -636,7 +653,7 @@ class SetsmDem(object):
                 matchtag_ndv = b.GetNoDataValue()
                 data = b.ReadAsArray()
                 err = gdal.GetLastErrorNo()
-                if err <> 0:
+                if err != 0:
                     raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
                 else:
                     data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
@@ -654,7 +671,7 @@ class SetsmDem(object):
             ds = gdal.Open(self.srcfp)
             try:
                 self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
                 self.stats = (None, None, None, None)
 
@@ -735,6 +752,9 @@ class SetsmDem(object):
             if len(values) > 0:
                 self.sensor2 = values[0]
 
+            if self.sensor1 != self.sensor2:
+                self.is_xtrack = True
+
             #### If density file exists, get density from there
             self.density = None
             self.stats = (None, None, None, None)
@@ -797,14 +817,14 @@ class SetsmDem(object):
             ## density, stats, proj4, creation date, version
             try:
                 self.density = float(metad['STRIP_DEM_matchtagDensity'])
-            except ValueError, e:
+            except ValueError as e:
                 logger.info("Cannot convert density value ({}) to float for {}".format(metad['STRIP_DEM_matchtagDensity'], self.srcfp))
                 self.density = None
 
             try:
                 min_elev = float(metad['STRIP_DEM_minElevValue'])
                 max_elev = float(metad['STRIP_DEM_maxElevValue'])
-            except ValueError, e:
+            except ValueError as e:
                 logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
                 min_elev, max_elev = None, None
 
@@ -814,14 +834,14 @@ class SetsmDem(object):
 
             try:
                 self.algm_version = metad['COMPONENT_1_setsmVersion']
-            except KeyError, e:
+            except KeyError as e:
                 pass
 
             ## acqdate
             try:
                 self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate1'], "%Y-%m-%d")
                 self.acqdate2 = datetime.strptime(metad['STRIP_DEM_acqDate2'], "%Y-%m-%d")
-            except KeyError, e:
+            except KeyError as e:
                 self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate'], "%Y-%m-%d")
                 self.acqdate2 = self.acqdate1
 
@@ -834,7 +854,7 @@ class SetsmDem(object):
                 mean_resid_z = float(metad['STRIP_DEM_REGISTRATION_registrationMeanVerticalResidual'])
                 num_gcps = int(metad['STRIP_DEM_REGISTRATION_registrationNumGCPs'])
                 name = metad['STRIP_DEM_REGISTRATION_registrationSource']
-            except KeyError, e:
+            except KeyError as e:
                 logger.warning("Registration info not found in {}".format(self.srcfp))
             else:
                 self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
@@ -875,7 +895,7 @@ class SetsmDem(object):
             #### make list of points
             pnt_list = []
 
-            if self.geom.GetGeometryCount() <> 1:
+            if self.geom.GetGeometryCount() != 1:
                 raise RuntimeError("Geometry has multiple parts: {}, {}".format(self.geom.ExportToWkt(),self.srcfp))
 
             g1 = self.geom.GetGeometryRef(0)
@@ -1070,7 +1090,7 @@ class SetsmDem(object):
                     if ': ' in l:
                         try:
                             key,val = l.split(': ')
-                        except ValueError, e:
+                        except ValueError as e:
                             logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
                         else:
                             metad[key.strip()] = val.strip()
@@ -1089,7 +1109,7 @@ class SetsmDem(object):
                         else:
                             try:
                                 key,val = l.split('=')
-                            except ValueError, e:
+                            except ValueError as e:
                                 logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,self.metapath))
                             else:
                                 if key.startswith('scene '):
@@ -1168,6 +1188,7 @@ class SetsmDem(object):
         'reg_files',
         'reginfo_list',
         'res',
+        'res_str',
         'scenes',
         'sensor1',
         'sensor2',
@@ -1249,7 +1270,7 @@ class AspDem(object):
             self.ndv = ds.GetRasterBand(1).GetNoDataValue()
             try:
                 self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
                 self.stats = (None, None, None, None)
 
@@ -1440,7 +1461,7 @@ class SetsmTile(object):
             self.ndv = ds.GetRasterBand(1).GetNoDataValue()
             try:
                 self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp,e))
                 self.stats = (None, None, None, None)
 
@@ -1523,7 +1544,7 @@ class SetsmTile(object):
             ndv = b.GetNoDataValue()
             data = b.ReadAsArray()
             err = gdal.GetLastErrorNo()
-            if err <> 0:
+            if err != 0:
                 raise RuntimeError("DEM dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
             else:
                 data_pixel_count = numpy.count_nonzero(data != ndv)
@@ -1644,7 +1665,7 @@ class SetsmTile(object):
         if '# GCPs' in metad:
             try:
                 self.num_gcps = int(sum(metad['# GCPs']))
-            except ValueError, e:
+            except ValueError as e:
                 self.num_gcps = 0
         if 'Mean Vertical Residual (m)' in metad:
             residuals = [resid for resid in metad['Mean Vertical Residual (m)'] if not math.isnan(resid)]
@@ -1669,7 +1690,7 @@ class SetsmTile(object):
                 if ': ' in l:
                     try:
                         key,val = l.split(': ')
-                    except ValueError, e:
+                    except ValueError as e:
                         logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
                     else:
                         metad[key.strip()] = val.strip()
@@ -1691,7 +1712,7 @@ class SetsmTile(object):
                     if ': ' in l:
                         try:
                             key,val = l.split(': ')
-                        except ValueError, e:
+                        except ValueError as e:
                             logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
                         else:
                             if val:

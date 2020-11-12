@@ -387,9 +387,6 @@ def build_archive(src,scratch,args):
                                     feat.SetField("DEM_RES",res)
                                     feat.SetField("DENSITY",raster.density)
                                     
-                                    if raster.version:
-                                        feat.SetField("REL_VER",raster.version)
-                                    
                                     #### Set fields if populated (will not be populated if metadata file is not found)
                                     if raster.creation_date:
                                         feat.SetField("CR_DATE",raster.creation_date.strftime("%Y-%m-%d"))
