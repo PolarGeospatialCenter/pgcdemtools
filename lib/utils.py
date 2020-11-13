@@ -148,6 +148,8 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
     StandardAttribute("HAS_LSF", ogr.OFTInteger, 8, 8),
     StandardAttribute("HAS_NONLSF", ogr.OFTInteger, 8, 8),
+    StandardAttribute("IS_XTRACK", ogr.OFTInteger, 8, 8),
+    StandardAttribute("IS_DSP", ogr.OFTInteger, 8, 8),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION = []

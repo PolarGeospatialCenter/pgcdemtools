@@ -38,6 +38,12 @@ for x in range(6,8):
         epsg = 32000 + x*100 + y
         epsgs.append(epsg)
 
+scene_dem_res_lookup = {
+    0.5: ('0','50cm'),
+    1.0: ('1','1m'),
+    2.0: ('2','2m'),
+    8.0: ('8','8m'),
+}
 
 #### Strip DEM name pattern
 setsm_scene_pattern = re.compile("""(?P<pairname>
@@ -154,17 +160,18 @@ class SetsmScene(object):
             self.get_metafile_info()
 
             ## Build res_str
-            try:
-                res_int = int(self.res)
-            except ValueError as e:
-                res_str = self.res
-            else:
-                if res_int > 0:
-                    self.res_str = "{}m".format(self.res)
-                elif res_int == 0:
-                    self.res_str = "50cm"
-                else:
-                    raise RuntimeError("Scene has invalid resolution value in name: {}".format(scene.sceneid))
+            self.res_str = scene_dem_res_lookup[float(self.res)][1]
+            # try:
+            #     res_int = int(self.res)
+            # except ValueError as e:
+            #     res_str = self.res
+            # else:
+            #     if res_int > 0:
+            #         self.res_str = "{}m".format(self.res)
+            #     elif res_int == 0:
+            #         self.res_str = "50cm"
+            #     else:
+            #         raise RuntimeError("Scene has invalid resolution value in name: {}".format(scene.sceneid))
 
             ## Get version str with ability to handle 1-3 parts of semantic version
             if self.group_version:
@@ -179,6 +186,13 @@ class SetsmScene(object):
 
             ## Make strip ID
             self.stripdemid = '{}_{}_v{}'.format(self.pairname, self.res_str, version_str)
+
+            sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
+            dsp_sceneid_split = self.sceneid.split('_')[:-1]
+            dsp_sceneid_split.append(sceneid_resstr)
+            self.dsp_sceneid = '_'.join(dsp_sceneid_split)
+            self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
+
 
     def get_dem_info(self):
 
@@ -203,19 +217,15 @@ class SetsmScene(object):
             self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
             self.gtf = ds.GetGeoTransform()
 
-            #print raster.proj
             src_srs = osr.SpatialReference()
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
-            #print self.proj4
             self.epsg = ''
 
             for epsg in epsgs:
                 tgt_srs = osr.SpatialReference()
                 tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
 
@@ -246,14 +256,10 @@ class SetsmScene(object):
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft":1,"1":1,
+                           "UpperRight":2,"2":2,
+                           "LowerLeft":4,"4":4,
+                           "LowerRight":3,"3":3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -294,8 +300,7 @@ class SetsmScene(object):
                 if k in metad:
                     setattr(self, v, metad[k])
 
-            if self.sensor1 != self.sensor2:
-                self.is_xtrack = True
+            self.is_xtrack = self.sensor1 != self.sensor2
 
             if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
@@ -319,10 +324,7 @@ class SetsmScene(object):
             if 'image_2_acquisition_time' in metad:
                 self.acqdate2 = datetime.strptime(metad["image_2_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
-            if 'downsample_method_dem' in metad:
-                self.is_dsp = True
-            else:
-                self.is_dsp = False
+            self.is_dsp = 'downsample_method_dem' in metad
 
             if 'original_resolution' in metad:
                 try:
@@ -451,6 +453,7 @@ class SetsmDem(object):
             self.srcfp = filepath
             self.srcdir, self.srcfn = os.path.split(self.srcfp)
             self.stripid = self.srcfn[:-8]
+            self.stripdemid = None
             self.id = self.stripid
             if 'lsf' in self.srcfn:
                 self.is_lsf = True
@@ -478,7 +481,6 @@ class SetsmDem(object):
                 os.path.join(self.srcdir,self.stripid+"_ngareg.txt")
             ]
             self.archive = os.path.join(self.srcdir,self.stripid+".tar.gz")
-            #self.archive = os.path.join(self.srcdir,self.stripid+".tar")
 
             self.filesz_attrib_map = {
                 'filesz_dem': self.dem,
@@ -547,19 +549,15 @@ class SetsmDem(object):
             self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
             self.gtf = ds.GetGeoTransform()
 
-            #print raster.proj
             src_srs = osr.SpatialReference()
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
-            #print self.proj4
             self.epsg = ''
 
             for epsg in epsgs:
                 tgt_srs = osr.SpatialReference()
                 tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
 
@@ -577,27 +575,15 @@ class SetsmDem(object):
 
                 self.xres = abs(self.gtf[1])
                 self.yres = abs(self.gtf[5])
-                ulx = self.gtf[0] + 0 * self.gtf[1] + 0 * self.gtf[2]
-                uly = self.gtf[3] + 0 * self.gtf[4] + 0 * self.gtf[5]
-                urx = self.gtf[0] + self.xsize * self.gtf[1] + 0 * self.gtf[2]
-                ury = self.gtf[3] + self.xsize * self.gtf[4] + 0 * self.gtf[5]
-                llx = self.gtf[0] + 0 * self.gtf[1] + self.ysize * self.gtf[2]
-                lly = self.gtf[3] + 0 * self.gtf[4] + self.ysize * self.gtf[5]
-                lrx = self.gtf[0] + self.xsize * self.gtf[1] + self.ysize* self.gtf[2]
-                lry = self.gtf[3] + self.xsize * self.gtf[4] + self.ysize * self.gtf[5]
 
             elif num_gcps == 4:
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft":1,"1":1,
+                           "UpperRight":2,"2":2,
+                           "LowerLeft":4,"4":4,
+                           "LowerRight":3,"3":3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -608,9 +594,6 @@ class SetsmDem(object):
                 ury = gcp_dict[2][3]
                 llx = gcp_dict[4][2]
                 lly = gcp_dict[4][3]
-                lrx = gcp_dict[3][2]
-                lry = gcp_dict[3][3]
-
                 self.xres = abs(math.sqrt((ulx - urx)**2 + (uly - ury)**2)/ self.xsize)
                 self.yres = abs(math.sqrt((ulx - llx)**2 + (uly - lly)**2)/ self.ysize)
 
@@ -658,12 +641,7 @@ class SetsmDem(object):
                 else:
                     data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
                     data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
-                    #logger.info("matchtag res: x = {}, y = {}".format(matchtag_res_x,matchtag_res_y))
-                    #logger.info("pixel count = {}".format(data_pixel_count))
-                    #logger.info("data area = {}".format(data_area))
-                    #logger.info("geom area = {}".format(geom_area))
                     self.density = data_area / geom_area
-                    #logger.info("calculated matchtag density = {}".format(self.density))
                     data = None
                     ds = None
 
@@ -752,8 +730,7 @@ class SetsmDem(object):
             if len(values) > 0:
                 self.sensor2 = values[0]
 
-            if self.sensor1 != self.sensor2:
-                self.is_xtrack = True
+            self.is_xtrack = 0 if self.sensor1 == self.sensor2 else 1
 
             #### If density file exists, get density from there
             self.density = None
@@ -1011,8 +988,6 @@ class SetsmDem(object):
 
             mdf = open(self.mdf,'w')
             text = format_as_imd(mdf_contents)
-            #logger.info(self.mdf)
-            #logger.info("\n"+text)
             mdf.write(text)
             mdf.close()
 
