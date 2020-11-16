@@ -160,18 +160,8 @@ class SetsmScene(object):
             self.get_metafile_info()
 
             ## Build res_str
-            self.res_str = scene_dem_res_lookup[float(self.res)][1]
-            # try:
-            #     res_int = int(self.res)
-            # except ValueError as e:
-            #     res_str = self.res
-            # else:
-            #     if res_int > 0:
-            #         self.res_str = "{}m".format(self.res)
-            #     elif res_int == 0:
-            #         self.res_str = "50cm"
-            #     else:
-            #         raise RuntimeError("Scene has invalid resolution value in name: {}".format(scene.sceneid))
+            scene_dem_resstr_lookup = { a: b for (a,b) in scene_dem_res_lookup.values()}
+            self.res_str = scene_dem_resstr_lookup[self.res]
 
             ## Get version str with ability to handle 1-3 parts of semantic version
             if self.group_version:
@@ -182,17 +172,17 @@ class SetsmScene(object):
             vl = [0,0,0]
             for i in range(len(vp)):
                 vl[i] = int(vp[i])
-            version_str = '{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
+            version_str = 'v{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
 
             ## Make strip ID
-            self.stripdemid = '{}_{}_v{}'.format(self.pairname, self.res_str, version_str)
+            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
 
-            sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
-            dsp_sceneid_split = self.sceneid.split('_')[:-1]
-            dsp_sceneid_split.append(sceneid_resstr)
-            self.dsp_sceneid = '_'.join(dsp_sceneid_split)
-            self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
-
+            if self.is_dsp:
+                sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
+                dsp_sceneid_split = self.sceneid.split('_')[:-1]
+                dsp_sceneid_split.append(sceneid_resstr)
+                self.dsp_sceneid = '_'.join(dsp_sceneid_split)
+                self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
 
     def get_dem_info(self):
 
@@ -387,7 +377,7 @@ class SetsmScene(object):
 
         ## Loop over dict, adding attributes to scene object
         for k in md:
-            setattr(self,k,md[k])
+            setattr(self, k, md[k])
 
         ## Verify presence of key attributes
         for k in self.key_attribs:
@@ -408,6 +398,8 @@ class SetsmScene(object):
         'dem',
         'epsg',
         'id',
+        'is_xtrack',
+        'is_dsp',
         'filesz_dem',
         'filesz_lsf',
         'filesz_mt',
@@ -432,7 +424,7 @@ class SetsmScene(object):
         'srcfn',
         'srcfp',
         'srs',
-        'stripid',
+        'stripdemid',
         'wkt_esri',
         'xres',
         'xsize',
@@ -612,10 +604,10 @@ class SetsmDem(object):
             vl = [0, 0, 0]
             for i in range(len(vp)):
                 vl[i] = int(vp[i])
-            version_str = '{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
+            version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
 
             ## Make strip ID
-            self.stripdemid = '{}_{}_v{}'.format(self.pairname, self.res_str, version_str)
+            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
 
 
     def compute_density_and_statistics(self):
@@ -1145,11 +1137,13 @@ class SetsmDem(object):
         'filesz_dem',
         'filesz_mt',
         'filesz_or',
+        'filesz_or2',
         'geocell',
         'geom',
         'gtf',
         'id',
         'is_lsf',
+        'is_xtrack',
         'matchtag',
         'mdf',
         'metapath',
@@ -1734,15 +1728,12 @@ class SetsmTile(object):
         'gtf',
         'id',
         'matchtag',
-        'mean_resid_z',
         'metapath',
         'ndv',
         'num_components',
-        'num_gcps',
         'ortho',
         'proj',
         'proj4',
-        'reg_src',
         'regmetapath',
         'res',
         'srcdir',
@@ -1750,7 +1741,6 @@ class SetsmTile(object):
         'srcfp',
         'srs',
         'stats',
-        'sum_gcps',
         'tileid',
         'tilename',
         'wkt_esri',
@@ -1758,6 +1748,10 @@ class SetsmTile(object):
         'xsize',
         'yres',
         'ysize',
+        # 'mean_resid_z',
+        # 'num_gcps',
+        # 'reg_src',
+        # 'sum_gcps',
     )
 
 class RegInfo(object):

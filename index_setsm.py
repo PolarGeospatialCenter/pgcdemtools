@@ -169,7 +169,7 @@ def main():
         ogr_driver_str = None
 
         if args.epsg:
-            logger.warning('--epsg will be ignored with the --write-json option')
+            logger.warning('--epsg and --dsp-original-res will be ignored with the --write-json option')
 
     ## If not writing to JSON, get OGR driver, ds name, and layer name
     else:
@@ -340,8 +340,8 @@ def main():
 
     if total == 0:
         logger.info("No valid records found")
-
     else:
+        logger.info("{} records found".format(total))
         ## Group into strips or tiles for json writing
         groups = {}
         for record in records:
@@ -401,6 +401,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         layer = ds.GetLayerByName(dst_lyr)
         fld_list = [f.fname for f in fld_defs]
 
+        err.err_level = gdal.CE_None
         tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         tgt_srs.ImportFromEPSG(args.epsg)
         if err.err_level >= gdal.CE_Warning:
@@ -690,7 +691,10 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         val, fld, fwidths[fld]
                                     ))
                                     valid_record = False
-                                feat.SetField(fld,val)
+                                feat.SetField(  # force unicode to str for a bug in GDAL's SetField. Revisit in Python3
+                                    fld.encode('utf-8'),
+                                    val if not isinstance(val, unicode) else val.encode('utf-8')
+                                )
                             feat.SetGeometry(feat_geom)
 
                             ## Add new feature to layer
