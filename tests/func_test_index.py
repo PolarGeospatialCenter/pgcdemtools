@@ -18,8 +18,8 @@ class TestIndexerIO(unittest.TestCase):
         self.scene_dir = os.path.join(script_dir,'testdata','setsm_scene')
         self.scene50cm_dir = os.path.join(script_dir,'testdata','setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(script_dir, 'testdata', 'setsm_scene_2mdsp')
-        self.scene_json = os.path.join(script_dir,'testdata','setsm_scene','json')
         self.strip_dir = os.path.join(script_dir,'testdata','setsm_strip')
+        self.stripmasked_dir = os.path.join(script_dir,'testdata','setsm_strip_masked')
         self.tile_dir = os.path.join(script_dir,'testdata','setsm_tile')
         self.output_dir = os.path.join(script_dir, 'testdata', 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
@@ -68,7 +68,6 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg,(se))
 
-    #@unittest.skip("test")
     def testOutputGdb(self):
 
         self.test_str = os.path.join(self.output_dir, 'test.gdb', 'test_lyr')
@@ -106,7 +105,6 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg,(se))
 
-    #@unittest.skip("test")
     def testOutputPostgres(self):
 
         ## Get config info
@@ -172,7 +170,6 @@ class TestIndexerIO(unittest.TestCase):
             if l.GetName() == lyr:
                 ds.DeleteLayer(i)
 
-    # @unittest.skip("test")
     def testScene50cm(self):
 
         ## Build shp
@@ -205,7 +202,6 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg, (se))
 
-    # @unittest.skip("test")
     def testSceneDsp(self):
 
         ## Build shp
@@ -246,7 +242,6 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg, (se))
 
-    #@unittest.skip("test")
     def testSceneJson(self):
 
         ## Test json creation
@@ -321,7 +316,6 @@ class TestIndexerIO(unittest.TestCase):
         self.assertEqual(cnt,43)
         ds, layer = None, None
 
-    #@unittest.skip("test")
     def testSceneDspJson(self):
 
         test_param_list = (
@@ -375,7 +369,18 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.strip_dir, self.test_str, '', 3, 'Done'),  # test creation
+            (self.stripmasked_dir, self.test_str, '--overwrite', 3, 'Done'),  # test index of masked strips
+            (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', 15, 'Done'),  # test index of masked strips
         )
+
+        strip_masks = {
+            ## name: (edgemask, watermask, cloudmask)
+            '_dem.tif': (1, 0, 0),
+            '_dem_water-masked.tif': (1, 1, 0),
+            '_dem_cloud-masked.tif': (1, 0, 1),
+            '_dem_cloud-water-masked.tif': (1, 1, 1),
+            '_dem_masked.tif': (1, 1, 1),
+        }
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python index_setsm.py --mode strip {} {} --skip-region-lookup {}'.format(
@@ -388,13 +393,20 @@ class TestIndexerIO(unittest.TestCase):
             # print(se)
             # print(so)
 
-            ## Test if ds exists and has corrent number of records
+            ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
             ds = ogr.Open(o,0)
             layer = ds.GetLayer()
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt,result_cnt)
+            for feat in layer:
+                srcfn = os.path.basename(feat.GetField('LOCATION'))
+                dem_suffix = srcfn[srcfn.find('_dem'):]
+                masks = strip_masks[dem_suffix]
+                self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
+                self.assertEqual(feat.GetField('WATERMASK'), masks[1])
+                self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
             ds, layer = None, None
 
             ##Test if stdout has proper error

@@ -43,11 +43,18 @@ PROJECTS = {
     'earthdem': 'EarthDEM',
 }
 
+mask_strip_suffixes = (
+    '_dem_water-masked.tif',
+    '_dem_cloud-masked.tif',
+    '_dem_cloud-water-masked.tif',
+    '_dem_masked.tif'
+)
+
 MODES = {
     ## mode : (class, suffix, groupid_fld, field_def)
     'scene' : (dem.SetsmScene, '_meta.txt', 'stripdemid',
                utils.SCENE_ATTRIBUTE_DEFINITIONS, utils.SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION),
-    'strip' : (dem.SetsmDem, ('_dem.tif','_dem_masked.tif','dem_edgemasked.tif'), 'stripdemid',
+    'strip' : (dem.SetsmDem, '_dem.tif', 'stripdemid',
                utils.DEM_ATTRIBUTE_DEFINITIONS, utils.DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
     'tile'  : (dem.SetsmTile, '_dem.tif', 'supertile_id',
                utils.TILE_DEM_ATTRIBUTE_DEFINITIONS, utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
@@ -79,6 +86,8 @@ def main():
     parser.add_argument('--status', help='custom value for status field')
     parser.add_argument('--include-registration', action='store_true', default=False,
                         help='include registration info if present (mode=strip and tile only)')
+    parser.add_argument('--search-masked', action='store_true', default=False,
+                        help='search for masked and unmasked DEMs (mode=strip only)')
     parser.add_argument('--read-json', action='store_true', default=False,
                         help='search for json files instead of images to populate the index')
     parser.add_argument('--write-json', action='store_true', default=False,
@@ -114,6 +123,12 @@ def main():
 
     if args.write_json and args.append:
         parser.error('--append cannot be used with the --write-json option')
+
+    if (args.write_json or args.read_json) and args.search_masked:
+        parser.error('--search-masked cannot be used with the --write-json or --read-json options')
+
+    if args.mode != 'strip' and args.search_masked:
+        parser.error('--search-masked applie donly to mode=strip')
 
     ## Check project
     if args.mode == 'tile' and not args.project:
@@ -306,6 +321,8 @@ def main():
 
     #### ID records
     dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
+    if args.mode == 'strip' and args.search_masked:
+        suffix = mask_strip_suffixes + tuple([suffix])
     fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base
     src_fps = []
     records = []
@@ -523,6 +540,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'CATALOGID2': record.catid2,
                                 'IS_LSF': int(record.is_lsf),
                                 'IS_XTRACK': int(record.is_xtrack),
+                                'EDGEMASK': int(record.mask_tuple[0]),
+                                'WATERMASK': int(record.mask_tuple[1]),
+                                'CLOUDMASK': int(record.mask_tuple[2]),
                                 'ALGM_VER': record.algm_version,
                                 'FILESZ_DEM': record.filesz_dem,
                                 'FILESZ_MT': record.filesz_mt,

@@ -69,7 +69,8 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (lsf_)?
                                     (?P<partnum>[SEG\d]+)_
                                     ((?P<version>v[\d/.]+)_)?
-                                    dem.(tif|jpg)\Z""", re.I | re.X)
+                                    (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
+                                    .(tif|jpg))\Z""", re.I | re.X)
 
 setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
@@ -81,14 +82,14 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     ((?P<version>v[\d/.]+)_)?
                                     (lsf_)?
-                                    dem.(tif|jpg)\Z""", re.I | re.X)
+                                    (?P<suffix>dem.(tif|jpg))\Z""", re.I | re.X)
 
 asp_strip_pattern = re.compile("""(?P<pairname>
                                   (?P<sensor>[A-Z]{2}\d{2})_
                                   (?P<timestamp>\d{8})_
                                   (?P<catid1>[A-Z0-9]{16})_
                                   (?P<catid2>[A-Z0-9]{16}))_?
-                                  (?P<res>\d+m)?-DEM.(tif|jpg)\Z""", re.I | re.X)
+                                  (?P<res>\d+m)?-dem.(tif|jpg)\Z""", re.I | re.X)
 
 setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    ((?P<subtile>\d+_\d+)_)?
@@ -96,6 +97,15 @@ setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    ((?P<version>v[\d/.]+)_)?
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
+
+strip_masks = {
+    ## name: (edgemask, watermask, cloudmask)
+    '_dem.tif': (1, 0, 0),
+    '_dem_water-masked.tif': (1, 1, 0),
+    '_dem_cloud-masked.tif': (1, 0, 1),
+    '_dem_cloud-water-masked.tif': (1, 1, 1),
+    '_dem_masked.tif': (1, 1, 1),
+}
 
 
 class SetsmScene(object):
@@ -444,7 +454,7 @@ class SetsmDem(object):
         else:
             self.srcfp = filepath
             self.srcdir, self.srcfn = os.path.split(self.srcfp)
-            self.stripid = self.srcfn[:-8]
+            self.stripid = self.srcfn[:self.srcfn.find('_dem')]
             self.stripdemid = None
             self.id = self.stripid
             if 'lsf' in self.srcfn:
@@ -452,6 +462,8 @@ class SetsmDem(object):
             else:
                 self.is_lsf = False
             self.is_xtrack = None
+            dem_suffix = self.srcfn[self.srcfn.find('_dem'):]
+            self.mask_tuple = strip_masks[dem_suffix]
 
             metapath = os.path.join(self.srcdir,self.stripid+"_meta.txt")
             if os.path.isfile(metapath):
@@ -1262,14 +1274,10 @@ class AspDem(object):
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft":1,"1":1,
+                           "UpperRight":2,"2":2,
+                           "LowerLeft":4,"4":4,
+                           "LowerRight":3,"3":3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -1753,6 +1761,7 @@ class SetsmTile(object):
         # 'reg_src',
         # 'sum_gcps',
     )
+
 
 class RegInfo(object):
 
