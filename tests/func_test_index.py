@@ -24,6 +24,12 @@ class TestIndexerIO(unittest.TestCase):
         self.output_dir = os.path.join(script_dir, 'testdata', 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
 
+        self.scene_count = 51
+        self.scene50cm_count = 14
+        self.scenedsp_count = 14
+        self.strip_count = 4
+        self.stripmasked_count = 3
+
     def tearDown(self):
         ## Clean up output
         for f in os.listdir(self.output_dir):
@@ -39,10 +45,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', 43, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', 86, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', 86, 'Dst shapefile exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', 43, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst shapefile exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -63,6 +69,10 @@ class TestIndexerIO(unittest.TestCase):
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt,result_cnt)
+            for feat in layer:
+                srcfn = os.path.basename(feat.GetField('LOCATION'))
+                is_xtrack = 0 if srcfn.startswith(('WV','GE','QB')) else 1
+                self.assertEqual(feat.GetField('IS_XTRACK'),is_xtrack)
             ds, layer = None, None
 
             ##Test if stdout has proper error
@@ -75,10 +85,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', 43, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', 86, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', 86, 'Dst GDB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', 43, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2 , 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst GDB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -128,10 +138,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', 43, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', 86, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', 86, 'Dst DB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', 43, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst DB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         ## Ensure test layer does not exist on DB
@@ -175,7 +185,7 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene50cm_dir, self.test_str, '', 14, 'Done'),  # test creation
+            (self.scene50cm_dir, self.test_str, '', self.scene50cm_count, 'Done'),  # test creation
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -207,7 +217,7 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scenedsp_dir, self.test_str, '', 14, 'Done', 2),  # test as 2m_dsp record
+            (self.scenedsp_dir, self.test_str, '', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
             (self.scenedsp_dir, self.test_str, '--overwrite --dsp-original-res', 14, 'Done', 0.5),  # test as 50cm record
         )
 
@@ -254,18 +264,20 @@ class TestIndexerIO(unittest.TestCase):
         # print(se)
         # print(so)
 
-        json1 = os.path.join(self.output_dir,'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json')
-        json2 = os.path.join(self.output_dir,'WV02_20190705_103001009505B700_10300100934D1000_2m_v040002.json')
-        self.assertTrue(os.path.isfile(json1))
-        self.assertTrue(os.path.isfile(json2))
+        jsons = [
+            os.path.join(self.output_dir, 'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json'),
+            os.path.join(self.output_dir, 'WV02_20190705_103001009505B700_10300100934D1000_2m_v040002.json'),
+            os.path.join(self.output_dir, 'W1W1_20190426_102001008466F300_1020010089C2DB00_2m_v030403.json'),
+        ]
 
         counter = 0
-        for json in json1,json2:
+        for json in jsons:
+            self.assertTrue(os.path.isfile(json))
             fh = open(json)
             for line in fh:
                 cnt = line.count('sceneid')
                 counter += cnt
-        self.assertEqual(counter,43)
+        self.assertEqual(counter,self.scene_count)
 
         ## Test json exists error
         msg = 'Json file already exists'
@@ -313,7 +325,7 @@ class TestIndexerIO(unittest.TestCase):
         layer = ds.GetLayer()
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
-        self.assertEqual(cnt,43)
+        self.assertEqual(cnt,self.scene_count)
         ds, layer = None, None
 
     def testSceneDspJson(self):
@@ -354,7 +366,7 @@ class TestIndexerIO(unittest.TestCase):
         layer = ds.GetLayer()
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
-        self.assertEqual(cnt,14)
+        self.assertEqual(cnt,self.scenedsp_count)
         feat = layer.GetFeature(1)
         scenedemid = feat.GetField('SCENEDEMID')
         stripdemid = feat.GetField('STRIPDEMID')
@@ -368,9 +380,9 @@ class TestIndexerIO(unittest.TestCase):
 
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.strip_dir, self.test_str, '', 3, 'Done'),  # test creation
-            (self.stripmasked_dir, self.test_str, '--overwrite', 3, 'Done'),  # test index of masked strips
-            (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', 15, 'Done'),  # test index of masked strips
+            (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
+            (self.stripmasked_dir, self.test_str, '--overwrite', self.stripmasked_count, 'Done'),  # test index of masked strips
+            (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
         )
 
         strip_masks = {
@@ -407,9 +419,11 @@ class TestIndexerIO(unittest.TestCase):
                 self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
                 self.assertEqual(feat.GetField('WATERMASK'), masks[1])
                 self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
+                is_xtrack = 0 if srcfn.startswith(('WV','GE','QB')) else 1
+                self.assertEqual(feat.GetField('IS_XTRACK'),is_xtrack)
             ds, layer = None, None
 
-            ##Test if stdout has proper error
+            ## Test if stdout has proper error
             self.assertIn(msg,se)
 
     def testStripJson(self):
@@ -446,7 +460,7 @@ class TestIndexerIO(unittest.TestCase):
         layer = ds.GetLayer()
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
-        self.assertEqual(cnt,3)
+        self.assertEqual(cnt,self.strip_count)
         ds, layer = None, None
 
     def testTile(self):

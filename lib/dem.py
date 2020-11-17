@@ -98,6 +98,8 @@ setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
 
+xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
+
 strip_masks = {
     ## name: (edgemask, watermask, cloudmask)
     '_dem.tif': (1, 0, 0),
@@ -162,7 +164,7 @@ class SetsmScene(object):
                 self.geom = None
                 self.group_version = None
                 self.is_dsp = None
-                self.is_xtrack = None
+                self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -299,8 +301,6 @@ class SetsmScene(object):
             for k, v in simple_attrib_map.items():
                 if k in metad:
                     setattr(self, v, metad[k])
-
-            self.is_xtrack = self.sensor1 != self.sensor2
 
             if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
@@ -461,7 +461,6 @@ class SetsmDem(object):
                 self.is_lsf = True
             else:
                 self.is_lsf = False
-            self.is_xtrack = None
             dem_suffix = self.srcfn[self.srcfn.find('_dem'):]
             self.mask_tuple = strip_masks[dem_suffix]
 
@@ -514,6 +513,7 @@ class SetsmDem(object):
                         self.version = groups['version']
                     else:
                         self.version = None
+                    self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -733,8 +733,6 @@ class SetsmDem(object):
                     values.append(self.scenes[x]['Image_2_satID'])
             if len(values) > 0:
                 self.sensor2 = values[0]
-
-            self.is_xtrack = 0 if self.sensor1 == self.sensor2 else 1
 
             #### If density file exists, get density from there
             self.density = None
