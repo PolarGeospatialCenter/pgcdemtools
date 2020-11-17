@@ -16,12 +16,19 @@ class TestIndexerIO(unittest.TestCase):
 
     def setUp(self):
         self.scene_dir = os.path.join(script_dir,'testdata','setsm_scene')
-        self.scene_json = os.path.join(script_dir,'testdata','setsm_scene','json')
+        self.scene50cm_dir = os.path.join(script_dir,'testdata','setsm_scene_50cm')
+        self.scenedsp_dir = os.path.join(script_dir, 'testdata', 'setsm_scene_2mdsp')
         self.strip_dir = os.path.join(script_dir,'testdata','setsm_strip')
+        self.stripmasked_dir = os.path.join(script_dir,'testdata','setsm_strip_masked')
         self.tile_dir = os.path.join(script_dir,'testdata','setsm_tile')
         self.output_dir = os.path.join(script_dir, 'testdata', 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
 
+        self.scene_count = 51
+        self.scene50cm_count = 14
+        self.scenedsp_count = 14
+        self.strip_count = 4
+        self.stripmasked_count = 3
 
     def tearDown(self):
         ## Clean up output
@@ -38,10 +45,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', 43, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', 86, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', 86, 'Dst shapefile exists.  Use the --overwrite flag to overwrite.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', 43, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst shapefile exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -55,19 +62,22 @@ class TestIndexerIO(unittest.TestCase):
             # print(se)
             # print(so)
 
-            ## Test if ds exists and has corrent number of records
+            ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
             ds = ogr.Open(o,0)
             layer = ds.GetLayer()
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt,result_cnt)
+            for feat in layer:
+                srcfn = os.path.basename(feat.GetField('LOCATION'))
+                is_xtrack = 0 if srcfn.startswith(('WV','GE','QB')) else 1
+                self.assertEqual(feat.GetField('IS_XTRACK'),is_xtrack)
             ds, layer = None, None
 
             ##Test if stdout has proper error
             self.assertIn(msg,(se))
 
-    #@unittest.skip("test")
     def testOutputGdb(self):
 
         self.test_str = os.path.join(self.output_dir, 'test.gdb', 'test_lyr')
@@ -75,10 +85,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', 43, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', 86, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', 86, 'Dst GDB layer exists.  Use the --overwrite flag to overwrite.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', 43, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2 , 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst GDB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -105,7 +115,6 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg,(se))
 
-    #@unittest.skip("test")
     def testOutputPostgres(self):
 
         ## Get config info
@@ -129,10 +138,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', 43, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', 86, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', 86, 'Dst DB layer exists.  Use the --overwrite flag to overwrite.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', 43, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst DB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         ## Ensure test layer does not exist on DB
@@ -171,7 +180,78 @@ class TestIndexerIO(unittest.TestCase):
             if l.GetName() == lyr:
                 ds.DeleteLayer(i)
 
-    #@unittest.skip("test")
+    def testScene50cm(self):
+
+        ## Build shp
+        test_param_list = (
+            # input, output, args, result feature count, message
+            (self.scene50cm_dir, self.test_str, '', self.scene50cm_count, 'Done'),  # test creation
+        )
+
+        for i, o, options, result_cnt, msg in test_param_list:
+            cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
+                i,
+                o,
+                options
+            )
+
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (so, se) = p.communicate()
+            # print(se)
+            # print(so)
+
+            ## Test if ds exists and has correct number of records
+            self.assertTrue(os.path.isfile(o))
+            ds = ogr.Open(o, 0)
+            layer = ds.GetLayer()
+            self.assertIsNotNone(layer)
+            cnt = layer.GetFeatureCount()
+            self.assertEqual(cnt, result_cnt)
+            ds, layer = None, None
+
+            ##Test if stdout has proper error
+            self.assertIn(msg, (se))
+
+    def testSceneDsp(self):
+
+        ## Build shp
+        test_param_list = (
+            # input, output, args, result feature count, message
+            (self.scenedsp_dir, self.test_str, '', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-original-res', 14, 'Done', 0.5),  # test as 50cm record
+        )
+
+        for i, o, options, result_cnt, msg, res in test_param_list:
+            cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
+                i,
+                o,
+                options
+            )
+
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (so, se) = p.communicate()
+            # print(se)
+            # print(so)
+
+            ## Test if ds exists and has correct number of records
+            self.assertTrue(os.path.isfile(o))
+            ds = ogr.Open(o, 0)
+            layer = ds.GetLayer()
+            self.assertIsNotNone(layer)
+            cnt = layer.GetFeatureCount()
+            self.assertEqual(cnt, result_cnt)
+            feat = layer.GetFeature(1)
+            scenedemid = feat.GetField('SCENEDEMID')
+            stripdemid = feat.GetField('STRIPDEMID')
+            self.assertEqual(feat.GetField('DEM_RES'),res)
+            self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
+            self.assertTrue(stripdemid.endswith('_2m_v040201' if res == 2.0 else '_50cm_v040201'))
+            self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+            ds, layer = None, None
+
+            ##Test if stdout has proper error
+            self.assertIn(msg, (se))
+
     def testSceneJson(self):
 
         ## Test json creation
@@ -184,18 +264,20 @@ class TestIndexerIO(unittest.TestCase):
         # print(se)
         # print(so)
 
-        json1 = os.path.join(self.output_dir,'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v402.json')
-        json2 = os.path.join(self.output_dir,'WV02_20190705_103001009505B700_10300100934D1000_2m_v402.json')
-        self.assertTrue(os.path.isfile(json1))
-        self.assertTrue(os.path.isfile(json2))
+        jsons = [
+            os.path.join(self.output_dir, 'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json'),
+            os.path.join(self.output_dir, 'WV02_20190705_103001009505B700_10300100934D1000_2m_v040002.json'),
+            os.path.join(self.output_dir, 'W1W1_20190426_102001008466F300_1020010089C2DB00_2m_v030403.json'),
+        ]
 
         counter = 0
-        for json in json1,json2:
+        for json in jsons:
+            self.assertTrue(os.path.isfile(json))
             fh = open(json)
             for line in fh:
                 cnt = line.count('sceneid')
                 counter += cnt
-        self.assertEqual(counter,43)
+        self.assertEqual(counter,self.scene_count)
 
         ## Test json exists error
         msg = 'Json file already exists'
@@ -211,7 +293,7 @@ class TestIndexerIO(unittest.TestCase):
         self.assertIn(msg,se)
 
         ## Test json overwrite
-        stat = os.stat(os.path.join(self.output_dir,'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v402.json'))
+        stat = os.stat(os.path.join(self.output_dir,'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json'))
         mod_date1 = stat.st_mtime
 
         cmd = 'python index_setsm.py {} {} --write-json --overwrite'.format(
@@ -223,7 +305,7 @@ class TestIndexerIO(unittest.TestCase):
         # print(se)
         # print(so)
 
-        stat = os.stat(os.path.join(self.output_dir,'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v402.json'))
+        stat = os.stat(os.path.join(self.output_dir,'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json'))
         mod_date2 = stat.st_mtime
         self.assertGreater(mod_date2,mod_date1)
 
@@ -243,16 +325,74 @@ class TestIndexerIO(unittest.TestCase):
         layer = ds.GetLayer()
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
-        self.assertEqual(cnt,43)
+        self.assertEqual(cnt,self.scene_count)
         ds, layer = None, None
 
+    def testSceneDspJson(self):
+
+        test_param_list = (
+            ('', 2.0),
+            ('--dsp-original-res --overwrite', 0.5),
+        )
+
+        ## Test json creation
+        cmd = 'python index_setsm.py {} {} --write-json'.format(
+            self.scenedsp_dir,
+            self.output_dir,
+        )
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (so,se) = p.communicate()
+        # print(se)
+        # print(so)
+
+        json1 = os.path.join(self.output_dir,'WV01_20120317_10200100192B8400_102001001AC4FE00_2m_v040201.json')
+        self.assertTrue(os.path.isfile(json1))
+
+        ## Test json read
+        test_shp = os.path.join(self.output_dir,'test.shp')
+        for options, res in test_param_list:
+            cmd = 'python index_setsm.py {} {} {} --skip-region-lookup --read-json'.format(
+                self.output_dir,
+                test_shp,
+                options,
+            )
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (so,se) = p.communicate()
+        # print(se)
+        # print(so)
+
+        self.assertTrue(os.path.isfile(test_shp))
+        ds = ogr.Open(test_shp,0)
+        layer = ds.GetLayer()
+        self.assertIsNotNone(layer)
+        cnt = layer.GetFeatureCount()
+        self.assertEqual(cnt,self.scenedsp_count)
+        feat = layer.GetFeature(1)
+        scenedemid = feat.GetField('SCENEDEMID')
+        stripdemid = feat.GetField('STRIPDEMID')
+        self.assertEqual(feat.GetField('DEM_RES'), res)
+        self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
+        self.assertTrue(stripdemid.endswith('_2m_v040201' if res == 2.0 else '_50cm_v040201'))
+        self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+        ds, layer = None, None
 
     def testStrip(self):
 
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.strip_dir, self.test_str, '', 20, 'Done'),  # test creation
+            (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
+            (self.stripmasked_dir, self.test_str, '--overwrite', self.stripmasked_count, 'Done'),  # test index of masked strips
+            (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
         )
+
+        strip_masks = {
+            ## name: (edgemask, watermask, cloudmask)
+            '_dem.tif': (1, 0, 0),
+            '_dem_water-masked.tif': (1, 1, 0),
+            '_dem_cloud-masked.tif': (1, 0, 1),
+            '_dem_cloud-water-masked.tif': (1, 1, 1),
+            '_dem_masked.tif': (1, 1, 1),
+        }
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python index_setsm.py --mode strip {} {} --skip-region-lookup {}'.format(
@@ -265,18 +405,26 @@ class TestIndexerIO(unittest.TestCase):
             # print(se)
             # print(so)
 
-            ## Test if ds exists and has corrent number of records
+            ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
             ds = ogr.Open(o,0)
             layer = ds.GetLayer()
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt,result_cnt)
+            for feat in layer:
+                srcfn = os.path.basename(feat.GetField('LOCATION'))
+                dem_suffix = srcfn[srcfn.find('_dem'):]
+                masks = strip_masks[dem_suffix]
+                self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
+                self.assertEqual(feat.GetField('WATERMASK'), masks[1])
+                self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
+                is_xtrack = 0 if srcfn.startswith(('WV','GE','QB')) else 1
+                self.assertEqual(feat.GetField('IS_XTRACK'),is_xtrack)
             ds, layer = None, None
 
-            ##Test if stdout has proper error
+            ## Test if stdout has proper error
             self.assertIn(msg,se)
-
 
     def testStripJson(self):
         ## Test json creation
@@ -286,30 +434,11 @@ class TestIndexerIO(unittest.TestCase):
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (so,se) = p.communicate()
-        #print(se)
-        #print(so)
+        # print(se)
+        # print(so)
 
         json_list = (
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg1.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg2.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg3.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg4.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg5.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg6.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg7.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg8.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg9.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg10.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg11.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg12.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg13.json',
-            'W1W1_20080124_1020010001577B00_1020010001B3EF00_2m_lsf_seg14.json',
-            'WV01_20101005_102001000EB73400_102001000F994F00_seg1_2m.json',
-            'WV01_20181130_102001007D6AD000_102001007EAD9100_2m_lsf_seg1.json',
-            'WV01_20181130_102001007D6AD000_102001007EAD9100_2m_lsf_seg2.json',
-            'WV01_20181130_102001007D6AD000_102001007EAD9100_2m_lsf_seg3.json',
-            'WV01_20181130_102001007D6AD000_102001007EAD9100_2m_lsf_seg4.json',
-            'WV02_20180401_103001007B43EF00_103001007A40F400_seg1_2m.json'
+            'WV01_20140402_102001002C6AFA00_102001002D8B3100_2m_v030202.json',
         )
 
         for json_fn in json_list:
@@ -331,16 +460,16 @@ class TestIndexerIO(unittest.TestCase):
         layer = ds.GetLayer()
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
-        self.assertEqual(cnt,20)
+        self.assertEqual(cnt,self.strip_count)
         ds, layer = None, None
-
 
     def testTile(self):
 
         test_param_list = (
             # input, output, args, result feature count, message
-            (os.path.join(self.tile_dir,'tile'), self.test_str, '', 1, 'Done'),  # test 100x100km tile
-            (os.path.join(self.tile_dir,'rel_tile'), self.test_str, '--overwrite', 4, 'Done'), # test quartertiles formatted for release
+            (os.path.join(self.tile_dir,'v3','33_11'), self.test_str, '', 3, 'Done'),  # test 100x100km tile at 3 resolutions
+            (os.path.join(self.tile_dir,'v3','33_11_quartertiles'), self.test_str, '--overwrite', 4, 'Done'), # test quartertiles formatted for release
+            (os.path.join(self.tile_dir,'v4','59_57'), self.test_str, '--overwrite', 4, 'Done'),  # test v4 tiles, 2m
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -366,11 +495,10 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg,se)
 
-
     def testTileJson(self):
         ## Test json creation
         cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --write-json'.format(
-            os.path.join(self.tile_dir,'tile'),
+            os.path.join(self.tile_dir,'v3','33_11'),
             self.output_dir,
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -378,8 +506,15 @@ class TestIndexerIO(unittest.TestCase):
         #print(se)
         #print(so)
 
-        json = os.path.join(self.output_dir,'arcticdem_14_29_2m.json')
-        self.assertTrue(os.path.isfile(json))
+        json_list = [
+            'arcticdem_33_11_2m.json',
+            'arcticdem_33_11_40m.json',
+            'arcticdem_33_11_10m.json',
+        ]
+
+        for json_fn in json_list:
+            json = os.path.join(self.output_dir,json_fn)
+            self.assertTrue(os.path.isfile(json))
 
         ## Test json read
         cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --read-json'.format(
@@ -396,14 +531,13 @@ class TestIndexerIO(unittest.TestCase):
         layer = ds.GetLayer()
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
-        self.assertEqual(cnt,1)
+        self.assertEqual(cnt,3)
         ds, layer = None, None
 
-
-    def testTileJson_qtile(self):
+    def testTilev4Json(self):
         ## Test json creation
         cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --write-json'.format(
-            os.path.join(self.tile_dir,'rel_tile'),
+            os.path.join(self.tile_dir,'v4','59_57'),
             self.output_dir,
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -411,7 +545,44 @@ class TestIndexerIO(unittest.TestCase):
         #print(se)
         #print(so)
 
-        json = os.path.join(self.output_dir,'arcticdem_14_29_2m.json')
+        json_list = [
+            'arcticdem_59_57_2m.json',
+        ]
+
+        for json_fn in json_list:
+            json = os.path.join(self.output_dir,json_fn)
+            self.assertTrue(os.path.isfile(json))
+
+        ## Test json read
+        cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --read-json'.format(
+            self.output_dir,
+            self.test_str,
+        )
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (so,se) = p.communicate()
+        # print(se)
+        # print(so)
+
+        self.assertTrue(os.path.isfile(self.test_str))
+        ds = ogr.Open(self.test_str,0)
+        layer = ds.GetLayer()
+        self.assertIsNotNone(layer)
+        cnt = layer.GetFeatureCount()
+        self.assertEqual(cnt,4)
+        ds, layer = None, None
+
+    def testTileJson_qtile(self):
+        ## Test json creation
+        cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --write-json'.format(
+            os.path.join(self.tile_dir,'v3','33_11_quartertiles'),
+            self.output_dir,
+        )
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (so,se) = p.communicate()
+        #print(se)
+        #print(so)
+
+        json = os.path.join(self.output_dir,'arcticdem_33_11_2m.json')
         self.assertTrue(os.path.isfile(json))
 
         ## Test json read
@@ -433,8 +604,7 @@ class TestIndexerIO(unittest.TestCase):
         ds, layer = None, None
 
 
-## test attribute contents
-## test db_path_prefix behavior
+## test custom path behavior
 ## test region lookup
 ## test bad config file
 

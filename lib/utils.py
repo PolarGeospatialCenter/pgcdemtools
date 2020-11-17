@@ -70,6 +70,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
     StandardAttribute("DEM_ID", ogr.OFTString, 254, 0),
+    StandardAttribute("STRIPDEMID", ogr.OFTString, 254, 0),
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
     StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
     StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
@@ -90,8 +91,23 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
     StandardAttribute("IS_LSF", ogr.OFTInteger, 8, 8),
-    StandardAttribute("REL_VER", ogr.OFTString, 32, 0),
+    StandardAttribute("IS_XTRACK", ogr.OFTInteger, 8, 8),
+    StandardAttribute("EDGEMASK", ogr.OFTInteger, 8, 8),
+    StandardAttribute("WATERMASK", ogr.OFTInteger, 8, 8),
+    StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
+]
+
+DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
+    StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
+    StandardAttribute("DX", ogr.OFTReal, 0, 0),
+    StandardAttribute("DY", ogr.OFTReal, 0, 0),
+    StandardAttribute("DZ", ogr.OFTReal, 0, 0),
+    StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
+    StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
+]
+
+DEM_ATTRIBUTE_DEFINITIONS_MASKING = [
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
     StandardAttribute("DX", ogr.OFTReal, 0, 0),
     StandardAttribute("DY", ogr.OFTReal, 0, 0),
@@ -101,10 +117,11 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
@@ -134,14 +151,19 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
     StandardAttribute("HAS_LSF", ogr.OFTInteger, 8, 8),
     StandardAttribute("HAS_NONLSF", ogr.OFTInteger, 8, 8),
+    StandardAttribute("IS_XTRACK", ogr.OFTInteger, 8, 8),
+    StandardAttribute("IS_DSP", ogr.OFTInteger, 8, 8),
 ]
 
+SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION = []
+
 SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_LSF", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
@@ -156,13 +178,16 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("REL_VER", ogr.OFTString, 32, 0),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
     StandardAttribute("NUM_COMP", ogr.OFTInteger, 8, 8),
+]
+
+TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
     StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
     StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS = TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 254, 0),
+    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
@@ -200,7 +225,7 @@ OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
     StandardAttribute("REFN_MTHD", ogr.OFTInteger, 8, 0),
     StandardAttribute("ALIGN_MTHD", ogr.OFTString, 64, 0),
     StandardAttribute("HOST", ogr.OFTString, 32, 0),
-    StandardAttribute("SEED_DEM", ogr.OFTString, 254, 0),
+    StandardAttribute("SEED_DEM", ogr.OFTString, 512, 0),
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
     StandardAttribute("RUNTIME", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0)
@@ -224,7 +249,7 @@ class SpatialRef(object):
         try:
             epsgcode = int(epsg)
 
-        except ValueError, e:
+        except ValueError as e:
             raise RuntimeError("EPSG value must be an integer: %s" %epsg)
         else:
 

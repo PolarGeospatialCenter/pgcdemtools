@@ -4,12 +4,10 @@
 dem raster information class and methods
 """
 
-import os, sys, string, shutil, glob, re, logging,math
+import os, re, logging,math
 from datetime import *
 import gdal, osr, ogr, gdalconst
-from collections import namedtuple
 import numpy
-from numpy import flatnonzero
 import utils
 
 gdal.UseExceptions()
@@ -20,6 +18,7 @@ logger.setLevel(logging.DEBUG)
 
 __all__ = [
     "SetsmDem",
+    "SetsmSceneDem",
     "AspDem",
     "SetsmTile",
     "RegInfo"
@@ -38,6 +37,13 @@ for x in range(6,8):
     for y in range(1,60):
         epsg = 32000 + x*100 + y
         epsgs.append(epsg)
+
+scene_dem_res_lookup = {
+    0.5: ('0','50cm'),
+    1.0: ('1','1m'),
+    2.0: ('2','2m'),
+    8.0: ('8','8m'),
+}
 
 #### Strip DEM name pattern
 setsm_scene_pattern = re.compile("""(?P<pairname>
@@ -63,7 +69,8 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (lsf_)?
                                     (?P<partnum>[SEG\d]+)_
                                     ((?P<version>v[\d/.]+)_)?
-                                    dem.(tif|jpg)\Z""", re.I | re.X)
+                                    (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
+                                    .(tif|jpg))\Z""", re.I | re.X)
 
 setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
@@ -75,14 +82,14 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     ((?P<version>v[\d/.]+)_)?
                                     (lsf_)?
-                                    dem.(tif|jpg)\Z""", re.I | re.X)
+                                    (?P<suffix>dem.(tif|jpg))\Z""", re.I | re.X)
 
 asp_strip_pattern = re.compile("""(?P<pairname>
                                   (?P<sensor>[A-Z]{2}\d{2})_
                                   (?P<timestamp>\d{8})_
                                   (?P<catid1>[A-Z0-9]{16})_
                                   (?P<catid2>[A-Z0-9]{16}))_?
-                                  (?P<res>\d+m)?-DEM.(tif|jpg)\Z""", re.I | re.X)
+                                  (?P<res>\d+m)?-dem.(tif|jpg)\Z""", re.I | re.X)
 
 setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    ((?P<subtile>\d+_\d+)_)?
@@ -90,6 +97,17 @@ setsm_tile_pattern = re.compile("""(?P<tile>\d+_\d+)_
                                    ((?P<version>v[\d/.]+)_)?
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
+
+xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
+
+strip_masks = {
+    ## name: (edgemask, watermask, cloudmask)
+    '_dem.tif': (1, 0, 0),
+    '_dem_water-masked.tif': (1, 1, 0),
+    '_dem_cloud-masked.tif': (1, 0, 1),
+    '_dem_cloud-water-masked.tif': (1, 1, 1),
+    '_dem_masked.tif': (1, 1, 1),
+}
 
 
 class SetsmScene(object):
@@ -108,6 +126,16 @@ class SetsmScene(object):
             self.dem = os.path.join(self.srcdir,self.sceneid+"_dem.tif")
             self.matchtag = os.path.join(self.srcdir,self.sceneid+"_matchtag.tif")
             self.ortho = os.path.join(self.srcdir,self.sceneid+"_ortho.tif")
+            self.ortho2 = os.path.join(self.srcdir, self.sceneid + "_ortho2.tif")
+            self.dspinfo = os.path.join(self.srcdir, self.sceneid + "_info50cm.txt")
+
+            self.filesz_attrib_map = {
+                'filesz_dem': self.dem,
+                'filesz_lsf': self.lsf_dem,
+                'filesz_mt': self.matchtag,
+                'filesz_or': self.ortho,
+                'filesz_or2': self.ortho2,
+            }
 
             # set shared attributes
             self.id = self.sceneid
@@ -135,6 +163,8 @@ class SetsmScene(object):
                 self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                 self.geom = None
                 self.group_version = None
+                self.is_dsp = None
+                self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -142,17 +172,8 @@ class SetsmScene(object):
             self.get_metafile_info()
 
             ## Build res_str
-            try:
-                res_int = int(self.res)
-            except ValueError as e:
-                res_str = self.res
-            else:
-                if res_int > 0:
-                    self.res_str = "{}m".format(self.res)
-                elif res_int == 0:
-                    self.res_str = "50cm"
-                else:
-                    raise RuntimeError("Scene has invalid resolution value in name: {}".format(scene.sceneid))
+            scene_dem_resstr_lookup = { a: b for (a,b) in scene_dem_res_lookup.values()}
+            self.res_str = scene_dem_resstr_lookup[self.res]
 
             ## Get version str with ability to handle 1-3 parts of semantic version
             if self.group_version:
@@ -163,32 +184,26 @@ class SetsmScene(object):
             vl = [0,0,0]
             for i in range(len(vp)):
                 vl[i] = int(vp[i])
-            version_str = '{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
+            version_str = 'v{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
 
             ## Make strip ID
-            self.stripid = '{}_{}_v{}'.format(self.pairname,self.res_str,version_str)
+            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+
+            if self.is_dsp:
+                sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
+                dsp_sceneid_split = self.sceneid.split('_')[:-1]
+                dsp_sceneid_split.append(sceneid_resstr)
+                self.dsp_sceneid = '_'.join(dsp_sceneid_split)
+                self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
 
     def get_dem_info(self):
 
-        try:
-            self.filesz_dem = os.path.getsize(self.dem) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_dem = 0
-
-        try:
-            self.filesz_lsf = os.path.getsize(self.lsf_dem) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_lsf = 0
-
-        try:
-            self.filesz_mt = os.path.getsize(self.matchtag) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_mt = 0
-
-        try:
-            self.filesz_or = os.path.getsize(self.ortho) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_or = 0
+        for k,v in self.filesz_attrib_map.items():
+            try:
+                fz = os.path.getsize(v) / 1024 / 1024 / 1024.0
+            except OSError:
+                fz = 0
+            setattr(self, k, fz)
 
         if os.path.isfile(self.lsf_dem):
             dsp = self.lsf_dem
@@ -204,19 +219,15 @@ class SetsmScene(object):
             self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
             self.gtf = ds.GetGeoTransform()
 
-            #print raster.proj
             src_srs = osr.SpatialReference()
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
-            #print self.proj4
             self.epsg = ''
 
             for epsg in epsgs:
                 tgt_srs = osr.SpatialReference()
                 tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
 
@@ -247,14 +258,10 @@ class SetsmScene(object):
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft":1,"1":1,
+                           "UpperRight":2,"2":2,
+                           "LowerLeft":4,"4":4,
+                           "LowerRight":3,"3":3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -283,7 +290,17 @@ class SetsmScene(object):
 
         ## If metafile exists
         if self.metapath:
-            metad = self._parse_metadata_file()
+            metad = self._parse_metadata_file(self.metapath)
+
+            simple_attrib_map = {
+                'group_version': 'group_version',
+                'image_1_satid': 'sensor1',
+                'image_2_satid': 'sensor2',
+            }
+
+            for k, v in simple_attrib_map.items():
+                if k in metad:
+                    setattr(self, v, metad[k])
 
             if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
@@ -301,28 +318,41 @@ class SetsmScene(object):
             else:
                 raise RuntimeError('Key "SETSM Version" not found in meta dict from {}'.format(self.metapath))
 
-            if 'group_version' in metad:
-                self.group_version = metad['group_version']
-
             if 'image_1_acquisition_time' in metad:
                 self.acqdate1 = datetime.strptime(metad["image_1_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
             if 'image_2_acquisition_time' in metad:
                 self.acqdate2 = datetime.strptime(metad["image_2_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
-            if 'image_1_satid' in metad:
-                self.sensor1 = metad['image_1_satid']
+            self.is_dsp = 'downsample_method_dem' in metad
 
-            if 'image_2_satid' in metad:
-                self.sensor2 = metad['image_2_satid']
+            if 'original_resolution' in metad:
+                try:
+                    self.dsp_dem_res = float(metad['original_resolution'])
+                except ValueError:
+                    if 'original_dem' in metad:
+                        self.dsp_dem_res = float(metad['original_dem'])
 
         else:
             raise RuntimeError("meta.txt file does not exist for DEM")
 
-    def _parse_metadata_file(self):
+        # Read dsp file if present
+        if os.path.isfile(self.dspinfo):
+            dspmetad = self._parse_metadata_file(self.dspinfo)
+            if len(dspmetad) != 7:
+                raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(len(self.dspmetad)))
+            for k in self.filesz_attrib_map:
+                k2 = "dsp_{}".format(k)
+                setattr(self,k2,dspmetad[k])
+        else:
+            for k in self.filesz_attrib_map:
+                k2 = "dsp_{}".format(k)
+                setattr(self,k2,None)
+
+    def _parse_metadata_file(self,metapath):
         metad = {}
 
-        mdf = open(self.metapath,'r')
+        mdf = open(metapath,'r')
         for line in mdf.readlines():
             l = line.strip()
             if '=' in l:
@@ -333,8 +363,8 @@ class SetsmScene(object):
                 else:
                     try:
                         key,val = l.split('=')
-                    except ValueError, e:
-                        logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,self.metapath))
+                    except ValueError as e:
+                        logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,metapath))
                     else:
                         key = key.strip().replace(" ","_").lower()
                         metad[key] = val.strip()
@@ -357,7 +387,7 @@ class SetsmScene(object):
 
         ## Loop over dict, adding attributes to scene object
         for k in md:
-            setattr(self,k,md[k])
+            setattr(self, k, md[k])
 
         ## Verify presence of key attributes
         for k in self.key_attribs:
@@ -378,10 +408,13 @@ class SetsmScene(object):
         'dem',
         'epsg',
         'id',
+        'is_xtrack',
+        'is_dsp',
         'filesz_dem',
         'filesz_lsf',
         'filesz_mt',
         'filesz_or',
+        'filesz_or2',
         'geom',
         'lsf_dem',
         'matchtag',
@@ -401,7 +434,7 @@ class SetsmScene(object):
         'srcfn',
         'srcfp',
         'srs',
-        'stripid',
+        'stripdemid',
         'wkt_esri',
         'xres',
         'xsize',
@@ -421,12 +454,15 @@ class SetsmDem(object):
         else:
             self.srcfp = filepath
             self.srcdir, self.srcfn = os.path.split(self.srcfp)
-            self.stripid = self.srcfn[:-8]
+            self.stripid = self.srcfn[:self.srcfn.find('_dem')]
+            self.stripdemid = None
             self.id = self.stripid
             if 'lsf' in self.srcfn:
                 self.is_lsf = True
             else:
                 self.is_lsf = False
+            dem_suffix = self.srcfn[self.srcfn.find('_dem'):]
+            self.mask_tuple = strip_masks[dem_suffix]
 
             metapath = os.path.join(self.srcdir,self.stripid+"_meta.txt")
             if os.path.isfile(metapath):
@@ -434,8 +470,10 @@ class SetsmDem(object):
             else:
                 self.metapath = None
 
+            self.dem = os.path.join(self.srcdir, self.stripid + "_dem.tif")
             self.matchtag = os.path.join(self.srcdir,self.stripid+"_matchtag.tif")
             self.ortho = os.path.join(self.srcdir,self.stripid+"_ortho.tif")
+            self.ortho2 = os.path.join(self.srcdir, self.stripid + "_ortho2.tif")
             self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
             self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
             self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
@@ -446,7 +484,13 @@ class SetsmDem(object):
                 os.path.join(self.srcdir,self.stripid+"_ngareg.txt")
             ]
             self.archive = os.path.join(self.srcdir,self.stripid+".tar.gz")
-            #self.archive = os.path.join(self.srcdir,self.stripid+".tar")
+
+            self.filesz_attrib_map = {
+                'filesz_dem': self.dem,
+                'filesz_mt': self.matchtag,
+                'filesz_or': self.ortho,
+                'filesz_or2': self.ortho2,
+            }
 
             #### parse name
             for pattern in setsm_strip_pattern, setsm_strip_pattern2:
@@ -461,6 +505,7 @@ class SetsmDem(object):
                     self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
                     self.sensor2 = self.sensor1
                     self.res = groups['res']
+                    self.res_str = groups['res']
                     self.creation_date = None
                     self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                     self.geom = None
@@ -468,6 +513,7 @@ class SetsmDem(object):
                         self.version = groups['version']
                     else:
                         self.version = None
+                    self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -493,21 +539,12 @@ class SetsmDem(object):
 
     def get_dem_info(self):
 
-        ## get size of non-ortho deliverable files in GB
-        try:
-            self.filesz_dem = os.path.getsize(self.srcfp) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_dem = 0
-
-        try:
-            self.filesz_mt = os.path.getsize(self.matchtag) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_mt = 0
-
-        try:
-            self.filesz_or = os.path.getsize(self.ortho) / 1024 / 1024 / 1024.0
-        except OSError:
-            self.filesz_or = 0
+        for k, v in self.filesz_attrib_map.items():
+            try:
+                fz = os.path.getsize(v) / 1024 / 1024 / 1024.0
+            except OSError:
+                fz = 0
+            setattr(self, k, fz)
 
         ds = gdal.Open(self.srcfp)
         if ds is not None:
@@ -516,19 +553,15 @@ class SetsmDem(object):
             self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
             self.gtf = ds.GetGeoTransform()
 
-            #print raster.proj
             src_srs = osr.SpatialReference()
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
-            #print self.proj4
             self.epsg = ''
 
             for epsg in epsgs:
                 tgt_srs = osr.SpatialReference()
                 tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
 
@@ -546,27 +579,15 @@ class SetsmDem(object):
 
                 self.xres = abs(self.gtf[1])
                 self.yres = abs(self.gtf[5])
-                ulx = self.gtf[0] + 0 * self.gtf[1] + 0 * self.gtf[2]
-                uly = self.gtf[3] + 0 * self.gtf[4] + 0 * self.gtf[5]
-                urx = self.gtf[0] + self.xsize * self.gtf[1] + 0 * self.gtf[2]
-                ury = self.gtf[3] + self.xsize * self.gtf[4] + 0 * self.gtf[5]
-                llx = self.gtf[0] + 0 * self.gtf[1] + self.ysize * self.gtf[2]
-                lly = self.gtf[3] + 0 * self.gtf[4] + self.ysize * self.gtf[5]
-                lrx = self.gtf[0] + self.xsize * self.gtf[1] + self.ysize* self.gtf[2]
-                lry = self.gtf[3] + self.xsize * self.gtf[4] + self.ysize * self.gtf[5]
 
             elif num_gcps == 4:
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft":1,"1":1,
+                           "UpperRight":2,"2":2,
+                           "LowerLeft":4,"4":4,
+                           "LowerRight":3,"3":3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -577,9 +598,6 @@ class SetsmDem(object):
                 ury = gcp_dict[2][3]
                 llx = gcp_dict[4][2]
                 lly = gcp_dict[4][3]
-                lrx = gcp_dict[3][2]
-                lry = gcp_dict[3][3]
-
                 self.xres = abs(math.sqrt((ulx - urx)**2 + (uly - ury)**2)/ self.xsize)
                 self.yres = abs(math.sqrt((ulx - llx)**2 + (uly - lly)**2)/ self.ysize)
 
@@ -590,6 +608,19 @@ class SetsmDem(object):
 
         self.get_metafile_info()
         self.get_geocell()
+
+        ## Get version str with ability to handle 1-3 parts of semantic version
+        if len(self.algm_version) > 6:
+            vp = self.algm_version[6:].split('.')
+
+            vl = [0, 0, 0]
+            for i in range(len(vp)):
+                vl[i] = int(vp[i])
+            version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
+
+            ## Make strip ID
+            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+
 
     def compute_density_and_statistics(self):
         #### If no mdf or mdf does not contain valid density key, compute
@@ -609,17 +640,12 @@ class SetsmDem(object):
                 matchtag_ndv = b.GetNoDataValue()
                 data = b.ReadAsArray()
                 err = gdal.GetLastErrorNo()
-                if err <> 0:
+                if err != 0:
                     raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
                 else:
                     data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
                     data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
-                    #logger.info("matchtag res: x = {}, y = {}".format(matchtag_res_x,matchtag_res_y))
-                    #logger.info("pixel count = {}".format(data_pixel_count))
-                    #logger.info("data area = {}".format(data_area))
-                    #logger.info("geom area = {}".format(geom_area))
                     self.density = data_area / geom_area
-                    #logger.info("calculated matchtag density = {}".format(self.density))
                     data = None
                     ds = None
 
@@ -627,7 +653,7 @@ class SetsmDem(object):
             ds = gdal.Open(self.srcfp)
             try:
                 self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
                 self.stats = (None, None, None, None)
 
@@ -770,14 +796,14 @@ class SetsmDem(object):
             ## density, stats, proj4, creation date, version
             try:
                 self.density = float(metad['STRIP_DEM_matchtagDensity'])
-            except ValueError, e:
+            except ValueError as e:
                 logger.info("Cannot convert density value ({}) to float for {}".format(metad['STRIP_DEM_matchtagDensity'], self.srcfp))
                 self.density = None
 
             try:
                 min_elev = float(metad['STRIP_DEM_minElevValue'])
                 max_elev = float(metad['STRIP_DEM_maxElevValue'])
-            except ValueError, e:
+            except ValueError as e:
                 logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
                 min_elev, max_elev = None, None
 
@@ -787,14 +813,14 @@ class SetsmDem(object):
 
             try:
                 self.algm_version = metad['COMPONENT_1_setsmVersion']
-            except KeyError, e:
+            except KeyError as e:
                 pass
 
             ## acqdate
             try:
                 self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate1'], "%Y-%m-%d")
                 self.acqdate2 = datetime.strptime(metad['STRIP_DEM_acqDate2'], "%Y-%m-%d")
-            except KeyError, e:
+            except KeyError as e:
                 self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate'], "%Y-%m-%d")
                 self.acqdate2 = self.acqdate1
 
@@ -807,7 +833,7 @@ class SetsmDem(object):
                 mean_resid_z = float(metad['STRIP_DEM_REGISTRATION_registrationMeanVerticalResidual'])
                 num_gcps = int(metad['STRIP_DEM_REGISTRATION_registrationNumGCPs'])
                 name = metad['STRIP_DEM_REGISTRATION_registrationSource']
-            except KeyError, e:
+            except KeyError as e:
                 logger.warning("Registration info not found in {}".format(self.srcfp))
             else:
                 self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
@@ -848,7 +874,7 @@ class SetsmDem(object):
             #### make list of points
             pnt_list = []
 
-            if self.geom.GetGeometryCount() <> 1:
+            if self.geom.GetGeometryCount() != 1:
                 raise RuntimeError("Geometry has multiple parts: {}, {}".format(self.geom.ExportToWkt(),self.srcfp))
 
             g1 = self.geom.GetGeometryRef(0)
@@ -964,8 +990,6 @@ class SetsmDem(object):
 
             mdf = open(self.mdf,'w')
             text = format_as_imd(mdf_contents)
-            #logger.info(self.mdf)
-            #logger.info("\n"+text)
             mdf.write(text)
             mdf.close()
 
@@ -1043,7 +1067,7 @@ class SetsmDem(object):
                     if ': ' in l:
                         try:
                             key,val = l.split(': ')
-                        except ValueError, e:
+                        except ValueError as e:
                             logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
                         else:
                             metad[key.strip()] = val.strip()
@@ -1062,7 +1086,7 @@ class SetsmDem(object):
                         else:
                             try:
                                 key,val = l.split('=')
-                            except ValueError, e:
+                            except ValueError as e:
                                 logger.error('Cannot split line on "=" - {}, {}, {}'.format(l,e,self.metapath))
                             else:
                                 if key.startswith('scene '):
@@ -1123,11 +1147,13 @@ class SetsmDem(object):
         'filesz_dem',
         'filesz_mt',
         'filesz_or',
+        'filesz_or2',
         'geocell',
         'geom',
         'gtf',
         'id',
         'is_lsf',
+        'is_xtrack',
         'matchtag',
         'mdf',
         'metapath',
@@ -1141,6 +1167,7 @@ class SetsmDem(object):
         'reg_files',
         'reginfo_list',
         'res',
+        'res_str',
         'scenes',
         'sensor1',
         'sensor2',
@@ -1222,7 +1249,7 @@ class AspDem(object):
             self.ndv = ds.GetRasterBand(1).GetNoDataValue()
             try:
                 self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
                 self.stats = (None, None, None, None)
 
@@ -1245,14 +1272,10 @@ class AspDem(object):
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft":1,"1":1,
+                           "UpperRight":2,"2":2,
+                           "LowerLeft":4,"4":4,
+                           "LowerRight":3,"3":3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -1413,7 +1436,7 @@ class SetsmTile(object):
             self.ndv = ds.GetRasterBand(1).GetNoDataValue()
             try:
                 self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp,e))
                 self.stats = (None, None, None, None)
 
@@ -1496,7 +1519,7 @@ class SetsmTile(object):
             ndv = b.GetNoDataValue()
             data = b.ReadAsArray()
             err = gdal.GetLastErrorNo()
-            if err <> 0:
+            if err != 0:
                 raise RuntimeError("DEM dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
             else:
                 data_pixel_count = numpy.count_nonzero(data != ndv)
@@ -1617,7 +1640,7 @@ class SetsmTile(object):
         if '# GCPs' in metad:
             try:
                 self.num_gcps = int(sum(metad['# GCPs']))
-            except ValueError, e:
+            except ValueError as e:
                 self.num_gcps = 0
         if 'Mean Vertical Residual (m)' in metad:
             residuals = [resid for resid in metad['Mean Vertical Residual (m)'] if not math.isnan(resid)]
@@ -1642,7 +1665,7 @@ class SetsmTile(object):
                 if ': ' in l:
                     try:
                         key,val = l.split(': ')
-                    except ValueError, e:
+                    except ValueError as e:
                         logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
                     else:
                         metad[key.strip()] = val.strip()
@@ -1664,7 +1687,7 @@ class SetsmTile(object):
                     if ': ' in l:
                         try:
                             key,val = l.split(': ')
-                        except ValueError, e:
+                        except ValueError as e:
                             logger.error('Cannot split line on ": " - {}, {}, {}'.format(l,e,self.metapath))
                         else:
                             if val:
@@ -1711,15 +1734,12 @@ class SetsmTile(object):
         'gtf',
         'id',
         'matchtag',
-        'mean_resid_z',
         'metapath',
         'ndv',
         'num_components',
-        'num_gcps',
         'ortho',
         'proj',
         'proj4',
-        'reg_src',
         'regmetapath',
         'res',
         'srcdir',
@@ -1727,7 +1747,6 @@ class SetsmTile(object):
         'srcfp',
         'srs',
         'stats',
-        'sum_gcps',
         'tileid',
         'tilename',
         'wkt_esri',
@@ -1735,7 +1754,12 @@ class SetsmTile(object):
         'xsize',
         'yres',
         'ysize',
+        # 'mean_resid_z',
+        # 'num_gcps',
+        # 'reg_src',
+        # 'sum_gcps',
     )
+
 
 class RegInfo(object):
 
