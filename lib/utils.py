@@ -93,8 +93,8 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("IS_LSF", ogr.OFTInteger, 8, 8),
     StandardAttribute("IS_XTRACK", ogr.OFTInteger, 8, 8),
     StandardAttribute("EDGEMASK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("WATERMASK", ogr.OFTInteger, 8, 8),
+    StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
 ]
 
