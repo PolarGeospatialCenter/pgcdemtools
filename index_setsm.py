@@ -128,7 +128,7 @@ def main():
         parser.error('--search-masked cannot be used with the --write-json or --read-json options')
 
     if args.mode != 'strip' and args.search_masked:
-        parser.error('--search-masked applie donly to mode=strip')
+        parser.error('--search-masked applies only to mode=strip')
 
     ## Check project
     if args.mode == 'tile' and not args.project:
