@@ -23,6 +23,7 @@ class TestIndexerIO(unittest.TestCase):
         self.tile_dir = os.path.join(script_dir,'testdata','setsm_tile')
         self.output_dir = os.path.join(script_dir, 'testdata', 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
+        self.pg_test_str = 'PG:sandwich:test'
 
         self.scene_count = 51
         self.scene50cm_count = 14
@@ -118,8 +119,7 @@ class TestIndexerIO(unittest.TestCase):
     def testOutputPostgres(self):
 
         ## Get config info
-        self.test_str = 'PG:sandwich:test'
-        protocol,section,lyr = self.test_str.split(':')
+        protocol,section,lyr = self.pg_test_str.split(':')
         try:
             config = ConfigParser.SafeConfigParser()
         except NameError:
@@ -138,20 +138,28 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', self.scene_count * 2, 'Dst DB layer exists.  Use the --overwrite or --append options.'), # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite', self.scene_count, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.pg_test_str, '', self.scene_count, 'Done', 2),  # test creation
+            (self.scene_dir, self.pg_test_str, '--append', self.scene_count * 2, 'Done', 2),  # test append
+            (self.scene_dir, self.pg_test_str, '', self.scene_count * 2, 'Dst DB layer exists.  Use the --overwrite or --append options.', 2), # test error meeasge on existing
+            (self.scene_dir, self.pg_test_str, '--overwrite', self.scene_count, 'Removing old index', 2), # test overwrite
+            (self.scenedsp_dir, self.pg_test_str, '--overwrite', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
+            (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-original-res', self.scenedsp_count, 'Done', 0.5),
         )
 
+        res_str = {
+            2.0: '_2m_v',
+            0.5: '_50cm_v',
+        }
+
         ## Ensure test layer does not exist on DB
-        ds = ogr.Open(pg_conn_str,0)
+        ds = ogr.Open(pg_conn_str,1)
         for i in range(ds.GetLayerCount()):
             l = ds.GetLayer(i)
             if l.GetName() == lyr:
                 ds.DeleteLayer(i)
+                break
 
-        for i, o, options, result_cnt, msg in test_param_list:
+        for i, o, options, result_cnt, msg, res in test_param_list:
             cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
                 i,
                 o,
@@ -168,17 +176,24 @@ class TestIndexerIO(unittest.TestCase):
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt,result_cnt)
+            for feat in layer:
+                scenedemid = feat.GetField('SCENEDEMID')
+                stripdemid = feat.GetField('STRIPDEMID')
+                self.assertEqual(feat.GetField('DEM_RES'), res)
+                self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
+                self.assertTrue(res_str[res] in stripdemid)
             ds, layer = None, None
 
             ##Test if stdout has proper error
             self.assertIn(msg,(se))
 
         ## Ensure test layer does not exist on DB
-        ds = ogr.Open(pg_conn_str,0)
+        ds = ogr.Open(pg_conn_str,1)
         for i in range(ds.GetLayerCount()):
             l = ds.GetLayer(i)
             if l.GetName() == lyr:
                 ds.DeleteLayer(i)
+                break
 
     def testScene50cm(self):
 
@@ -218,8 +233,14 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.scenedsp_dir, self.test_str, '', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
-            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-original-res', 14, 'Done', 0.5),  # test as 50cm record
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-original-res', self.scenedsp_count, 'Done', 0.5),  # test as 50cm record
+        # test as 50cm record
         )
+
+        res_str = {
+            2.0: '_2m_v',
+            0.5: '_50cm_v',
+        }
 
         for i, o, options, result_cnt, msg, res in test_param_list:
             cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
@@ -240,13 +261,13 @@ class TestIndexerIO(unittest.TestCase):
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt, result_cnt)
-            feat = layer.GetFeature(1)
-            scenedemid = feat.GetField('SCENEDEMID')
-            stripdemid = feat.GetField('STRIPDEMID')
-            self.assertEqual(feat.GetField('DEM_RES'),res)
-            self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
-            self.assertTrue(stripdemid.endswith('_2m_v040201' if res == 2.0 else '_50cm_v040201'))
-            self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+            for feat in layer:
+                scenedemid = feat.GetField('SCENEDEMID')
+                stripdemid = feat.GetField('STRIPDEMID')
+                self.assertEqual(feat.GetField('DEM_RES'),res)
+                self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
+                self.assertTrue(res_str[res] in stripdemid)
+                self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
             ds, layer = None, None
 
             ##Test if stdout has proper error

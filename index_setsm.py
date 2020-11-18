@@ -439,7 +439,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         if layer:
             # Get field widths
             lyr_def = layer.GetLayerDefn()
-            fwidths = {lyr_def.GetFieldDefn(i).GetName(): lyr_def.GetFieldDefn(i).GetWidth() for i in range(lyr_def.GetFieldCount())}
+            fwidths = {lyr_def.GetFieldDefn(i).GetName().upper(): lyr_def.GetFieldDefn(i).GetWidth() for i in range(lyr_def.GetFieldCount())}
 
             logger.info("Appending records...")
             #### loop through records and add features
@@ -706,10 +706,14 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         ## Write feature
                         if valid_record:
                             for fld,val in attrib_map.items():
-                                if isinstance(val, str) and len(val) > fwidths[fld]:
-                                    logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
-                                        val, fld, fwidths[fld]
-                                    ))
+                                if fld in fwidths:
+                                    if isinstance(val, str) and len(val) > fwidths[fld]:
+                                        logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
+                                            val, fld, fwidths[fld]
+                                        ))
+                                        valid_record = False
+                                else:
+                                    logger.warning("Field {} is not in target table. Feature skipped".format(fld))
                                     valid_record = False
                                 feat.SetField(  # force unicode to str for a bug in GDAL's SetField. Revisit in Python3
                                     fld.encode('utf-8'),
