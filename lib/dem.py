@@ -343,7 +343,11 @@ class SetsmScene(object):
                 raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(len(self.dspmetad)))
             for k in self.filesz_attrib_map:
                 k2 = "dsp_{}".format(k)
-                setattr(self,k2,dspmetad[k])
+                try:
+                    val = float(dspmetad[k])
+                except ValueError as e:
+                    val = dspmetad[k]
+                setattr(self,k2,val)
         else:
             for k in self.filesz_attrib_map:
                 k2 = "dsp_{}".format(k)
