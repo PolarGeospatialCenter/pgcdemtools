@@ -11,9 +11,7 @@ Version `1.0` released 11 Oct 2017.
 rename_setsm_add_version
 
 ### Index
-index_setsm - Build a gdb or shapefile index of a single SETSM DEM or a directory of DEMs.
-
-index_setsm_tiles - Build a gdb or shapefile index of a SETSM DEM mosaic tile or a directory of tiles.
+index_setsm - Build a gdb or shapefile index of a single SETSM DEM scene, strip, or tile, or a directory of DEMs of these types.
 
 ### Package
 package_setsm - Build an index of a SETSM DEM or directory of DEMs and package all auxilary files into tar.gz archives.
