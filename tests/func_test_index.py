@@ -488,23 +488,24 @@ class TestIndexerIO(unittest.TestCase):
 
         test_param_list = (
             # input, output, args, result feature count, message
-            (os.path.join(self.tile_dir,'v3','33_11'), self.test_str, '', 3, 'Done'),  # test 100x100km tile at 3 resolutions
-            (os.path.join(self.tile_dir,'v3','33_11_quartertiles'), self.test_str, '--overwrite', 4, 'Done'), # test quartertiles formatted for release
-            (os.path.join(self.tile_dir,'v4','59_57'), self.test_str, '--overwrite', 4, 'Done'),  # test v4 tiles, 2m
+            (os.path.join(self.tile_dir,'v3','33_11'), self.test_str, '--project arcticdem', 3, 'Done'),  # test 100x100km tile at 3 resolutions
+            (os.path.join(self.tile_dir,'v3','33_11_quartertiles'), self.test_str, '--overwrite --project arcticdem', 4, 'Done'), # test quartertiles formatted for release
+            (os.path.join(self.tile_dir,'v4','59_57'), self.test_str, '--overwrite --project arcticdem', 4, 'Done'),  # test v4 tiles, 2m
+            (os.path.join(self.tile_dir, 'v4', 'utm34n_60_06'), self.test_str, '--overwrite --project earthdem', 4, 'Done'),  # test v4 utm tiles, 2m
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
-            cmd = 'python index_setsm.py --mode tile --project arcticdem {} {} {}'.format(
+            cmd = 'python index_setsm.py --mode tile  {} {} {}'.format(
                 i,
                 o,
                 options
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so,se) = p.communicate()
-            #print(se)
-            #print(so)
+            print(se)
+            print(so)
 
-            ## Test if ds exists and has corrent number of records
+            ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
             ds = ogr.Open(o,0)
             layer = ds.GetLayer()
@@ -513,7 +514,7 @@ class TestIndexerIO(unittest.TestCase):
             self.assertEqual(cnt,result_cnt)
             ds, layer = None, None
 
-            ##Test if stdout has proper error
+            ## Test if stdout has proper error
             self.assertIn(msg,se)
 
     def testTileJson(self):

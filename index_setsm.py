@@ -63,6 +63,7 @@ MODES = {
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dems/setsm'
 TNVA_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
 
+
 def main():
 
     #### Set Up Arguments
@@ -969,7 +970,6 @@ def decode_json(d):
         srs.ImportFromWkt(d['value'])
         return srs
     return d
-
 
 
 if __name__ == '__main__':
