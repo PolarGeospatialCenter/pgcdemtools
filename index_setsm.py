@@ -782,6 +782,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 finally:
                                     gdal.PopErrorHandler()
 
+            if invalid_record_cnt > 0:
+                logger.info("{} invalid records skipped".format(invalid_record_cnt))
+
             if len(recordids) == 0:
                 logger.error("No valid records found")
                 sys.exit(-1)
