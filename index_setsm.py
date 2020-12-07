@@ -464,6 +464,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             #### loop through records and add features
             i=0
             recordids = []
+            invalid_record_cnt = 0
 
             for groupid in groups:
                 for record in groups[groupid]:
@@ -757,11 +758,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         feat.SetGeometry(feat_geom)
 
                         ## Add new feature to layer
-                        if valid_record:
+                        if not valid_record:
+                            invalid_record_cnt += 1
+                        else:
                             if not args.dryrun:
-                                # Record record identifiers for later checking
-                                if args.check:
-                                    recordids.append(recordid_map[args.mode].format(**attrib_map))
+                                # Store record identifiers for later checking
+                                recordids.append(recordid_map[args.mode].format(**attrib_map))
 
                                 # Append record
                                 err.err_level = gdal.CE_None
@@ -780,24 +782,25 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 finally:
                                     gdal.PopErrorHandler()
 
+            if len(recordids) == 0:
+                logger.error("No valid records found")
+                sys.exit(-1)
+
             # Check contents of layer for all records
             if args.check and not args.dryrun:
-                if len(recordids) == 0:
-                    logger.info("No valid records found. No checks to perform")
-                else:
-                    layer.ResetReading()
-                    attrib_maps = [{id_fld: feat.GetField(id_fld) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
-                    layer_recordids = [recordid_map[args.mode].format(**attrib_map) for attrib_map in attrib_maps]
-                    layer_recordids = set(layer_recordids)
+                layer.ResetReading()
+                attrib_maps = [{id_fld: feat.GetField(id_fld) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
+                layer_recordids = [recordid_map[args.mode].format(**attrib_map) for attrib_map in attrib_maps]
+                layer_recordids = set(layer_recordids)
 
-                    err_cnt = 0
-                    for recordid in recordids:
-                        if recordid not in layer_recordids:
-                            err_cnt += 1
-                            logger.error("Record not found in target layer: {}".format(recordid))
+                err_cnt = 0
+                for recordid in recordids:
+                    if recordid not in layer_recordids:
+                        err_cnt += 1
+                        logger.error("Record not found in target layer: {}".format(recordid))
 
-                    if err_cnt > 0:
-                        sys.exit(-1)
+                if err_cnt > 0:
+                    sys.exit(-1)
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
