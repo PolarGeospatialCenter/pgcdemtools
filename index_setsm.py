@@ -70,6 +70,12 @@ recordid_map = {
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dems/setsm'
 TNVA_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
 
+# handle unicode in Python 3
+try:
+    unicode('')
+except NameError:
+    unicode = str
+
 
 def main():
 
