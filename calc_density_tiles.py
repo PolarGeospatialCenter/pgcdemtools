@@ -88,7 +88,7 @@ def main():
         logger.debug(src)
         try:
             raster = dem.SetsmTile(src)
-        except RuntimeError, e:
+        except RuntimeError as e:
             logger.error( e )
         else:
             j+=1
@@ -102,7 +102,7 @@ def main():
             
             try:
                 raster = dem.SetsmTile(sceneid)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error( e )
             else:
                 j+=1
@@ -117,7 +117,7 @@ def main():
                     logger.debug(srcfp)
                     try:
                         raster = dem.SetsmTile(srcfp)
-                    except RuntimeError, e:
+                    except RuntimeError as e:
                         logger.error( e )
                     else:
                         j+=1
@@ -214,14 +214,14 @@ def build_archive(src,scratch,args):
     
     try:
         raster.get_dem_info()
-    except RuntimeError, e:
+    except RuntimeError as e:
         logger.error(e)
     else:
         ## get raster density if not precomputed
         if raster.density is None:
             try:
                 raster.compute_density_and_statistics()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning(e)
                 
 

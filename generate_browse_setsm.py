@@ -188,7 +188,7 @@ def resample_setsm(dem, args):
                     try:
                         os.remove(f)
                     except:
-                        print "Cannot remove %s" %f
+                        print("Cannot remove %s" %f)
     
 def get_extension(image_format):
     if image_format == 'GTiff':

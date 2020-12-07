@@ -53,7 +53,7 @@ def main():
         parser.error("Src is not a valid directory or shapefile: %s" %src)
 
 
-    print "Collecting DEMs from source..."
+    print("Collecting DEMs from source...")
 
     #### ID all dems, pairname is dirname
     overlaps = []
@@ -85,19 +85,19 @@ def main():
                 try:
                     i = feat.GetFieldIndex(dem_fld)
                     dem_name = feat.GetField(i)
-                except ValueError, e:
-                    print "Cannot locate DEM name field (%s)" %(dem_fld)
+                except ValueError as e:
+                    print("Cannot locate DEM name field (%s)" %(dem_fld))
 
                 if not dem_name:
-                    print "Cannot locate DEM name field (%s)" %(dem_fld)
+                    print("Cannot locate DEM name field (%s)" %(dem_fld))
                 else:
 
                     for fld in flds:
                         try:
                             i = feat.GetFieldIndex(fld)
                             attrib = feat.GetField(i)
-                        except ValueError, e:
-                            print "Cannot locate candidate field (%s) in source feature class" %(fld)
+                        except ValueError as e:
+                            print("Cannot locate candidate field (%s) in source feature class" %(fld))
                         else:
                             if attrib:
                                 attrib_path = os.path.join(attrib,dem_name)
@@ -108,13 +108,13 @@ def main():
                                 elif os.path.isfile(attrib_path):
                                     path = attrib_path
                     if path:
-                        print path
+                        print(path)
                         overlaps.append(path)
                     else:
                         if len(paths) > 0:
-                            print "Cannot locate path for DEM in any of the following locations: \n%s" %('\n\t'.join(paths))
+                            print("Cannot locate path for DEM in any of the following locations: \n%s" %('\n\t'.join(paths)))
                         else:
-                            print "Cannot get valid values from candidate fields (%s) in source feature class" %(', '.join(flds))
+                            print("Cannot get valid values from candidate fields (%s) in source feature class" %(', '.join(flds)))
             ds = None
 
     overlaps = list(set(overlaps))
@@ -124,11 +124,11 @@ def main():
     i = 0
     for overlap in overlaps:
         i+=1
-        print '\n[%d of %d]\t %s' %(i,total,os.path.basename(overlap))
+        print('\n[%d of %d]\t %s' %(i,total,os.path.basename(overlap)))
 
         #### Check that path is not terranova storage location
         if args.move is True and (path.startswith(r'V:\pgc\data\elev\dem') or path.startswith(r'V:/pgc/data/elev/dem') or path.startswith(r'/mnt/pgc/data/elev/dem/asp')):
-            print "Cannot use --move flag on DEMs located in /pgc/data/elev/dem/"
+            print("Cannot use --move flag on DEMs located in /pgc/data/elev/dem/")
         else:
             srcpairdir = os.path.dirname(overlap)
             pairname = os.path.basename(srcpairdir)
@@ -157,13 +157,13 @@ def main():
                     ofp = os.path.join(file_dstdir,f)
                     if args.move is True:
                         if not os.path.isfile(ofp):
-                            print "Moving %s --> %s" %(ifp,ofp)
+                            print("Moving %s --> %s" %(ifp,ofp))
                             if not args.dryrun:
                                 os.rename(ifp,ofp)
 
                     else:
                         if not os.path.isfile(ofp):
-                            print "Copying %s --> %s" %(ifp,ofp)
+                            print("Copying %s --> %s" %(ifp,ofp))
                             if not args.dryrun:
                                 shutil.copy2(ifp,ofp)
 

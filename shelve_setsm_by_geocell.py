@@ -70,7 +70,7 @@ def main():
         logger.info(src)
         try:
             raster = dem.SetsmDem(src)
-        except RuntimeError, e:
+        except RuntimeError as e:
             logger.error( e )
         else:
             if raster.metapath is not None:
@@ -89,7 +89,7 @@ def main():
                     logger.debug(os.path.join(root,f))
                     try:
                         raster = dem.SetsmDem(os.path.join(root,f))
-                    except RuntimeError, e:
+                    except RuntimeError as e:
                         logger.error( e )
                     else:
                         if raster.metapath is not None:
@@ -129,7 +129,7 @@ def main():
                     if args.try_link:
                         try:
                             os.link(ifp,ofp)
-                        except OSError, e:
+                        except OSError:
                             logger.error("os.link failed on {}".format(ifp))
                     else:
                         shutil.copy2(ifp,ofp)
@@ -140,7 +140,7 @@ def main():
                     if args.try_link:
                         try:
                             os.link(ifp,ofp)
-                        except OSError, e:
+                        except OSError:
                             logger.error("os.link failed on {}".format(ifp))
                     else:
                         shutil.copy2(ifp,ofp)

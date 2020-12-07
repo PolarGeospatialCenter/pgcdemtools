@@ -104,7 +104,7 @@ def main():
             logger.info(src)
             try:
                 raster = dem.SetsmDem(src)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error( e )
             else:
                 if raster.metapath or os.path.isfile(raster.mdf):
@@ -119,7 +119,7 @@ def main():
                         logger.debug(os.path.join(root,f))
                         try:
                             raster = dem.SetsmDem(os.path.join(root,f))
-                        except RuntimeError, e:
+                        except RuntimeError as e:
                             logger.error( e )
                         else:
                             if raster.metapath or os.path.isfile(raster.mdf):

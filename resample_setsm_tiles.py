@@ -72,7 +72,7 @@ def main():
             dem = path
             low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
             low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
-            if dem <> low_res_dem and not os.path.isfile(low_res_dem):
+            if dem != low_res_dem and not os.path.isfile(low_res_dem):
                 i+=1
                 task = taskhandler.Task(
                     os.path.basename(dem),
@@ -91,7 +91,7 @@ def main():
                     dem = os.path.join(root,f)
                     low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
                     low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
-                    if dem <> low_res_dem and not os.path.isfile(low_res_dem):
+                    if dem != low_res_dem and not os.path.isfile(low_res_dem):
                         i+=1
                         task = taskhandler.Task(
                             f,
