@@ -36,7 +36,7 @@ def main():
         logger.debug(src)
         try:
             raster = dem.SetsmDem(os.path.join(src))
-        except RuntimeError, e:
+        except RuntimeError as e:
             logger.error( e )
         else:
             rasters.append(raster)
@@ -48,7 +48,7 @@ def main():
                     #logger.info(os.path.join(root, f))
                     try:
                         raster = dem.SetsmDem(os.path.join(root, f))
-                    except RuntimeError, e:
+                    except RuntimeError as e:
                         logger.error( e )
                     else:
                         rasters.append(raster)
@@ -78,7 +78,7 @@ def rename(raster, args):
         ofn = "SETSM_{}_{}{}".format(fn[:len(raster.stripid)], args.version, fn[len(raster.stripid):])
         ofp = os.path.join(dirp, ofn)
         if os.path.isfile(ofp):
-            print "Output file already exists: {}".format(ofp)
+            print("Output file already exists: {}".format(ofp))
         else:
             logger.debug("{} --> {}".format(ifp, ofp))
             if not args.dryrun:

@@ -101,7 +101,7 @@ def main():
         logger.debug(src)
         try:
             raster = dem.SetsmTile(os.path.join(src))
-        except RuntimeError, e:
+        except RuntimeError as e:
             logger.error( e )
         else:
             if not os.path.isfile(raster.archive) or args.overwrite:
@@ -115,7 +115,7 @@ def main():
                     logger.debug(os.path.join(root,f))
                     try:
                         raster = dem.SetsmTile(os.path.join(root,f))
-                    except RuntimeError, e:
+                    except RuntimeError as e:
                         logger.error( e )
                     else:
                         if not os.path.isfile(raster.archive) or args.overwrite:
@@ -175,16 +175,16 @@ def build_archive(raster,scratch,args):
 
     try:
         raster.get_dem_info()
-    except RuntimeError, e:
+    except RuntimeError as e:
         logger.error(e)
-        print raster.ndv
+        print(raster.ndv)
     else:
 
         ## get raster density if not precomputed
         if raster.density is None:
             try:
                 raster.compute_density_and_statistics()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning(e)
 
         #### Build Archive
@@ -230,7 +230,7 @@ def build_archive(raster,scratch,args):
                 ## create dem index shp: <strip_id>_index.shp
                 try:
                     index_dir, index_lyr = utils.get_source_names(index)
-                except RuntimeError, e:
+                except RuntimeError as e:
                     logger.error("{}: {}".format(index,e))
 
                 if os.path.isfile(index):
@@ -341,8 +341,8 @@ def build_archive(raster,scratch,args):
                                 if not args.dryrun:
                                     try:
                                         archive.close()
-                                    except Exception,e:
-                                        print e
+                                    except Exception as e:
+                                        print(e)
 
                         else:
                             logger.error('Cannot create layer: {}'.format(dst_lyr))

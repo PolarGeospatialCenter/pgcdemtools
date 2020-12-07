@@ -102,7 +102,7 @@ def main():
         logger.info(src)
         try:
             raster = dem.SetsmTile(src)
-        except RuntimeError, e:
+        except RuntimeError as e:
             logger.error( e )
         else:
             if src.endswith('reg_dem.tif'):
@@ -145,7 +145,7 @@ def main():
                         srcfp = os.path.join(root,f)
                         try:
                             raster = dem.SetsmTile(srcfp)
-                        except RuntimeError, e:
+                        except RuntimeError as e:
                             logger.error( e )
                         else:
                             if srcfp.endswith('reg_dem.tif'):
@@ -326,7 +326,7 @@ def divide_tile(src, args):
                         ds = gdal.Open(dstfp)
                         try:
                             stats = ds.GetRasterBand(1).GetStatistics(True,True)
-                        except RuntimeError, e:
+                        except RuntimeError as e:
                             logger.info("subtile has no data pixels, removing: {}".format(dstfp))
                             os.remove(dstfp)
                         else:

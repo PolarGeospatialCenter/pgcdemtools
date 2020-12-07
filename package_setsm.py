@@ -103,7 +103,7 @@ def main():
         logger.debug(src)
         try:
             raster = dem.SetsmDem(src)
-        except RuntimeError, e:
+        except RuntimeError as e:
             logger.error( e )
         else:
             j+=1
@@ -122,7 +122,7 @@ def main():
             
             try:
                 raster = dem.SetsmDem(sceneid)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error( e )
             else:
                 j+=1
@@ -142,7 +142,7 @@ def main():
                     logger.debug(srcfp)
                     try:
                         raster = dem.SetsmDem(srcfp)
-                    except RuntimeError, e:
+                    except RuntimeError as e:
                         logger.error( e )
                     else:
                         j+=1
@@ -248,7 +248,7 @@ def build_archive(src,scratch,args):
     
     try:
         raster.get_dem_info()
-    except RuntimeError, e:
+    except RuntimeError as e:
         logger.error(e)
     else:
         process = True
@@ -257,7 +257,7 @@ def build_archive(src,scratch,args):
         if raster.density is None:
             try:
                 raster.compute_density_and_statistics()
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.warning(e)
         
         if args.filter_dems or args.force_filter_dems:
@@ -288,7 +288,7 @@ def build_archive(src,scratch,args):
                 try:
                     if not args.dryrun:
                         raster.write_mdf_file(args.lsf)
-                except RuntimeError, e:
+                except RuntimeError as e:
                     logger.error(e)
             
             #### Build Readme
@@ -307,7 +307,7 @@ def build_archive(src,scratch,args):
                         try:
                             os.remove(dstfp)
                         except:
-                            print "Cannot replace archive: %s" %srcfp
+                            print("Cannot replace archive: %s" %srcfp)
             
                 if not os.path.isfile(dstfp):    
                 
@@ -347,7 +347,7 @@ def build_archive(src,scratch,args):
                         ## create dem index shp: <strip_id>_index.shp
                         try:
                             index_dir, index_lyr = utils.get_source_names(index)
-                        except RuntimeError, e:
+                        except RuntimeError as e:
                             logger.error("{}: {}".format(index,e))            
                         
                         if os.path.isfile(index):
@@ -462,7 +462,7 @@ def build_archive(src,scratch,args):
                                         if not args.dryrun:
                                             try:
                                                 archive.close()
-                                            except Exception,e:
+                                            except Exception as e:
                                                 print e
                                                         
                                                         

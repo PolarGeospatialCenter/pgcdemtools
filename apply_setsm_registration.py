@@ -128,7 +128,7 @@ def main():
         if args.pbs:
             try:
                 task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error(e)
             else:
                 if not args.dryrun:
@@ -137,7 +137,7 @@ def main():
         elif args.slurm:
             try:
                 task_handler = taskhandler.SLURMTaskHandler(qsubpath)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error(e)
             else:
                 if not args.dryrun:
@@ -146,7 +146,7 @@ def main():
         elif args.parallel_processes > 1:
             try:
                 task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
-            except RuntimeError, e:
+            except RuntimeError as e:
                 logger.error(e)
             else:
                 logger.info("Number of child processes to spawn: {0}".format(task_handler.num_processes))
@@ -270,7 +270,7 @@ def apply_reg(srcfp, args):
     for f in files_to_remove:
         try:
             os.remove(f)
-        except OSError, e:
+        except OSError as e:
             logger.info('Cannot remove {}'.format(f))
     
 if __name__ == '__main__':
