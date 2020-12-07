@@ -307,7 +307,7 @@ def build_archive(src,scratch,args):
                         try:
                             os.remove(dstfp)
                         except:
-                            print("Cannot replace archive: %s" %srcfp)
+                            print("Cannot replace archive: %s" %dstfp)
             
                 if not os.path.isfile(dstfp):    
                 
@@ -463,7 +463,7 @@ def build_archive(src,scratch,args):
                                             try:
                                                 archive.close()
                                             except Exception as e:
-                                                print e
+                                                print(e)
                                                         
                                                         
                                 else:

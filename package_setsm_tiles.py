@@ -193,7 +193,7 @@ def build_archive(raster,scratch,args):
                 try:
                     os.remove(dstfp)
                 except:
-                    print "Cannot replace archive: %s" %srcfp
+                    print("Cannot replace archive: %s" %dstfp)
 
         if not os.path.isfile(dstfp):
 
@@ -345,7 +345,7 @@ def build_archive(raster,scratch,args):
                                         print(e)
 
                         else:
-                            logger.error('Cannot create layer: {}'.format(dst_lyr))
+                            logger.error('Cannot create layer: {}'.format(index_lyr))
                     else:
                         logger.error("Cannot create index: {}".format(index))
                 else:
