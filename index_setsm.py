@@ -500,6 +500,22 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         for k in record.filesz_attrib_map:
                             attrib_map[k.upper()] = getattr(record,'{}{}'.format(attr_pfx,k))
 
+                        # Test if filesz attr is valid for dsp original res records
+                        if args.dsp_original_res:
+                            if attrib_map['FILESZ_DEM'] is None:
+                                logger.error(
+                                    "Original res filesz_dem is empty for {}. Record skipped".format(record.sceneid))
+                                valid_record = False
+                            elif attrib_map['FILESZ_DEM'] == 0:
+                                logger.warning(
+                                    "Original res filesz_dem is 0 for {}. Record will still be written".format(record.sceneid))
+
+                        # Test if filesz attr is valid for normal records
+                        elif not attrib_map['FILESZ_DEM'] and not attrib_map['FILESZ_LSF']:
+                            logger.warning(
+                                "DEM and LSF DEM file size is zero or null for {}. Record will still be written".format(record.sceneid))
+                            valid_record = False
+
                         # Set region
                         try:
                             region = pairs[record.pairname]
