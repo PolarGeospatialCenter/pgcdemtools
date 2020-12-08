@@ -785,7 +785,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             if invalid_record_cnt > 0:
                 logger.info("{} invalid records skipped".format(invalid_record_cnt))
 
-            if len(recordids) == 0:
+            if len(recordids) == 0 and not args.dryrun:
                 logger.error("No valid records found")
                 sys.exit(-1)
 
