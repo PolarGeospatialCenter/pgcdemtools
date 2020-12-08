@@ -4,6 +4,7 @@
 dem raster information class and methods
 """
 
+from __future__ import division
 import os, re, logging,math
 from datetime import *
 import gdal, osr, ogr, gdalconst
@@ -201,7 +202,7 @@ class SetsmScene(object):
 
         for k,v in self.filesz_attrib_map.items():
             try:
-                fz = os.path.getsize(v) / 1024 / 1024 / 1024.0
+                fz = os.path.getsize(v) / 1024.0 / 1024 / 1024
             except OSError:
                 fz = 0
             setattr(self, k, fz)
@@ -546,7 +547,7 @@ class SetsmDem(object):
 
         for k, v in self.filesz_attrib_map.items():
             try:
-                fz = os.path.getsize(v) / 1024 / 1024 / 1024.0
+                fz = os.path.getsize(v) / 1024.0 / 1024 / 1024
             except OSError:
                 fz = 0
             setattr(self, k, fz)
@@ -1405,7 +1406,7 @@ class SetsmTile(object):
     def get_dem_info(self):
 
         try:
-            self.filesz_dem = os.path.getsize(self.srcfp) / 1024 / 1024 / 1024.0
+            self.filesz_dem = os.path.getsize(self.srcfp) / 1024.0 / 1024 / 1024
         except OSError:
             self.filesz_dem = 0
 
