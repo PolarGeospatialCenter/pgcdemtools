@@ -9,7 +9,7 @@ import os, re, logging,math
 from datetime import *
 import gdal, osr, ogr, gdalconst
 import numpy
-import utils
+from lib import utils
 
 gdal.UseExceptions()
 
@@ -678,7 +678,7 @@ class SetsmDem(object):
             self.scenes = metad['scene_list']
             self.alignment_dct = metad['alignment_dct']
 
-            pts = zip(metad['X'].split(), metad['Y'].split())
+            pts = list(zip(metad['X'].split(), metad['Y'].split()))
             #### create geometry
 
             if pts == [('NaN', 'NaN')]:
