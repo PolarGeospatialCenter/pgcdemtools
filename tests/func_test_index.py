@@ -2,6 +2,7 @@ import unittest, os, sys, glob, shutil, argparse, logging, subprocess, ConfigPar
 import gdal, ogr, osr, gdalconst
 
 script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+testdata_dir = os.path.join(script_dir,'testdata')
 root_dir = os.path.dirname(script_dir)
 sys.path.append(root_dir)
 
@@ -15,13 +16,13 @@ sys.path.append(root_dir)
 class TestIndexerIO(unittest.TestCase):
 
     def setUp(self):
-        self.scene_dir = os.path.join(script_dir,'testdata','setsm_scene')
-        self.scene50cm_dir = os.path.join(script_dir,'testdata','setsm_scene_50cm')
-        self.scenedsp_dir = os.path.join(script_dir, 'testdata', 'setsm_scene_2mdsp')
-        self.strip_dir = os.path.join(script_dir,'testdata','setsm_strip')
-        self.stripmasked_dir = os.path.join(script_dir,'testdata','setsm_strip_masked')
-        self.tile_dir = os.path.join(script_dir,'testdata','setsm_tile')
-        self.output_dir = os.path.join(script_dir, 'testdata', 'output')
+        self.scene_dir = os.path.join(testdata_dir,'setsm_scene')
+        self.scene50cm_dir = os.path.join(testdata_dir,'setsm_scene_50cm')
+        self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
+        self.strip_dir = os.path.join(testdata_dir,'setsm_strip')
+        self.stripmasked_dir = os.path.join(testdata_dir,'setsm_strip_masked')
+        self.tile_dir = os.path.join(testdata_dir,'setsm_tile')
+        self.output_dir = os.path.join(testdata_dir, 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
         self.pg_test_str = 'PG:sandwich:test'
 
@@ -502,8 +503,8 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so,se) = p.communicate()
-            print(se)
-            print(so)
+            # print(se)
+            # print(so)
 
             ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
