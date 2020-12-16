@@ -147,7 +147,7 @@ def main():
             
             ## Run intersection with each tile 
             tile_overlaps = []
-            for tile_name, tile_geom in tiles.iteritems():
+            for tile_name, tile_geom in tiles.items():
                 if centroid.Intersects(tile_geom):
                     tile_overlaps.append(tile_name)
             
