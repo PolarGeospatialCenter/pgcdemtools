@@ -57,8 +57,9 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (?P<order1>\d{12}_\d{2}_P\d{3})_
                                     (?P<tile2>R\d+C\d+)?-?
                                     (?P<order2>\d{12}_\d{2}_P\d{3})_
-                                    (?P<res>[0128])_
-                                    meta.txt\Z""", re.I | re.X)
+                                    (?P<res>[0128])-?
+                                    (?P<subtile>\d{2})?
+                                    _meta.txt\Z""", re.I | re.X)
 
 setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
@@ -193,9 +194,10 @@ class SetsmScene(object):
 
             if self.is_dsp:
                 sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
-                dsp_sceneid_split = self.sceneid.split('_')[:-1]
-                dsp_sceneid_split.append(sceneid_resstr)
-                self.dsp_sceneid = '_'.join(dsp_sceneid_split)
+                dsp_sceneid_res_subtile_suffix = self.sceneid.split('_')[-1]
+                src_sceneid_res_subtile_suffix = sceneid_resstr+dsp_sceneid_res_subtile_suffix[1:]
+                dsp_sceneid_no_suffix = self.sceneid[:-(len(dsp_sceneid_res_subtile_suffix)+1)]
+                self.dsp_sceneid = '{}_{}'.format(dsp_sceneid_no_suffix, src_sceneid_res_subtile_suffix)
                 self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
 
     def get_dem_info(self):
