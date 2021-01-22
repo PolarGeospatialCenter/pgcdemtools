@@ -57,13 +57,8 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (?P<order1>\d{12}_\d{2}_P\d{3})_
                                     (?P<tile2>R\d+C\d+)?-?
                                     (?P<order2>\d{12}_\d{2}_P\d{3})_
-<<<<<<< HEAD
                                     (?P<res>[0128])
                                     (-(?P<subtile>\d{2}))?
-=======
-                                    (?P<res>[0128])-?
-                                    (?P<subtile>\d{2})?
->>>>>>> master
                                     _meta.txt\Z""", re.I | re.X)
 
 setsm_strip_pattern = re.compile("""(?P<pairname>
