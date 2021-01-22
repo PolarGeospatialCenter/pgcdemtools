@@ -751,10 +751,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             else:
                                 logger.warning("Field {} is not in target table. Feature skipped".format(fld))
                                 valid_record = False
-                            feat.SetField(  # force unicode to str for a bug in GDAL's SetField. Revisit in Python3
-                                fld.encode('utf-8'),
-                                val if not isinstance(val, unicode) else val.encode('utf-8')
-                            )
+
+                            if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
+                                fld = fld.encode('utf-8')
+                                val = val if not isinstance(val, unicode) else val.encode('utf-8')
+                            feat.SetField(fld, val)
                         feat.SetGeometry(feat_geom)
 
                         ## Add new feature to layer
@@ -785,7 +786,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             if invalid_record_cnt > 0:
                 logger.info("{} invalid records skipped".format(invalid_record_cnt))
 
-            if len(recordids) == 0:
+            if len(recordids) == 0 and not args.dryrun:
                 logger.error("No valid records found")
                 sys.exit(-1)
 
