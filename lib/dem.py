@@ -57,8 +57,9 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (?P<order1>\d{12}_\d{2}_P\d{3})_
                                     (?P<tile2>R\d+C\d+)?-?
                                     (?P<order2>\d{12}_\d{2}_P\d{3})_
-                                    (?P<res>[0128])_
-                                    meta.txt\Z""", re.I | re.X)
+                                    (?P<res>[0128])
+                                    (-(?P<subtile>\d{2}))?
+                                    _meta.txt\Z""", re.I | re.X)
 
 setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
@@ -167,6 +168,7 @@ class SetsmScene(object):
                 self.group_version = None
                 self.is_dsp = None
                 self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                self.subtile = groups['subtile'] if 'subtile' in groups else None
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -195,7 +197,7 @@ class SetsmScene(object):
                 sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
                 dsp_sceneid_split = self.sceneid.split('_')[:-1]
                 dsp_sceneid_split.append(sceneid_resstr)
-                self.dsp_sceneid = '_'.join(dsp_sceneid_split)
+                self.dsp_sceneid = '_'.join(dsp_sceneid_split) + '-' + self.subtile if self.subtile else '_'.join(dsp_sceneid_split)
                 self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
 
     def get_dem_info(self):
