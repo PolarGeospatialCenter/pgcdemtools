@@ -2,8 +2,14 @@ import unittest, os, sys, glob, shutil, argparse, logging, subprocess, ConfigPar
 import gdal, ogr, osr, gdalconst
 
 script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
+testdata_dir = os.path.join(script_dir,'testdata')
 root_dir = os.path.dirname(script_dir)
 sys.path.append(root_dir)
+
+res_str = {
+    2.0: '_2m_v',
+    0.5: '_50cm_v',
+}
 
 # logger = logging.getLogger("logger")
 # lso = logging.StreamHandler()
@@ -15,19 +21,19 @@ sys.path.append(root_dir)
 class TestIndexerIO(unittest.TestCase):
 
     def setUp(self):
-        self.scene_dir = os.path.join(script_dir,'testdata','setsm_scene')
-        self.scene50cm_dir = os.path.join(script_dir,'testdata','setsm_scene_50cm')
-        self.scenedsp_dir = os.path.join(script_dir, 'testdata', 'setsm_scene_2mdsp')
-        self.strip_dir = os.path.join(script_dir,'testdata','setsm_strip')
-        self.stripmasked_dir = os.path.join(script_dir,'testdata','setsm_strip_masked')
-        self.tile_dir = os.path.join(script_dir,'testdata','setsm_tile')
-        self.output_dir = os.path.join(script_dir, 'testdata', 'output')
+        self.scene_dir = os.path.join(testdata_dir,'setsm_scene')
+        self.scene50cm_dir = os.path.join(testdata_dir,'setsm_scene_50cm')
+        self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
+        self.strip_dir = os.path.join(testdata_dir,'setsm_strip')
+        self.stripmasked_dir = os.path.join(testdata_dir,'setsm_strip_masked')
+        self.tile_dir = os.path.join(testdata_dir,'setsm_tile')
+        self.output_dir = os.path.join(testdata_dir, 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
         self.pg_test_str = 'PG:sandwich:test'
 
         self.scene_count = 51
         self.scene50cm_count = 14
-        self.scenedsp_count = 14
+        self.scenedsp_count = 102
         self.strip_count = 4
         self.stripmasked_count = 3
 
@@ -146,11 +152,6 @@ class TestIndexerIO(unittest.TestCase):
             (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-original-res', self.scenedsp_count, 'Done', 0.5),
         )
 
-        res_str = {
-            2.0: '_2m_v',
-            0.5: '_50cm_v',
-        }
-
         ## Ensure test layer does not exist on DB
         ds = ogr.Open(pg_conn_str,1)
         for i in range(ds.GetLayerCount()):
@@ -180,7 +181,8 @@ class TestIndexerIO(unittest.TestCase):
                 scenedemid = feat.GetField('SCENEDEMID')
                 stripdemid = feat.GetField('STRIPDEMID')
                 self.assertEqual(feat.GetField('DEM_RES'), res)
-                self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
+                scenedemid_lastpart = scenedemid.split('_')[-1]
+                self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
                 self.assertTrue(res_str[res] in stripdemid)
             ds, layer = None, None
 
@@ -237,11 +239,6 @@ class TestIndexerIO(unittest.TestCase):
         # test as 50cm record
         )
 
-        res_str = {
-            2.0: '_2m_v',
-            0.5: '_50cm_v',
-        }
-
         for i, o, options, result_cnt, msg, res in test_param_list:
             cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
                 i,
@@ -264,13 +261,18 @@ class TestIndexerIO(unittest.TestCase):
             for feat in layer:
                 scenedemid = feat.GetField('SCENEDEMID')
                 stripdemid = feat.GetField('STRIPDEMID')
+                location = feat.GetField('LOCATION')
                 self.assertEqual(feat.GetField('DEM_RES'),res)
-                self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
+                scenedemid_lastpart = scenedemid.split('_')[-1]
+                location_lastpart = location.split('_')[-2]
+                self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
+                if '-' in location_lastpart:
+                    self.assertEqual(scenedemid_lastpart.split('-')[1], location_lastpart.split('-')[1])
                 self.assertTrue(res_str[res] in stripdemid)
                 self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
             ds, layer = None, None
 
-            ##Test if stdout has proper error
+            # Test if stdout has proper error
             self.assertIn(msg, (se))
 
     def testSceneJson(self):
@@ -392,8 +394,9 @@ class TestIndexerIO(unittest.TestCase):
         scenedemid = feat.GetField('SCENEDEMID')
         stripdemid = feat.GetField('STRIPDEMID')
         self.assertEqual(feat.GetField('DEM_RES'), res)
-        self.assertTrue(scenedemid.endswith('_2' if res == 2.0 else '_0'))
-        self.assertTrue(stripdemid.endswith('_2m_v040201' if res == 2.0 else '_50cm_v040201'))
+        scenedemid_lastpart = scenedemid.split('_')[-1]
+        self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
+        self.assertTrue(res_str[res] in stripdemid)
         self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
         ds, layer = None, None
 
@@ -502,8 +505,8 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so,se) = p.communicate()
-            print(se)
-            print(so)
+            # print(se)
+            # print(so)
 
             ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
