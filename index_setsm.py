@@ -1,6 +1,6 @@
 import os, sys, string, shutil, glob, re, logging, json, pickle
 import datetime
-import gdal, osr, ogr, gdalconst
+from osgeo import gdal, osr, ogr, gdalconst
 import argparse
 import numpy
 from numpy import flatnonzero
