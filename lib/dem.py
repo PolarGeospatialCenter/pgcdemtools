@@ -7,7 +7,7 @@ dem raster information class and methods
 from __future__ import division
 import os, re, logging,math
 from datetime import *
-import gdal, osr, ogr, gdalconst
+from osgeo import gdal, osr, ogr, gdalconst
 import numpy
 from lib import utils
 

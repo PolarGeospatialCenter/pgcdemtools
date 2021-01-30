@@ -1,5 +1,5 @@
 import unittest, os, sys, glob, shutil, argparse, logging, subprocess, ConfigParser
-import gdal, ogr, osr, gdalconst
+from osgeo import gdal, ogr, osr, gdalconst
 
 script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 testdata_dir = os.path.join(script_dir,'testdata')
