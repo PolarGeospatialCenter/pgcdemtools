@@ -792,6 +792,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
             # Check contents of layer for all records
             if args.check and not args.dryrun:
+                logger.info("Checking for new records in target table")
                 layer.ResetReading()
                 attrib_maps = [{id_fld: feat.GetField(id_fld) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
                 layer_recordids = [recordid_map[args.mode].format(**attrib_map) for attrib_map in attrib_maps]

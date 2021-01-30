@@ -57,8 +57,8 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (?P<order1>\d{12}_\d{2}_P\d{3})_
                                     (?P<tile2>R\d+C\d+)?-?
                                     (?P<order2>\d{12}_\d{2}_P\d{3})_
-                                    (?P<res>[0128])-?
-                                    (?P<subtile>\d{2})?
+                                    (?P<res>[0128])
+                                    (-(?P<subtile>\d{2}))?
                                     _meta.txt\Z""", re.I | re.X)
 
 setsm_strip_pattern = re.compile("""(?P<pairname>
@@ -168,6 +168,7 @@ class SetsmScene(object):
                 self.group_version = None
                 self.is_dsp = None
                 self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                self.subtile = groups['subtile'] if 'subtile' in groups else None
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
