@@ -1,6 +1,6 @@
 import os, sys, string, shutil, glob, re, logging, math
 from datetime import *
-import gdal, osr, ogr, gdalconst
+from osgeo import gdal, osr, ogr, gdalconst
 import argparse
 from collections import namedtuple
 import numpy

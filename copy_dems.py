@@ -1,6 +1,6 @@
 import os, sys, string, shutil, glob
 import argparse
-import gdal,ogr,osr, gdalconst
+from osgeo import gdal,ogr,osr, gdalconst
 from lib import utils
 
 
