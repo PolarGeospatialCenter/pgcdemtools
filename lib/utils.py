@@ -5,15 +5,9 @@ demtools utilties and constants
 """
 
 from collections import namedtuple
-import glob
 import logging
-import multiprocessing as mp
 import os
 import re
-import shutil
-import string
-import subprocess
-import sys
 
 from osgeo import gdal, osr, ogr, gdalconst
 
