@@ -127,10 +127,14 @@ class SetsmScene(object):
             self.metapath = metapath
             self.lsf_dem = os.path.join(self.srcdir,self.sceneid+"_dem_smooth.tif")
             self.dem = os.path.join(self.srcdir,self.sceneid+"_dem.tif")
+            self.dem_edge_masked = os.path.join(self.srcdir,self.sceneid+"_dem_edge-masked.tif")
             self.matchtag = os.path.join(self.srcdir,self.sceneid+"_matchtag.tif")
             self.ortho = os.path.join(self.srcdir,self.sceneid+"_ortho.tif")
             self.ortho2 = os.path.join(self.srcdir, self.sceneid + "_ortho2.tif")
             self.dspinfo = os.path.join(self.srcdir, self.sceneid + "_info50cm.txt")
+
+            if not os.path.isfile(self.dem) and os.path.isfile(self.dem_edge_masked):
+                self.dem = self.dem_edge_masked
 
             self.filesz_attrib_map = {
                 'filesz_dem': self.dem,
