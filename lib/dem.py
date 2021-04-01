@@ -647,7 +647,7 @@ class SetsmDem(object):
                 matchtag_res_x = gtf[1]
                 matchtag_res_y = gtf[5]
                 matchtag_ndv = b.GetNoDataValue()
-                data = b.ReadAsArray()
+                data = utils.gdalReadAsArraySetsmSceneBand(b)
                 err = gdal.GetLastErrorNo()
                 if err != 0:
                     raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
@@ -1526,7 +1526,7 @@ class SetsmTile(object):
             res_x = gtf[1]
             res_y = gtf[5]
             ndv = b.GetNoDataValue()
-            data = b.ReadAsArray()
+            data = utils.gdalReadAsArraySetsmSceneBand(b)
             err = gdal.GetLastErrorNo()
             if err != 0:
                 raise RuntimeError("DEM dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))

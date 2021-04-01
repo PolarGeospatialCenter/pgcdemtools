@@ -4,10 +4,13 @@
 demtools utilties and constants
 """
 
-import os, sys, string, shutil, glob, re, logging, subprocess
-from osgeo import gdal, osr, ogr, gdalconst
 from collections import namedtuple
-import multiprocessing as mp
+import logging
+import os
+import re
+
+import numpy as np
+from osgeo import gdal, osr, ogr, gdalconst
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -242,6 +245,11 @@ def osr_srs_preserve_axis_order(osr_srs):
     return osr_srs
 
 
+class RasterIOError(Exception):
+    def __init__(self, msg=""):
+        super(Exception, self).__init__(msg)
+
+
 class SpatialRef(object):
 
     def __init__(self,epsg):
@@ -376,3 +384,46 @@ def drange(start, stop, step):
     while r < stop:
         yield r
         r += step
+
+
+def gdalReadAsArraySetsmSceneBand(raster_band, make_nodata_nan=False):
+    scale = raster_band.GetScale()
+    offset = raster_band.GetOffset()
+    if scale is None:
+        scale = 1.0
+    if offset is None:
+        offset = 0.0
+    if scale == 1.0 and offset == 0.0:
+        array_data = raster_band.ReadAsArray()
+        if make_nodata_nan:
+            nodata_val = raster_band.GetNoDataValue()
+            if nodata_val is not None:
+                array_data[array_data == nodata_val] = np.nan
+    else:
+        if raster_band.DataType != gdalconst.GDT_Int32:
+            raise RasterIOError(
+                "Expected GDAL raster band with scale!=1.0 or offset!=0.0 to be of Int32 data type"
+                " (scaled int LERC_ZSTD-compressed 50cm DEM), but data type is {}".format(
+                    gdal.GetDataTypeName(raster_band.DataType)
+                )
+            )
+        if scale == 0.0:
+            raise RasterIOError(
+                "GDAL raster band has invalid parameters: scale={}, offset={}".format(scale, offset)
+            )
+        nodata_val = raster_band.GetNoDataValue()
+        array_data = raster_band.ReadAsArray(buf_type=gdalconst.GDT_Float32)
+        adjust_where = (array_data != nodata_val) if nodata_val is not None else True
+        if scale != 1.0:
+            np.multiply(array_data, scale, out=array_data, where=adjust_where)
+        if offset != 0.0:
+            np.add(array_data, offset, out=array_data, where=adjust_where)
+        if make_nodata_nan:
+            array_nodata = np.logical_not(adjust_where, out=adjust_where)
+            array_data[array_nodata] = np.nan
+        del adjust_where
+
+    if array_data is None:
+        raise RasterIOError("`raster_band.ReadAsArray()` returned None")
+
+    return array_data
