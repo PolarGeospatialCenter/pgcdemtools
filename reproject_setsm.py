@@ -1,5 +1,5 @@
-import os, string, sys, re, glob, argparse, subprocess, logging, math, numpy, ogr, osr
-from osgeo import gdal, gdalconst
+import os, string, sys, re, glob, argparse, subprocess, logging, math, numpy
+from osgeo import gdal, ogr, osr, gdalconst
 from lib import taskhandler
 
 #### Create Logger
