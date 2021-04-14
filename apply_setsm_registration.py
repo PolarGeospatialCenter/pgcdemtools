@@ -1,5 +1,5 @@
 import os, string, sys, re, glob, argparse, subprocess, logging
-import gdal, gdalconst, ogr, osr
+from osgeo import gdal, gdalconst, ogr, osr
 from lib import dem, utils, taskhandler
 
 #### Create Logger
@@ -198,8 +198,9 @@ def apply_reg(srcfp, args):
         if line.startswith('Translation Vector (dz,dx,dy)(m)='):
             trans_vector = line.strip().split('=')[1]
             trans_vector = trans_vector.split(', ')
-            dx, dy, dz = [float(parm.strip()) for parm in trans_vector]
-            logger.info("Translation Vector (dx, dy, dz) (m) = {}, {}, {}".format(dx, dy, dz))
+            dz, dx, dy = [float(parm.strip()) for parm in trans_vector]
+            logger.info("Translation Vector (dz, dx, dy) (m) = {}, {}, {}".format(dz, dx, dy))
+            break
     regfh.close()
     
     ## open image and built vrt with modified geotransform for x and y offset

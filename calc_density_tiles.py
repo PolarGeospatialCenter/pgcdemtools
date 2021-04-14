@@ -1,6 +1,6 @@
 import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
 from datetime import *
-import gdal, osr, ogr, gdalconst
+from osgeo import gdal, osr, ogr, gdalconst
 import argparse
 from lib import utils, dem, taskhandler
 
@@ -230,7 +230,6 @@ if __name__ == '__main__':
         
             
             
-        
         
         
         
