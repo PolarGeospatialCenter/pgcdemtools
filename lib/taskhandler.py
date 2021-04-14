@@ -178,22 +178,24 @@ def exec_cmd(cmd):
 
     return (err,so,se)
 
+
 def convert_optional_args_to_string(args, positional_arg_keys, arg_keys_to_remove):
 
     args_dict = vars(args)
     arg_list = []
 
     ## Add optional args to arg_list
-    for k,v in args_dict.items():
+    for k, v in args_dict.items():
         if k not in positional_arg_keys and k not in arg_keys_to_remove and v is not None:
-            k = k.replace('_','-')
-            if isinstance(v,list) or isinstance(v,tuple):
-                arg_list.append("--{} {}".format(k,' '.join([str(item) for item in v])))
-            elif isinstance(v,bool):
+            k = k.replace('_', '-')
+            if isinstance(v, list) or isinstance(v, tuple):
+                if v[0] is not None:
+                    arg_list.append("--{} {}".format(k, ' '.join([str(item) for item in v])))
+            elif isinstance(v, bool):
                 if v is True:
                     arg_list.append("--{}".format(k))
             else:
-                arg_list.append("--{} {}".format(k,str(v)))
+                arg_list.append("--{} {}".format(k, str(v)))
 
     arg_str_base = " ".join(arg_list)
     return arg_str_base

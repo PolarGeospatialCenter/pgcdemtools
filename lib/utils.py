@@ -4,10 +4,12 @@
 demtools utilties and constants
 """
 
-import os, sys, string, shutil, glob, re, logging, subprocess
-import gdal, osr, ogr, gdalconst
+import logging
+import os
+import re
 from collections import namedtuple
-import multiprocessing as mp
+
+from osgeo import osr, ogr
 
 #### Create Logger
 logger = logging.getLogger("logger")
