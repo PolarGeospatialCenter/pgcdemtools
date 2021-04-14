@@ -1,5 +1,8 @@
-import unittest, os, sys, glob, shutil, argparse, logging
-import gdal, ogr, osr, gdalconst
+import argparse
+import logging
+import os
+import sys
+import unittest
 
 script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
 root_dir = os.path.dirname(script_dir)
