@@ -261,7 +261,7 @@ def apply_reg(srcfp, args):
                 
         ## use gdal_calc to modify for z offset if raster is a DEM only
         if os.path.isfile(temp_fp) and not os.path.isfile(dstfp):
-            cmd = 'gdal_calc.py --co COMPRESS=LZW --co TILED=YES -A {} --calc "A+{}" --outfile {}'.format(temp_fp,dz,dstfp)
+            cmd = 'gdal_calc.py --co COMPRESS=LZW --co TILED=YES --NoDataValue=-9999 -A {} --calc "A+{}" --outfile {}'.format(temp_fp,dz,dstfp)
             if not args.dryrun:
                 logger.info(cmd)
                 subprocess.call(cmd,shell=True)
