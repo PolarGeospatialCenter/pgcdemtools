@@ -4,13 +4,13 @@
 demtools utilties and constants
 """
 
-from collections import namedtuple
 import logging
 import os
 import re
-
 import numpy as np
-from osgeo import gdal, osr, ogr, gdalconst
+from collections import namedtuple
+
+from osgeo import osr, ogr, gdalconst, gdal
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -18,51 +18,50 @@ logger.setLevel(logging.DEBUG)
 
 # Copy DEM global vars
 deliv_suffixes = (
-### ASP
-'-DEM.prj',
-'-DEM.tif',
-'-DRG.tif',
-'-IntersectionErr.tif',
-'-GoodPixelMap.tif',
-'-stereo.default',
-'-PC.laz',
-'-PC.las',
-'.geojson',
+    ### ASP
+    '-DEM.prj',
+    '-DEM.tif',
+    '-DRG.tif',
+    '-IntersectionErr.tif',
+    '-GoodPixelMap.tif',
+    '-stereo.default',
+    '-PC.laz',
+    '-PC.las',
+    '.geojson',
 
-### SETSM
-'_dem.tif',
-'_ortho.tif',
-'_matchtag.tif',
-'_meta.txt'
+    ### SETSM
+    '_dem.tif',
+    '_ortho.tif',
+    '_matchtag.tif',
+    '_meta.txt'
 )
 
 archive_suffix = ".tar"
 
 shp_suffixes = (
-'.shp',
-'.shx',
-'.prj',
-'.dbf'
+    '.shp',
+    '.shx',
+    '.prj',
+    '.dbf'
 )
 
 pc_suffixes = (
-'-PC.tif',
-'-PC-center.txt'
+    '-PC.tif',
+    '-PC-center.txt'
 )
 
 fltr_suffixes = (
-'_fltr-DEM.tif',
-'_fltr-DEM.prj'
+    '_fltr-DEM.tif',
+    '_fltr-DEM.prj'
 )
 
-
 log_suffixes = (
-'-log-point2dem',
-'-log-stereo_corr',
- '-log-stereo_pprc',
-'-log-stereo_fltr',
-'-log-stereo_rfne',
-'-log-stereo_tri',
+    '-log-point2dem',
+    '-log-stereo_corr',
+    '-log-stereo_pprc',
+    '-log-stereo_fltr',
+    '-log-stereo_rfne',
+    '-log-stereo_tri',
 )
 
 # common name id, attribute field name, storage type, field width, field precision
@@ -201,7 +200,7 @@ OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS = [
     StandardAttribute("OVERLAP", ogr.OFTString, 254, 0),
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
     StandardAttribute("STATUS", ogr.OFTInteger, 2, 0)
-    ]
+]
 
 OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
 
@@ -232,17 +231,9 @@ OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
     StandardAttribute("RUNTIME", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0)
-    ]
+]
 
 OVERLAP_FILE_ATTRIBUTE_DEFINITIONS = OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS + OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS
-
-
-def osr_srs_preserve_axis_order(osr_srs):
-    try:
-        osr_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-    except AttributeError:
-        pass
-    return osr_srs
 
 
 class RasterIOError(Exception):
@@ -252,33 +243,41 @@ class RasterIOError(Exception):
 
 class SpatialRef(object):
 
-    def __init__(self,epsg):
+    def __init__(self, epsg):
         srs = osr_srs_preserve_axis_order(osr.SpatialReference())
         try:
             epsgcode = int(epsg)
 
-        except ValueError as e:
-            raise RuntimeError("EPSG value must be an integer: %s" %epsg)
+        except ValueError:
+            raise RuntimeError("EPSG value must be an integer: %s" % epsg)
         else:
 
             err = srs.ImportFromEPSG(epsgcode)
             if err == 7:
-                raise RuntimeError("Invalid EPSG code: %d" %epsgcode)
+                raise RuntimeError("Invalid EPSG code: %d" % epsgcode)
             else:
                 proj4_string = srs.ExportToProj4()
 
                 proj4_patterns = {
-                    "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0":"+datum=NAD83",
-                    "+ellps=WGS84 +towgs84=0,0,0,0,0,0,0":"+datum=WGS84",
+                    "+ellps=GRS80 +towgs84=0,0,0,0,0,0,0": "+datum=NAD83",
+                    "+ellps=WGS84 +towgs84=0,0,0,0,0,0,0": "+datum=WGS84",
                 }
 
                 for pattern, replacement in proj4_patterns.items():
                     if proj4_string.find(pattern) != -1:
-                        proj4_string = proj4_string.replace(pattern,replacement)
+                        proj4_string = proj4_string.replace(pattern, replacement)
 
                 self.srs = srs
                 self.proj4 = proj4_string
                 self.epsg = epsgcode
+
+
+def osr_srs_preserve_axis_order(osr_srs):
+    try:
+        osr_srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    except AttributeError:
+        pass
+    return osr_srs
 
 
 def check_file_inclusion(f, pairname, overlap_prefix, args):
@@ -305,7 +304,7 @@ def check_file_inclusion(f, pairname, overlap_prefix, args):
                 move_file = True
 
         if args.exclude_drg is True:
-            if f.endswith(('-DRG.tif','_ortho.tif')):
+            if f.endswith(('-DRG.tif', '_ortho.tif')):
                 move_file = False
 
         if args.exclude_err is True:
@@ -314,9 +313,9 @@ def check_file_inclusion(f, pairname, overlap_prefix, args):
 
         if args.dems_only is True:
             move_file = False
-            if f.endswith(("-DEM.tif",'-DEM.prj','.geojson','_dem.tif','_meta.txt')):
+            if f.endswith(("-DEM.tif", '-DEM.prj', '.geojson', '_dem.tif', '_meta.txt')):
                 move_file = True
-            if f.endswith(("_fltr-DEM.tif",'_fltr-DEM.prj')):
+            if f.endswith(("_fltr-DEM.tif", '_fltr-DEM.prj')):
                 if args.include_fltr:
                     move_file = True
                 else:
@@ -328,7 +327,7 @@ def check_file_inclusion(f, pairname, overlap_prefix, args):
                 move_file = True
 
     #### determine if file is in pair shp
-    if (f.endswith(shp_suffixes) and pairname in f and not '-DEM' in f):
+    if f.endswith(shp_suffixes) and pairname in f and '-DEM' not in f:
         if not args.dems_only:
             move_file = True
 
@@ -347,7 +346,7 @@ def get_source_names(src_fp):
         msg = "The source {} does not appear to be a shapefile or File GDB -- quitting".format(src_fp)
         raise RuntimeError(msg)
 
-    return (_src_fp, src_lyr)
+    return _src_fp, src_lyr
 
 
 def get_source_names2(src_str):
@@ -373,10 +372,11 @@ def get_source_names2(src_str):
         pfx, src_ds, src_lyr = src_str.split(":")
 
     else:
-        msg = "The source {} does not appear to be a Shapefile, File GDB, or PostgreSQL connection -- quitting".format(src_str)
+        msg = "The source {} does not appear to be a Shapefile, File GDB, or PostgreSQL connection -- quitting".format(
+            src_str)
         raise RuntimeError(msg)
 
-    return (driver, src_ds, src_lyr)
+    return driver, src_ds, src_lyr
 
 
 def drange(start, stop, step):

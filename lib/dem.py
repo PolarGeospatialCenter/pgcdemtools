@@ -5,10 +5,16 @@ dem raster information class and methods
 """
 
 from __future__ import division
-import os, re, logging,math
+
+import logging
+import math
+import os
+import re
 from datetime import *
-from osgeo import gdal, osr, ogr, gdalconst
+
 import numpy
+from osgeo import gdal, osr, ogr
+
 from lib import utils
 
 gdal.UseExceptions()
@@ -19,7 +25,7 @@ logger.setLevel(logging.DEBUG)
 
 __all__ = [
     "SetsmDem",
-    "SetsmSceneDem",
+    "SetsmScene",
     "AspDem",
     "SetsmTile",
     "RegInfo"
@@ -207,7 +213,7 @@ class SetsmScene(object):
 
     def get_dem_info(self):
 
-        for k,v in self.filesz_attrib_map.items():
+        for k, v in self.filesz_attrib_map.items():
             try:
                 fz = os.path.getsize(v) / 1024.0 / 1024 / 1024
             except OSError:
@@ -228,14 +234,14 @@ class SetsmScene(object):
             self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
             self.gtf = ds.GetGeoTransform()
 
-            src_srs = osr.SpatialReference()
+            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
             self.epsg = ''
 
             for epsg in epsgs:
-                tgt_srs = osr.SpatialReference()
+                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                 tgt_srs.ImportFromEPSG(epsg)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
@@ -566,14 +572,14 @@ class SetsmDem(object):
             self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
             self.gtf = ds.GetGeoTransform()
 
-            src_srs = osr.SpatialReference()
+            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
             self.epsg = ''
 
             for epsg in epsgs:
-                tgt_srs = osr.SpatialReference()
+                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                 tgt_srs.ImportFromEPSG(epsg)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
@@ -634,7 +640,6 @@ class SetsmDem(object):
             ## Make strip ID
             self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
 
-
     def compute_density_and_statistics(self):
         #### If no mdf or mdf does not contain valid density key, compute
         if self.density is None or self.density == 'None':
@@ -644,23 +649,7 @@ class SetsmDem(object):
             if not os.path.isfile(self.matchtag):
                 raise RuntimeError("Matchtag file does not exist for DEM: {}".format(self.srcfp))
             else:
-                geom_area = self.geom.Area()
-                ds = gdal.Open(self.matchtag)
-                b = ds.GetRasterBand(1)
-                gtf = ds.GetGeoTransform()
-                matchtag_res_x = gtf[1]
-                matchtag_res_y = gtf[5]
-                matchtag_ndv = b.GetNoDataValue()
-                data = utils.gdalReadAsArraySetsmSceneBand(b)
-                err = gdal.GetLastErrorNo()
-                if err != 0:
-                    raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
-                else:
-                    data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
-                    data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
-                    self.density = data_area / geom_area
-                    data = None
-                    ds = None
+                self.density = get_matchtag_density(self.matchtag, self.geom.Area())
 
         if self.stats[0] is None or self.stats[0] == 'None':
             ds = gdal.Open(self.srcfp)
@@ -1239,14 +1228,14 @@ class AspDem(object):
             self.gtf = ds.GetGeoTransform()
 
             #print raster.proj
-            src_srs = osr.SpatialReference()
+            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
             src_srs.ImportFromWkt(self.proj)
             self.proj4 = src_srs.ExportToProj4()
             #print self.proj4
             self.epsg = ''
 
             for epsg in epsgs:
-                tgt_srs = osr.SpatialReference()
+                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                 tgt_srs.ImportFromEPSG(epsg)
                 #print epsg
                 #print src_srs.IsSame(tgt_srs)
@@ -1412,97 +1401,12 @@ class SetsmTile(object):
 
     def get_dem_info(self):
 
+        self.get_geom(get_stats=True)
+
         try:
             self.filesz_dem = os.path.getsize(self.srcfp) / 1024.0 / 1024 / 1024
         except OSError:
             self.filesz_dem = 0
-
-        ds = gdal.Open(self.srcfp)
-        if ds is not None:
-            self.xsize = ds.RasterXSize
-            self.ysize = ds.RasterYSize
-            self.proj = ds.GetProjectionRef() if ds.GetProjectionRef() != '' else ds.GetGCPProjection()
-            self.gtf = ds.GetGeoTransform()
-
-            #print raster.proj
-            src_srs = osr.SpatialReference()
-            src_srs.ImportFromWkt(self.proj)
-            self.srs = src_srs
-            self.proj4 = src_srs.ExportToProj4()
-            #print self.proj4
-            self.epsg = ''
-
-            for epsg in epsgs:
-                tgt_srs = osr.SpatialReference()
-                tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
-                if src_srs.IsSame(tgt_srs) == 1:
-                    self.epsg = epsg
-
-            src_srs.MorphToESRI()
-            self.wkt_esri = src_srs.ExportToWkt()
-
-            self.bands = ds.RasterCount
-            self.datatype = ds.GetRasterBand(1).DataType
-            self.datatype_readable = gdal.GetDataTypeName(self.datatype)
-            self.ndv = ds.GetRasterBand(1).GetNoDataValue()
-            try:
-                self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
-            except RuntimeError as e:
-                logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp,e))
-                self.stats = (None, None, None, None)
-
-            num_gcps = ds.GetGCPCount()
-
-            if num_gcps == 0:
-
-                self.xres = abs(self.gtf[1])
-                self.yres = abs(self.gtf[5])
-                ulx = self.gtf[0] + 0 * self.gtf[1] + 0 * self.gtf[2]
-                uly = self.gtf[3] + 0 * self.gtf[4] + 0 * self.gtf[5]
-                urx = self.gtf[0] + self.xsize * self.gtf[1] + 0 * self.gtf[2]
-                ury = self.gtf[3] + self.xsize * self.gtf[4] + 0 * self.gtf[5]
-                llx = self.gtf[0] + 0 * self.gtf[1] + self.ysize * self.gtf[2]
-                lly = self.gtf[3] + 0 * self.gtf[4] + self.ysize * self.gtf[5]
-                lrx = self.gtf[0] + self.xsize * self.gtf[1] + self.ysize* self.gtf[2]
-                lry = self.gtf[3] + self.xsize * self.gtf[4] + self.ysize * self.gtf[5]
-
-            elif num_gcps == 4:
-
-                gcps = ds.GetGCPs()
-                gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
-
-                for gcp in gcps:
-                    gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
-
-                ulx = gcp_dict[1][2]
-                uly = gcp_dict[1][3]
-                urx = gcp_dict[2][2]
-                ury = gcp_dict[2][3]
-                llx = gcp_dict[4][2]
-                lly = gcp_dict[4][3]
-                lrx = gcp_dict[3][2]
-                lry = gcp_dict[3][3]
-
-                self.xres = abs(math.sqrt((ulx - urx)**2 + (uly - ury)**2)/ self.xsize)
-                self.yres = abs(math.sqrt((ulx - llx)**2 + (uly - lly)**2)/ self.ysize)
-
-            poly_wkt = 'POLYGON (( %.12f %.12f, %.12f %.12f, %.12f %.12f, %.12f %.12f, %.12f %.12f ))' %(ulx,uly,urx,ury,lrx,lry,llx,lly,ulx,uly)
-            self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
-
-        else:
-            raise RuntimeError("Cannot open image: %s" %self.srcfp)
-
-        ds = None
 
         #### if metadata file parse it
         if self.metapath:
@@ -1523,34 +1427,13 @@ class SetsmTile(object):
             self.density = None
 
             #### If dem exists, get dem density within data boundary
-            geom_area = self.geom.Area()
-            ds = gdal.Open(self.srcfp)
-            b = ds.GetRasterBand(1)
-            gtf = ds.GetGeoTransform()
-            res_x = gtf[1]
-            res_y = gtf[5]
-            ndv = b.GetNoDataValue()
-            data = utils.gdalReadAsArraySetsmSceneBand(b)
-            err = gdal.GetLastErrorNo()
-            if err != 0:
-                raise RuntimeError("DEM dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
-            else:
-                data_pixel_count = numpy.count_nonzero(data != ndv)
-                data_area = abs(data_pixel_count * res_x * res_y)
-                #logger.info("matchtag res: x = {}, y = {}".format(matchtag_res_x,matchtag_res_y))
-                #logger.info("pixel count = {}".format(data_pixel_count))
-                #logger.info("data area = {}".format(data_area))
-                #logger.info("geom area = {}".format(geom_area))
-                self.density = data_area / geom_area
-                #logger.info("matchtag density = {}".format(self.density))
-                data = None
-                ds = None
+            self.density = get_matchtag_density(self.matchtag, self.geom.Area())
 
             fh = open(self.density_file, 'w')
             fh.write('{}\n'.format(self.density))
             fh.close()
 
-    def get_geom(self):
+    def get_geom(self, get_stats=False):
 
         ds = gdal.Open(self.srcfp)
         if ds is not None:
@@ -1560,7 +1443,7 @@ class SetsmTile(object):
             self.gtf = ds.GetGeoTransform()
 
             #print raster.proj
-            src_srs = osr.SpatialReference()
+            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
@@ -1568,7 +1451,7 @@ class SetsmTile(object):
             self.epsg = ''
 
             for epsg in epsgs:
-                tgt_srs = osr.SpatialReference()
+                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                 tgt_srs.ImportFromEPSG(epsg)
                 #print epsg
                 #print src_srs.IsSame(tgt_srs)
@@ -1602,14 +1485,10 @@ class SetsmTile(object):
 
                 gcps = ds.GetGCPs()
                 gcp_dict = {}
-                id_dict = {"UpperLeft":1,
-                           "1":1,
-                           "UpperRight":2,
-                           "2":2,
-                           "LowerLeft":4,
-                           "4":4,
-                           "LowerRight":3,
-                           "3":3}
+                id_dict = {"UpperLeft": 1, "1": 1,
+                           "UpperRight": 2, "2": 2,
+                           "LowerLeft": 4, "4": 4,
+                           "LowerRight": 3, "3": 3}
 
                 for gcp in gcps:
                     gcp_dict[id_dict[gcp.Id]] = [float(gcp.GCPPixel), float(gcp.GCPLine), float(gcp.GCPX), float(gcp.GCPY), float(gcp.GCPZ)]
@@ -1628,6 +1507,13 @@ class SetsmTile(object):
 
             poly_wkt = 'POLYGON (( %.12f %.12f, %.12f %.12f, %.12f %.12f, %.12f %.12f, %.12f %.12f ))' %(ulx,uly,urx,ury,lrx,lry,llx,lly,ulx,uly)
             self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
+
+            if get_stats:
+                try:
+                    self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                except RuntimeError as e:
+                    logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
+                    self.stats = (None, None, None, None)
 
         else:
             raise RuntimeError("Cannot open image: %s" %self.srcfp)
@@ -1818,3 +1704,30 @@ def format_as_imd(contents):
         text = text + '{}{} = {}{}'.format('\t'*(tab_count+tab_offset),key,val,eol)
     text = text + 'END;'
     return text
+
+
+def get_matchtag_density(matchtag, geom_area=None):
+    ds = gdal.Open(matchtag)
+    b = ds.GetRasterBand(1)
+    gtf = ds.GetGeoTransform()
+    matchtag_res_x = gtf[1]
+    matchtag_res_y = gtf[5]
+    matchtag_size_x = ds.RasterXSize
+    matchtag_size_y = ds.RasterYSize
+    matchtag_ndv = b.GetNoDataValue()
+    data = utils.gdalReadAsArraySetsmSceneBand(b)
+    err = gdal.GetLastErrorNo()
+    if err != 0:
+        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), matchtag))
+    else:
+        data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
+        # If geom area is available, use that as the denominator to exclude collar pixes
+        if geom_area:
+            data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
+            density = data_area / geom_area
+        # If geom area is not available, assume there is no collar and use total pixel count
+        else:
+            total_pixel_count = matchtag_size_x * matchtag_size_y
+            density = data_pixel_count / float(total_pixel_count)
+
+        return density
