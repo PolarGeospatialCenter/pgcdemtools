@@ -133,6 +133,7 @@ class SetsmScene(object):
             self.metapath = metapath
             self.lsf_dem = os.path.join(self.srcdir,self.sceneid+"_dem_smooth.tif")
             self.dem = os.path.join(self.srcdir,self.sceneid+"_dem.tif")
+            self.dem_edge_masked = os.path.join(self.srcdir,self.sceneid+"_dem_edge-masked.tif")
             self.matchtag = os.path.join(self.srcdir,self.sceneid+"_matchtag.tif")
             self.ortho = os.path.join(self.srcdir,self.sceneid+"_ortho.tif")
             self.ortho2 = os.path.join(self.srcdir, self.sceneid + "_ortho2.tif")
@@ -1710,7 +1711,7 @@ def get_matchtag_density(matchtag, geom_area=None):
     matchtag_size_x = ds.RasterXSize
     matchtag_size_y = ds.RasterYSize
     matchtag_ndv = b.GetNoDataValue()
-    data = b.ReadAsArray()
+    data = utils.gdalReadAsArraySetsmSceneBand(b)
     err = gdal.GetLastErrorNo()
     if err != 0:
         raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
