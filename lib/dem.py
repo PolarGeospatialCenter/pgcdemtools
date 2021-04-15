@@ -139,6 +139,9 @@ class SetsmScene(object):
             self.ortho2 = os.path.join(self.srcdir, self.sceneid + "_ortho2.tif")
             self.dspinfo = os.path.join(self.srcdir, self.sceneid + "_info50cm.txt")
 
+            if not os.path.isfile(self.dem) and os.path.isfile(self.dem_edge_masked):
+                self.dem = self.dem_edge_masked
+
             self.filesz_attrib_map = {
                 'filesz_dem': self.dem,
                 'filesz_lsf': self.lsf_dem,
@@ -1394,6 +1397,7 @@ class SetsmTile(object):
 
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
+
 
     def get_dem_info(self):
 

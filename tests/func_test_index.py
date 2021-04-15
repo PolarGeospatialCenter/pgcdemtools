@@ -111,8 +111,7 @@ class TestIndexerIO(unittest.TestCase):
             (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
             (self.scene_dir, self.test_str, '', self.scene_count * 2,
              'Dst GDB layer exists.  Use the --overwrite or --append options.'),  # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite --check', self.scene_count, 'Removing old index'),
-        # test overwrite
+            (self.scene_dir, self.test_str, '--overwrite --check', self.scene_count, 'Removing old index'), # test overwrite
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -166,10 +165,8 @@ class TestIndexerIO(unittest.TestCase):
             (self.scene_dir, self.pg_test_str, '--append', self.scene_count * 2, 'Done', 2),  # test append
             (self.scene_dir, self.pg_test_str, '', self.scene_count * 2,
              'Dst DB layer exists.  Use the --overwrite or --append options.', 2),  # test error meeasge on existing
-            (self.scene_dir, self.pg_test_str, '--overwrite --check', self.scene_count, 'Removing old index', 2),
-            # test overwrite
-            (self.scenedsp_dir, self.pg_test_str, '--overwrite', self.scenedsp_count, 'Done', 2),
-            # test as 2m_dsp record
+            (self.scene_dir, self.pg_test_str, '--overwrite --check', self.scene_count, 'Removing old index', 2), # test overwrite
+            (self.scenedsp_dir, self.pg_test_str, '--overwrite', self.scenedsp_count, 'Done', 2), # test as 2m_dsp record
             (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-original-res', self.scenedsp_count, 'Done', 0.5),
         )
 
@@ -258,7 +255,6 @@ class TestIndexerIO(unittest.TestCase):
             (self.scenedsp_dir, self.test_str, '', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
             (self.scenedsp_dir, self.test_str, '--overwrite --dsp-original-res --check', self.scenedsp_count, 'Done',
              0.5),  # test as 50cm record
-            # test as 50cm record
         )
 
         for i, o, options, result_cnt, msg, res in test_param_list:
@@ -427,10 +423,8 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
-            (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'),
-            # test index of masked strips
-            (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),
-        # test index of masked strips
+            (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'), # test index of masked strips
+            (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
         )
 
         strip_masks = {
@@ -515,14 +509,14 @@ class TestIndexerIO(unittest.TestCase):
 
         test_param_list = (
             # input, output, args, result feature count, message
-            (os.path.join(self.tile_dir, 'v3', '33_11'), self.test_str, '--project arcticdem', 3, 'Done'),
-            # test 100x100km tile at 3 resolutions
-            (os.path.join(self.tile_dir, 'v3', '33_11_quartertiles'), self.test_str, '--overwrite --project arcticdem',
-             4, 'Done'),  # test quartertiles formatted for release
-            (os.path.join(self.tile_dir, 'v4', '59_57'), self.test_str, '--overwrite --check --project arcticdem', 4,
-             'Done'),  # test v4 tiles, 2m
-            (os.path.join(self.tile_dir, 'v4', 'utm34n_60_06'), self.test_str, '--overwrite --project earthdem', 4,
-             'Done'),  # test v4 utm tiles, 2m
+            (os.path.join(self.tile_dir, 'v3', '33_11'), self.test_str,
+             '--project arcticdem', 3, 'Done'),  # test 100x100km tile at 3 resolutions
+            (os.path.join(self.tile_dir, 'v3', '33_11_quartertiles'), self.test_str,
+             '--overwrite --project arcticdem', 4, 'Done'),  # test quartertiles formatted for release
+            (os.path.join(self.tile_dir, 'v4', '59_57'), self.test_str,
+             '--overwrite --check --project arcticdem', 4, 'Done'),  # test v4 tiles, 2m
+            (os.path.join(self.tile_dir, 'v4', 'utm34n_60_06'), self.test_str,
+             '--overwrite --project earthdem', 4, 'Done'),  # test v4 utm tiles, 2m
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
