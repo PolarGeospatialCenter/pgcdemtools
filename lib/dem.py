@@ -25,7 +25,7 @@ logger.setLevel(logging.DEBUG)
 
 __all__ = [
     "SetsmDem",
-    "SetsmSceneDem",
+    "SetsmScene",
     "AspDem",
     "SetsmTile",
     "RegInfo"
@@ -1718,7 +1718,7 @@ def get_matchtag_density(matchtag, geom_area=None):
     data = utils.gdalReadAsArraySetsmSceneBand(b)
     err = gdal.GetLastErrorNo()
     if err != 0:
-        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(),self.srcfp))
+        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), matchtag))
     else:
         data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
         # If geom area is available, use that as the denominator to exclude collar pixes
