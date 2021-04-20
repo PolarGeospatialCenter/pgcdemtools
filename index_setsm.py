@@ -133,10 +133,6 @@ def main():
     src = args.src
     dst = args.dst
 
-    if args.write_json:
-        logger.info("Forcing indexer to use absolute paths for writing JSONs")
-        src = os.path.abspath(args.src)
-
     if args.overwrite and args.append:
         parser.error('--append and --overwrite are mutually exclusive')
 
@@ -207,6 +203,10 @@ def main():
 
         if args.epsg:
             logger.warning('--epsg and --dsp-original-res will be ignored with the --write-json option')
+
+    if args.write_json:
+        logger.info("Forcing indexer to use absolute paths for writing JSONs")
+        src = os.path.abspath(args.src)
 
     ## If not writing to JSON, get OGR driver, ds name, and layer name
     else:
