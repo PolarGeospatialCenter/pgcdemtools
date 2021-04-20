@@ -121,7 +121,7 @@ def main():
     parser.add_argument("--tnva-paths", action='store_true', default=False, help='Use Terranova path schema')
     parser.add_argument('--project', choices=PROJECTS.keys(), help='project name (required when writing tiles)')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
-
+    parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
 
     #### Parse Arguments
     args = parser.parse_args()
@@ -130,9 +130,12 @@ def main():
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
 
-    #src = os.path.abspath(args.src)
     src = args.src
     dst = args.dst
+
+    if args.write_json:
+        logger.info("Forcing indexer to use absolute paths for writing JSONs")
+        src = os.path.abspath(args.src)
 
     if args.overwrite and args.append:
         parser.error('--append and --overwrite are mutually exclusive')
@@ -218,9 +221,9 @@ def main():
 
         #### Get Config file contents
         try:
-            config = ConfigParser.SafeConfigParser()
-        except NameError:
             config = ConfigParser.ConfigParser()  # ConfigParser() replaces SafeConfigParser() in Python >=3.2
+        except NameError:
+            config = ConfigParser.SafeConfigParser()
         config.read(args.config)
 
         #### Get output DB connection if specified
@@ -346,6 +349,7 @@ def main():
     src_fps = []
     records = []
     logger.info('Identifying DEMs')
+
     if os.path.isfile(src):
         logger.info(src)
         src_fps.append(src)
@@ -469,7 +473,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             for groupid in groups:
                 for record in groups[groupid]:
                     i+=1
-                    progress(i,total,"features written")
+                    if not args.np:
+                        progress(i,total,"features written")
                     feat = ogr.Feature(layer.GetLayerDefn())
                     valid_record = True
 
