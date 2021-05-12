@@ -74,13 +74,21 @@ recordid_map = {
 
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dems/setsm'
 PGC_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
-CSS_PATH_PREFIX = '/css/nga-dems/data/pgc-dems/setsm'
+CSS_PATH_PREFIX = '/css/nga-dems/setsm'
 
 custom_path_prefixes = {
-    'BlackPearl': BP_PATH_PREFIX,
+    'BP': BP_PATH_PREFIX,
     'PGC': PGC_PATH_PREFIX,
     'CSS': CSS_PATH_PREFIX
 }
+
+DSP_OPTIONS = {
+    'dsp': 'record using current downsample product DEM res',
+    'orig': 'record using original pre-DSP DEM res',
+    'both': 'write a record for each'
+}
+
+DEFAULT_DSP_OPTION = 'dsp'
 
 # handle unicode in Python 3
 try:
@@ -107,8 +115,11 @@ def main():
                         help="config file (default is config.ini in script dir")
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
-    parser.add_argument('--dsp-original-res', action='store_true', default=False,
-                        help='write index of downsampled product (dsp) scenes as original resolution (mode=scene only)')
+    parser.add_argument('--dsp-record-mode', choices=DSP_OPTIONS.keys(), default=DEFAULT_DSP_OPTION,
+                        help='resolution mode for downsampled product (dsp) record (mode=scene only): {}'.format(
+                            DEFAULT_DSP_OPTION,
+                            ', '.join([k+': '+v for k,v in DSP_OPTIONS.items()])
+                        ))
     parser.add_argument('--status', help='custom value for status field')
     parser.add_argument('--include-registration', action='store_true', default=False,
                         help='include registration info if present (mode=strip and tile only)')
@@ -173,10 +184,7 @@ def main():
     if args.status and args.custom_paths == 'BP':
         parser.error("--custom_paths BP sets status field to 'tape' and cannot be used with --status")
 
-    if args.mode != 'scene' and args.dsp_original_res:
-        parser.error("--dsp-original-res is applicable only when mode = scene")
-
-    path_prefix = custom_path_prefixes[args.custom_paths]
+    path_prefix = custom_path_prefixes[args.custom_paths] if args.custom_paths else None
 
     #### Set up loggers
     lsh = logging.StreamHandler()
@@ -285,8 +293,8 @@ def main():
             if len(pairs) == 0:
                 logger.warning("Cannot get region-pair lookup")
 
-                if args.tnva_paths:
-                    logger.error("Region-pair lookup required for --tnva-paths option")
+                if args.custom_paths == 'PGC':
+                    logger.error("Region-pair lookup required for --custom_paths PGC option")
                     sys.exit()
 
         ## Save pickle if selected
@@ -374,7 +382,8 @@ def main():
             except RuntimeError as e:
                 logger.error( e )
             else:
-                if args.mode == 'scene' and not os.path.isfile(record.dspinfo) and args.dsp_original_res:
+                if args.mode == 'scene' and not os.path.isfile(record.dspinfo) and\
+                        args.dsp_record_mode in ['orig', 'both']:
                     logger.error("Record {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
                 else:
                     records.append(record)
@@ -433,7 +442,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     if args.status:
         status = args.status
-    elif args.bp_paths:
+    elif args.custom_paths == 'BP':
         status = 'tape'
     else:
         status = 'online'
@@ -473,368 +482,381 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             recordids = []
             invalid_record_cnt = 0
 
+            dsp_modes = ['orig','dsp'] if args.dsp_record_mode == 'both' else [args.dsp_record_mode]
+
             for groupid in groups:
                 for record in groups[groupid]:
-                    i+=1
-                    if not args.np:
-                        progress(i,total,"features written")
-                    feat = ogr.Feature(layer.GetLayerDefn())
-                    valid_record = True
+                    for dsp_mode in dsp_modes:
+                        i+=1
+                        if not args.np:
+                            progress(i, total * len(dsp_modes), "features written")
+                        feat = ogr.Feature(layer.GetLayerDefn())
+                        valid_record = True
 
-                    ## Set attributes
-                    ## Fields for scene DEM
-                    if args.mode == 'scene':
+                        ## Set attributes
+                        ## Fields for scene DEM
+                        if args.mode == 'scene':
 
-                        attrib_map = {
-                            'SCENEDEMID': record.dsp_sceneid if (args.dsp_original_res and record.is_dsp) else record.sceneid,
-                            'STRIPDEMID': record.dsp_stripdemid if (args.dsp_original_res and record.is_dsp) else record.stripdemid,
-                            'STATUS': status,
-                            'PAIRNAME': record.pairname,
-                            'SENSOR1': record.sensor1,
-                            'SENSOR2': record.sensor2,
-                            'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
-                            'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
-                            'CATALOGID1': record.catid1,
-                            'CATALOGID2': record.catid2,
-                            'HAS_LSF': int(os.path.isfile(record.lsf_dem)),
-                            'HAS_NONLSF': int(os.path.isfile(record.dem)),
-                            'IS_XTRACK': int(record.is_xtrack),
-                            'IS_DSP': 0 if args.dsp_original_res else int(record.is_dsp),
-                            'ALGM_VER': record.algm_version,
-                            'PROJ4': record.proj4,
-                            'EPSG': record.epsg,
-                        }
+                            attrib_map = {
+                                'SCENEDEMID': record.dsp_sceneid if (dsp_mode == 'orig' and record.is_dsp) else record.sceneid,
+                                'STRIPDEMID': record.dsp_stripdemid if (dsp_mode == 'orig' and record.is_dsp) else record.stripdemid,
+                                'STATUS': status,
+                                'PAIRNAME': record.pairname,
+                                'SENSOR1': record.sensor1,
+                                'SENSOR2': record.sensor2,
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
+                                'CATALOGID1': record.catid1,
+                                'CATALOGID2': record.catid2,
+                                'HAS_LSF': int(os.path.isfile(record.lsf_dem)),
+                                'HAS_NONLSF': int(os.path.isfile(record.dem)),
+                                'IS_XTRACK': int(record.is_xtrack),
+                                'IS_DSP': 0 if dsp_mode == 'orig' else int(record.is_dsp),
+                                'ALGM_VER': record.algm_version,
+                                'PROJ4': record.proj4,
+                                'EPSG': record.epsg,
+                            }
 
-                        attr_pfx = 'dsp_' if args.dsp_original_res else ''
-                        for k in record.filesz_attrib_map:
-                            attrib_map[k.upper()] = getattr(record,'{}{}'.format(attr_pfx,k))
+                            attr_pfx = 'dsp_' if dsp_mode == 'orig' else ''
+                            for k in record.filesz_attrib_map:
+                                attrib_map[k.upper()] = getattr(record,'{}{}'.format(attr_pfx,k))
 
-                        # Test if filesz attr is valid for dsp original res records
-                        if args.dsp_original_res:
-                            if attrib_map['FILESZ_DEM'] is None:
-                                logger.error(
-                                    "Original res filesz_dem is empty for {}. Record skipped".format(record.sceneid))
-                                valid_record = False
-                            elif attrib_map['FILESZ_DEM'] == 0:
+                            # Test if filesz attr is valid for dsp original res records
+                            if dsp_mode == 'orig':
+                                if attrib_map['FILESZ_DEM'] is None:
+                                    logger.error(
+                                        "Original res filesz_dem is empty for {}. Record skipped".format(record.sceneid))
+                                    valid_record = False
+                                elif attrib_map['FILESZ_DEM'] == 0:
+                                    logger.warning(
+                                        "Original res filesz_dem is 0 for {}. Record will still be written".format(record.sceneid))
+
+                            # Test if filesz attr is valid for normal records
+                            elif not attrib_map['FILESZ_DEM'] and not attrib_map['FILESZ_LSF']:
                                 logger.warning(
-                                    "Original res filesz_dem is 0 for {}. Record will still be written".format(record.sceneid))
-
-                        # Test if filesz attr is valid for normal records
-                        elif not attrib_map['FILESZ_DEM'] and not attrib_map['FILESZ_LSF']:
-                            logger.warning(
-                                "DEM and LSF DEM file size is zero or null for {}. Record will still be written".format(record.sceneid))
-
-                        # Set region
-                        try:
-                            region = pairs[record.pairname]
-                        except KeyError as e:
-                            region = None
-                        else:
-                            attrib_map['REGION'] = region
-
-                        if path_prefix:
-                            if args.custom_paths == 'BP':
-                                # https://blackpearl-data2.pgc.umn.edu/dem/setsm/scene/WV02/2015/05/
-                                # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
-                                custom_path = "{}/{}/{}/{}/{}.tar".format(
-                                    args.mode,               # mode (scene, strip, tile)
-                                    record.pairname[:4],     # sensor
-                                    record.pairname[5:9],    # year
-                                    record.pairname[9:11],   # month
-                                    groupid                  # mode-specific group ID
-                                )
-
-                            elif args.custom_paths == 'PGC':
-                                # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
-                                # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
-                                # WV01_20200630_10200100991E2C00_102001009A862700_504471479080_01_P001_504471481090_01_P001_2_meta.txt
-
-                                if not region:
-                                    logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
-                                    valid_record = False
-
-                                else:
-                                    pretty_project = PROJECTS[region.split('_')[0]]
-                                    res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
-
-                                    custom_path = "{}/{}/region/{}/scenes/{}/{}/{}".format(
-                                        path_prefix,
-                                        pretty_project,         # project (e.g. ArcticDEM)
-                                        region,                 # region
-                                        res_dir,                # e.g. 2m, 50cm, 2m_dsp
-                                        groupid,                # strip ID
-                                        record.srcfn            # file name (meta.txt)
-                                    )
-
-                            elif args.custom_paths == 'CSS':
-                                # example
-                                custom_path = "{}/{}/{}/{}/{}/{}".format(
-                                    args.mode,  # mode (scene, strip, tile)
-                                    record.pairname[:4],  # sensor
-                                    record.pairname[5:9],  # year
-                                    record.pairname[9:11],  # month
-                                    groupid,  # mode-specific group ID
-                                    record.srcfn  # file name (meta.txt)
-                                )
-
-                            else:
-                                logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    "DEM and LSF DEM file size is zero or null for {}. Record skipped".format(record.sceneid))
                                 valid_record = False
 
-                    ## Fields for strip DEM
-                    if args.mode == 'strip':
-                        attrib_map = {
-                            'DEM_ID': record.stripid,
-                            'STRIPDEMID': record.stripdemid,
-                            'PAIRNAME': record.pairname,
-                            'SENSOR1': record.sensor1,
-                            'SENSOR2': record.sensor2,
-                            'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
-                            'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
-                            'CATALOGID1': record.catid1,
-                            'CATALOGID2': record.catid2,
-                            'IS_LSF': int(record.is_lsf),
-                            'IS_XTRACK': int(record.is_xtrack),
-                            'EDGEMASK': int(record.mask_tuple[0]),
-                            'WATERMASK': int(record.mask_tuple[1]),
-                            'CLOUDMASK': int(record.mask_tuple[2]),
-                            'ALGM_VER': record.algm_version,
-                            'FILESZ_DEM': record.filesz_dem,
-                            'FILESZ_MT': record.filesz_mt,
-                            'FILESZ_OR': record.filesz_or,
-                            'FILESZ_OR2': record.filesz_or2,
-                            'PROJ4': record.proj4,
-                            'EPSG': record.epsg,
-                            'GEOCELL': record.geocell,
-                        }
-
-                        ## Set region
-                        try:
-                            region = pairs[record.pairname]
-                        except KeyError as e:
-                            pass
-                        else:
-                            attrib_map['REGION'] = region
-
-                        if record.version:
-                            attrib_map['REL_VER'] = record.version
-                        if record.density:
-                            attrib_map['DENSITY'] = record.density
-                        else:
-                            attrib_map['DENSITY'] = -9999
-
-                        ## If registration info exists
-                        if args.include_registration:
-                            if len(record.reginfo_list) > 0:
-                                for reginfo in record.reginfo_list:
-                                    if reginfo.name == 'ICESat':
-                                        attrib_map["DX"] = reginfo.dx
-                                        attrib_map["DY"] = reginfo.dy
-                                        attrib_map["DZ"] = reginfo.dz
-                                        attrib_map["REG_SRC"] = 'ICESat'
-                                        attrib_map["NUM_GCPS"] = reginfo.num_gcps
-                                        attrib_map["MEANRESZ"] = reginfo.mean_resid_z
-
-                        ## Set path folders for use if path_prefix specified
-                        if path_prefix:
-                            if args.custom_paths == 'BP':
-                                custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
-                                    path_prefix,
-                                    args.mode,               # mode (scene, strip, tile)
-                                    record.pairname[:4],     # sensor
-                                    record.pairname[5:9],    # year
-                                    record.pairname[9:11],   # month
-                                    groupid                  # mode-specific group ID
-                                )
-
-                            elif args.custom_paths == 'PGC':
-                                # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
-                                # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
-                                # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
-
-                                if not region:
-                                    logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
-                                    valid_record = False
-
-                                else:
-                                    pretty_project = PROJECTS[region.split('_')[0]]
-                                    res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
-
-                                    custom_path = "{}/{}/region/{}/strips_v4/{}/{}/{}".format(
-                                        path_prefix,
-                                        pretty_project,         # project (e.g. ArcticDEM)
-                                        region,                 # region
-                                        res_dir,                # e.g. 2m, 50cm, 2m_dsp
-                                        groupid,                # strip ID
-                                        record.srcfn            # file name (meta.txt)
-                                    )
-
-                            elif args.custom_paths == 'CSS':
-                                # example
-                                custom_path = "{}/{}/{}/{}/{}/{}".format(
-                                    args.mode,  # mode (scene, strip, tile)
-                                    record.pairname[:4],  # sensor
-                                    record.pairname[5:9],  # year
-                                    record.pairname[9:11],  # month
-                                    groupid,  # mode-specific group ID
-                                    record.srcfn  # file name (meta.txt)
-                                )
-
-                            else:
-                                logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
-                                valid_record = False
-
-                    ## Fields for tile DEM
-                    if args.mode == 'tile':
-                        attrib_map = {
-                            'DEM_ID': record.tileid,
-                            'TILE': record.tilename,
-                            'NUM_COMP': record.num_components,
-                            'FILESZ_DEM': record.filesz_dem,
-                        }
-
-                        ## Optional attributes
-                        if record.version:
-                            attrib_map['REL_VER'] = record.version
-                            version = record.version
-                        else:
-                            version = 'novers'
-                        if record.density:
-                            attrib_map['DENSITY'] = record.density
-                        else:
-                            attrib_map['DENSITY'] = -9999
-
-                        if args.include_registration:
-                            if record.reg_src:
-                                attrib_map["REG_SRC"] = record.reg_src
-                                attrib_map["NUM_GCPS"] = record.num_gcps
-                            if record.mean_resid_z:
-                                attrib_map["MEANRESZ"] = record.mean_resid_z
-
-                        ## Set path folders for use if db_path_prefix specified
-                        if path_prefix:
-                            if args.custom_paths == 'BP':
-                                custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
-                                    path_prefix,
-                                    record.mode,               # mode (scene, strip, tile)
-                                    args.project.lower(),    # project
-                                    record.res,              # resolution
-                                    version,                 # version
-                                    groupid                  # mode-specific group ID
-                                )
-                            else:
-                                logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
-                                valid_record = False
-
-                    ## Common fields
-                    if valid_record:
-                        ## Common Attributes across all modes
-                        attrib_map['INDEX_DATE'] = datetime.datetime.today().strftime('%Y-%m-%d')
-                        attrib_map['CR_DATE'] = record.creation_date.strftime('%Y-%m-%d')
-                        attrib_map['ND_VALUE'] = record.ndv
-                        if args.dsp_original_res:
-                            res = record.dsp_dem_res
-                        else:
-                            res = (record.xres + record.yres) / 2.0
-                        attrib_map['DEM_RES'] = res
-
-                        ## Set location
-                        if path_prefix:
-                            location = custom_path
-                        else:
-                            location = record.srcfp
-                        attrib_map['LOCATION'] = location
-
-                        ## Transform and write geom
-                        src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-                        src_srs.ImportFromWkt(record.proj)
-
-                        if not record.geom:
-                            logger.error('No valid geom found, feature skipped: {}'.format(record.sceneid))
-                            valid_record = False
-                        else:
-                            temp_geom = record.geom.Clone()
-                            transform = osr.CoordinateTransformation(src_srs,tgt_srs)
+                            # Set region
                             try:
-                                temp_geom.Transform(transform)
-                            except TypeError as e:
-                                logger.error('Geom transformation failed, feature skipped: {} {}'.format(e, record.sceneid))
+                                region = pairs[record.pairname]
+                            except KeyError as e:
+                                region = None
+                            else:
+                                attrib_map['REGION'] = region
+
+                            if path_prefix:
+                                res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
+
+                                if args.custom_paths == 'BP':
+                                    # https://blackpearl-data2.pgc.umn.edu/dem/setsm/scene/WV02/2015/05/
+                                    # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
+                                    custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
+                                        path_prefix,
+                                        args.mode,               # mode (scene, strip, tile)
+                                        record.pairname[:4],     # sensor
+                                        record.pairname[5:9],    # year
+                                        record.pairname[9:11],   # month
+                                        groupid                  # mode-specific group ID
+                                    )
+
+                                elif args.custom_paths == 'PGC':
+                                    # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
+                                    # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
+                                    # WV01_20200630_10200100991E2C00_102001009A862700_
+                                    # 504471479080_01_P001_504471481090_01_P001_2_meta.txt
+
+                                    if not region:
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+                                        valid_record = False
+
+                                    else:
+                                        pretty_project = PROJECTS[region.split('_')[0]]
+
+                                        custom_path = "{}/{}/region/{}/scenes/{}/{}/{}".format(
+                                            path_prefix,
+                                            pretty_project,         # project (e.g. ArcticDEM)
+                                            region,                 # region
+                                            res_dir,                # e.g. 2m, 50cm, 2m_dsp
+                                            groupid,                # strip ID
+                                            record.srcfn            # file name (meta.txt)
+                                        )
+
+                                elif args.custom_paths == 'CSS':
+                                    # /css/nga-dems/setsm/scene/2m/2021/04/21/
+                                    # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
+                                    custom_path = "{}/{}/{}/{}/{}/{}/{}/{}".format(
+                                        path_prefix,
+                                        args.mode,  # mode (scene, strip, tile)
+                                        res_dir,  # e.g. 2m, 50cm, 2m_dsp
+                                        record.pairname[:4],  # sensor
+                                        record.pairname[5:9],  # year
+                                        record.pairname[9:11],  # month
+                                        groupid,  # mode-specific group ID
+                                        record.srcfn  # file name (meta.txt)
+                                    )
+
+                                else:
+                                    logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    valid_record = False
+
+                        ## Fields for strip DEM
+                        if args.mode == 'strip':
+                            attrib_map = {
+                                'DEM_ID': record.stripid,
+                                'STRIPDEMID': record.stripdemid,
+                                'PAIRNAME': record.pairname,
+                                'SENSOR1': record.sensor1,
+                                'SENSOR2': record.sensor2,
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
+                                'CATALOGID1': record.catid1,
+                                'CATALOGID2': record.catid2,
+                                'IS_LSF': int(record.is_lsf),
+                                'IS_XTRACK': int(record.is_xtrack),
+                                'EDGEMASK': int(record.mask_tuple[0]),
+                                'WATERMASK': int(record.mask_tuple[1]),
+                                'CLOUDMASK': int(record.mask_tuple[2]),
+                                'ALGM_VER': record.algm_version,
+                                'FILESZ_DEM': record.filesz_dem,
+                                'FILESZ_MT': record.filesz_mt,
+                                'FILESZ_OR': record.filesz_or,
+                                'FILESZ_OR2': record.filesz_or2,
+                                'PROJ4': record.proj4,
+                                'EPSG': record.epsg,
+                                'GEOCELL': record.geocell,
+                            }
+
+                            ## Set region
+                            try:
+                                region = pairs[record.pairname]
+                            except KeyError as e:
+                                pass
+                            else:
+                                attrib_map['REGION'] = region
+
+                            if record.version:
+                                attrib_map['REL_VER'] = record.version
+                            if record.density:
+                                attrib_map['DENSITY'] = record.density
+                            else:
+                                attrib_map['DENSITY'] = -9999
+
+                            ## If registration info exists
+                            if args.include_registration:
+                                if len(record.reginfo_list) > 0:
+                                    for reginfo in record.reginfo_list:
+                                        if reginfo.name == 'ICESat':
+                                            attrib_map["DX"] = reginfo.dx
+                                            attrib_map["DY"] = reginfo.dy
+                                            attrib_map["DZ"] = reginfo.dz
+                                            attrib_map["REG_SRC"] = 'ICESat'
+                                            attrib_map["NUM_GCPS"] = reginfo.num_gcps
+                                            attrib_map["MEANRESZ"] = reginfo.mean_resid_z
+
+                            ## Set path folders for use if path_prefix specified
+                            if path_prefix:
+                                if args.custom_paths == 'BP':
+                                    custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
+                                        path_prefix,
+                                        args.mode,               # mode (scene, strip, tile)
+                                        record.pairname[:4],     # sensor
+                                        record.pairname[5:9],    # year
+                                        record.pairname[9:11],   # month
+                                        groupid                  # mode-specific group ID
+                                    )
+
+                                elif args.custom_paths == 'PGC':
+                                    # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
+                                    # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
+                                    # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
+
+                                    if not region:
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+                                        valid_record = False
+
+                                    else:
+                                        pretty_project = PROJECTS[region.split('_')[0]]
+                                        res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
+
+                                        custom_path = "{}/{}/region/{}/strips_v4/{}/{}/{}".format(
+                                            path_prefix,
+                                            pretty_project,         # project (e.g. ArcticDEM)
+                                            region,                 # region
+                                            res_dir,                # e.g. 2m, 50cm, 2m_dsp
+                                            groupid,                # strip ID
+                                            record.srcfn            # file name (meta.txt)
+                                        )
+
+                                elif args.custom_paths == 'CSS':
+                                    # /css/nga-dems/setsm/scene/2m/2021/04/21/
+                                    # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
+                                    custom_path = "{}/{}/{}/{}/{}/{}/{}/{}".format(
+                                        path_prefix,
+                                        args.mode,  # mode (scene, strip, tile)
+                                        res_dir,  # e.g. 2m, 50cm, 2m_dsp
+                                        record.pairname[:4],  # sensor
+                                        record.pairname[5:9],  # year
+                                        record.pairname[9:11],  # month
+                                        groupid,  # mode-specific group ID
+                                        record.srcfn  # file name (meta.txt)
+                                    )
+
+                                else:
+                                    logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    valid_record = False
+
+                        ## Fields for tile DEM
+                        if args.mode == 'tile':
+                            attrib_map = {
+                                'DEM_ID': record.tileid,
+                                'TILE': record.tilename,
+                                'NUM_COMP': record.num_components,
+                                'FILESZ_DEM': record.filesz_dem,
+                            }
+
+                            ## Optional attributes
+                            if record.version:
+                                attrib_map['REL_VER'] = record.version
+                                version = record.version
+                            else:
+                                version = 'novers'
+                            if record.density:
+                                attrib_map['DENSITY'] = record.density
+                            else:
+                                attrib_map['DENSITY'] = -9999
+
+                            if args.include_registration:
+                                if record.reg_src:
+                                    attrib_map["REG_SRC"] = record.reg_src
+                                    attrib_map["NUM_GCPS"] = record.num_gcps
+                                if record.mean_resid_z:
+                                    attrib_map["MEANRESZ"] = record.mean_resid_z
+
+                            ## Set path folders for use if db_path_prefix specified
+                            if path_prefix:
+                                if args.custom_paths == 'BP':
+                                    custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
+                                        path_prefix,
+                                        record.mode,               # mode (scene, strip, tile)
+                                        args.project.lower(),    # project
+                                        record.res,              # resolution
+                                        version,                 # version
+                                        groupid                  # mode-specific group ID
+                                    )
+                                else:
+                                    logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    valid_record = False
+
+                        ## Common fields
+                        if valid_record:
+                            ## Common Attributes across all modes
+                            attrib_map['INDEX_DATE'] = datetime.datetime.today().strftime('%Y-%m-%d')
+                            attrib_map['CR_DATE'] = record.creation_date.strftime('%Y-%m-%d')
+                            attrib_map['ND_VALUE'] = record.ndv
+                            if dsp_mode == 'orig':
+                                res = record.dsp_dem_res
+                            else:
+                                res = (record.xres + record.yres) / 2.0
+                            attrib_map['DEM_RES'] = res
+
+                            ## Set location
+                            if path_prefix:
+                                location = custom_path
+                            else:
+                                location = record.srcfp
+                            attrib_map['LOCATION'] = location
+
+                            ## Transform and write geom
+                            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+                            src_srs.ImportFromWkt(record.proj)
+
+                            if not record.geom:
+                                logger.error('No valid geom found, feature skipped: {}'.format(record.sceneid))
                                 valid_record = False
                             else:
+                                temp_geom = record.geom.Clone()
+                                transform = osr.CoordinateTransformation(src_srs,tgt_srs)
+                                try:
+                                    temp_geom.Transform(transform)
+                                except TypeError as e:
+                                    logger.error('Geom transformation failed, feature skipped: {} {}'.format(e, record.sceneid))
+                                    valid_record = False
+                                else:
 
-                                ## Get centroid coordinates
-                                centroid = temp_geom.Centroid()
-                                if 'CENT_LAT' in fld_list:
-                                    attrib_map['CENT_LAT'] = centroid.GetY()
-                                    attrib_map['CENT_LON'] = centroid.GetX()
+                                    ## Get centroid coordinates
+                                    centroid = temp_geom.Centroid()
+                                    if 'CENT_LAT' in fld_list:
+                                        attrib_map['CENT_LAT'] = centroid.GetY()
+                                        attrib_map['CENT_LON'] = centroid.GetX()
 
-                                ## If srs is geographic and geom crosses 180, split geom into 2 parts
-                                if tgt_srs.IsGeographic:
+                                    ## If srs is geographic and geom crosses 180, split geom into 2 parts
+                                    if tgt_srs.IsGeographic:
 
-                                    ## Get Lat and Lon coords in arrays
-                                    lons = []
-                                    lats = []
-                                    ring = temp_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
-                                    for j in range(0, ring.GetPointCount()):
-                                        pt = ring.GetPoint(j)
-                                        lons.append(pt[0])
-                                        lats.append(pt[1])
+                                        ## Get Lat and Lon coords in arrays
+                                        lons = []
+                                        lats = []
+                                        ring = temp_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
+                                        for j in range(0, ring.GetPointCount()):
+                                            pt = ring.GetPoint(j)
+                                            lons.append(pt[0])
+                                            lats.append(pt[1])
 
-                                    ## Test if image crosses 180
-                                    if max(lons) - min(lons) > 180:
-                                        split_geom = wrap_180(temp_geom)
-                                        feat_geom = split_geom
+                                        ## Test if image crosses 180
+                                        if max(lons) - min(lons) > 180:
+                                            split_geom = wrap_180(temp_geom)
+                                            feat_geom = split_geom
+                                        else:
+                                            mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                            feat_geom = mp_geom
+
                                     else:
                                         mp_geom = ogr.ForceToMultiPolygon(temp_geom)
                                         feat_geom = mp_geom
 
+                        ## Write feature
+                        if valid_record:
+                            for fld,val in attrib_map.items():
+                                if fld in fwidths:
+                                    if isinstance(val, str) and len(val) > fwidths[fld]:
+                                        logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
+                                            val, fld, fwidths[fld]
+                                        ))
+                                        valid_record = False
                                 else:
-                                    mp_geom = ogr.ForceToMultiPolygon(temp_geom)
-                                    feat_geom = mp_geom
-
-                    ## Write feature
-                    if valid_record:
-                        for fld,val in attrib_map.items():
-                            if fld in fwidths:
-                                if isinstance(val, str) and len(val) > fwidths[fld]:
-                                    logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
-                                        val, fld, fwidths[fld]
-                                    ))
+                                    logger.warning("Field {} is not in target table. Feature skipped".format(fld))
                                     valid_record = False
+
+                                if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
+                                    fld = fld.encode('utf-8')
+                                    val = val if not isinstance(val, unicode) else val.encode('utf-8')
+                                feat.SetField(fld, val)
+                            feat.SetGeometry(feat_geom)
+
+                            ## Add new feature to layer
+                            if not valid_record:
+                                invalid_record_cnt += 1
                             else:
-                                logger.warning("Field {} is not in target table. Feature skipped".format(fld))
-                                valid_record = False
+                                if not args.dryrun:
+                                    # Store record identifiers for later checking
+                                    recordids.append(recordid_map[args.mode].format(**attrib_map))
 
-                            if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
-                                fld = fld.encode('utf-8')
-                                val = val if not isinstance(val, unicode) else val.encode('utf-8')
-                            feat.SetField(fld, val)
-                        feat.SetGeometry(feat_geom)
-
-                        ## Add new feature to layer
-                        if not valid_record:
-                            invalid_record_cnt += 1
-                        else:
-                            if not args.dryrun:
-                                # Store record identifiers for later checking
-                                recordids.append(recordid_map[args.mode].format(**attrib_map))
-
-                                # Append record
-                                err.err_level = gdal.CE_None
-                                try:
-                                    if ogr_driver_str in ('PostgreSQL'):
-                                        layer.StartTransaction()
-                                        layer.CreateFeature(feat)
-                                        layer.CommitTransaction()
+                                    # Append record
+                                    err.err_level = gdal.CE_None
+                                    try:
+                                        if ogr_driver_str in ('PostgreSQL'):
+                                            layer.StartTransaction()
+                                            layer.CreateFeature(feat)
+                                            layer.CommitTransaction()
+                                        else:
+                                            layer.CreateFeature(feat)
+                                    except Exception as e:
+                                        raise e
                                     else:
-                                        layer.CreateFeature(feat)
-                                except Exception as e:
-                                    raise e
-                                else:
-                                    if err.err_level >= gdal.CE_Warning:
-                                        raise RuntimeError(err.err_level, err.err_no, err.err_msg)
-                                finally:
-                                    gdal.PopErrorHandler()
+                                        if err.err_level >= gdal.CE_Warning:
+                                            raise RuntimeError(err.err_level, err.err_no, err.err_msg)
+                                    finally:
+                                        gdal.PopErrorHandler()
 
             if invalid_record_cnt > 0:
                 logger.info("{} invalid records skipped".format(invalid_record_cnt))

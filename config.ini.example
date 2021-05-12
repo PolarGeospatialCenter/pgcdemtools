@@ -1,0 +1,9 @@
+# Config file for user specific info
+
+[connection_name]
+host = dbname.univ.edu
+name = dem
+port = 5432
+schema= dem
+user = myusername
+pw = mypassword

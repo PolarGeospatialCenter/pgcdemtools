@@ -65,24 +65,28 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
-            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
-            (self.scene_dir, self.test_str, '', self.scene_count * 2,
-             'Dst shapefile exists.  Use the --overwrite or --append options.'),  # test error meeasge on existing
-            (self.scene_dir, self.test_str, '--overwrite --check', self.scene_count, 'Removing old index'),
-        # test overwrite
+            (self.scene_dir, self.test_str, '--skip-region-lookup', self.scene_count, 'Done'),  # test creation
+            (self.scene_dir, self.test_str, '--skip-region-lookup --append', self.scene_count * 2, 'Done'),  # test append
+            (self.scene_dir, self.test_str, '--skip-region-lookup', self.scene_count * 2,
+             'Dst shapefile exists.  Use the --overwrite or --append options.'),  # test error message on existing
+            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --check', self.scene_count, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '--overwrite --custom-paths BP', self.scene_count, 'Done'), # test BP paths
+            (self.scene_dir, self.test_str, '--overwrite --custom-paths PGC', self.scene_count,
+             'Done'),  # test BP paths
+            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
+             'Done'),  # test BP paths
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
-            cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
+            cmd = 'python index_setsm.py {} {} {}'.format(
                 i,
                 o,
                 options
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
-            # print(se)
-            # print(so)
+            print(se)
+            print(so)
 
             ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
@@ -100,6 +104,7 @@ class TestIndexerIO(unittest.TestCase):
             # Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
+    @unittest.skip("test")
     def testOutputGdb(self):
 
         self.test_str = os.path.join(self.output_dir, 'test.gdb', 'test_lyr')
@@ -138,6 +143,7 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
+    @unittest.skip("test")
     def testOutputPostgres(self):
 
         ## Get config info
@@ -167,7 +173,7 @@ class TestIndexerIO(unittest.TestCase):
              'Dst DB layer exists.  Use the --overwrite or --append options.', 2),  # test error meeasge on existing
             (self.scene_dir, self.pg_test_str, '--overwrite --check', self.scene_count, 'Removing old index', 2), # test overwrite
             (self.scenedsp_dir, self.pg_test_str, '--overwrite', self.scenedsp_count, 'Done', 2), # test as 2m_dsp record
-            (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-original-res', self.scenedsp_count, 'Done', 0.5),
+            (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-record-mode orig', self.scenedsp_count, 'Done', 0.5),
         )
 
         ## Ensure test layer does not exist on DB
@@ -215,6 +221,7 @@ class TestIndexerIO(unittest.TestCase):
                 ds.DeleteLayer(i)
                 break
 
+    # @unittest.skip("test")
     def testScene50cm(self):
 
         ## Build shp
@@ -247,14 +254,18 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
+    # @unittest.skip("test")
     def testSceneDsp(self):
 
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scenedsp_dir, self.test_str, '', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
-            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-original-res --check', self.scenedsp_count, 'Done',
+            (self.scenedsp_dir, self.test_str, '--dsp-record-mode dsp', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode orig --check', self.scenedsp_count, 'Done',
              0.5),  # test as 50cm record
+            (
+            self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --check', self.scenedsp_count*2, 'Done',
+            None),  # test as 50cm and 2m records
         )
 
         for i, o, options, result_cnt, msg, res in test_param_list:
@@ -280,19 +291,24 @@ class TestIndexerIO(unittest.TestCase):
                 scenedemid = feat.GetField('SCENEDEMID')
                 stripdemid = feat.GetField('STRIPDEMID')
                 location = feat.GetField('LOCATION')
-                self.assertEqual(feat.GetField('DEM_RES'), res)
                 scenedemid_lastpart = scenedemid.split('_')[-1]
                 location_lastpart = location.split('_')[-2]
-                self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
                 if '-' in location_lastpart:
                     self.assertEqual(scenedemid_lastpart.split('-')[1], location_lastpart.split('-')[1])
-                self.assertTrue(res_str[res] in stripdemid)
-                self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+                if res:
+                    self.assertEqual(feat.GetField('DEM_RES'), res)
+                    self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
+                    self.assertTrue(res_str[res] in stripdemid)
+                    self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+                self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
+                self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
+
             ds, layer = None, None
 
             # Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
+    # @unittest.skip("test")
     def testSceneJson(self):
 
         ## Test json creation
@@ -369,11 +385,13 @@ class TestIndexerIO(unittest.TestCase):
         self.assertEqual(cnt, self.scene_count)
         ds, layer = None, None
 
+    # @unittest.skip("test")
     def testSceneDspJson(self):
 
         test_param_list = (
-            ('', 2.0),
-            ('--dsp-original-res --overwrite', 0.5),
+            ('', self.scenedsp_count, 2.0),
+            ('--dsp-record-mode orig --overwrite', self.scenedsp_count, 0.5),
+            ('--dsp-record-mode both --overwrite', self.scenedsp_count * 2, None),
         )
 
         ## Test json creation
@@ -391,7 +409,7 @@ class TestIndexerIO(unittest.TestCase):
 
         ## Test json read
         test_shp = os.path.join(self.output_dir, 'test.shp')
-        for options, res in test_param_list:
+        for options, result_cnt, res in test_param_list:
             cmd = 'python index_setsm.py {} {} {} --skip-region-lookup --read-json'.format(
                 self.output_dir,
                 test_shp,
@@ -407,17 +425,22 @@ class TestIndexerIO(unittest.TestCase):
             layer = ds.GetLayer()
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
-            self.assertEqual(cnt, self.scenedsp_count)
+            self.assertEqual(cnt, result_cnt)
             feat = layer.GetFeature(1)
             scenedemid = feat.GetField('SCENEDEMID')
             stripdemid = feat.GetField('STRIPDEMID')
-            self.assertEqual(feat.GetField('DEM_RES'), res)
             scenedemid_lastpart = scenedemid.split('_')[-1]
-            self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
-            self.assertTrue(res_str[res] in stripdemid)
-            self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+            if res:
+                self.assertEqual(feat.GetField('DEM_RES'), res)
+                self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
+                self.assertTrue(res_str[res] in stripdemid)
+                self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
+            self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
+            self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
+
             ds, layer = None, None
 
+    # @unittest.skip("test")
     def testStrip(self):
 
         test_param_list = (
@@ -468,6 +491,7 @@ class TestIndexerIO(unittest.TestCase):
             ## Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
+    # @unittest.skip("test")
     def testStripJson(self):
         ## Test json creation
         cmd = 'python index_setsm.py {} {} --mode strip --write-json'.format(
@@ -505,6 +529,7 @@ class TestIndexerIO(unittest.TestCase):
         self.assertEqual(cnt, self.strip_count)
         ds, layer = None, None
 
+    # @unittest.skip("test")
     def testTile(self):
 
         test_param_list = (
@@ -542,6 +567,7 @@ class TestIndexerIO(unittest.TestCase):
             ## Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
+    # @unittest.skip("test")
     def testTileJson(self):
         ## Test json creation
         cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --write-json'.format(
@@ -581,6 +607,7 @@ class TestIndexerIO(unittest.TestCase):
         self.assertEqual(cnt, 3)
         ds, layer = None, None
 
+    # @unittest.skip("test")
     def testTilev4Json(self):
         ## Test json creation
         cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --write-json'.format(
@@ -618,6 +645,7 @@ class TestIndexerIO(unittest.TestCase):
         self.assertEqual(cnt, 4)
         ds, layer = None, None
 
+    # @unittest.skip("test")
     def testTileJson_qtile(self):
         ## Test json creation
         cmd = 'python index_setsm.py {} {} --mode tile --project arcticdem --write-json'.format(
