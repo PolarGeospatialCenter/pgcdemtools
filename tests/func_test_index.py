@@ -69,12 +69,14 @@ class TestIndexerIO(unittest.TestCase):
             (self.scene_dir, self.test_str, '--skip-region-lookup --append', self.scene_count * 2, 'Done'),  # test append
             (self.scene_dir, self.test_str, '--skip-region-lookup', self.scene_count * 2,
              'Dst shapefile exists.  Use the --overwrite or --append options.'),  # test error message on existing
-            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --check', self.scene_count, 'Removing old index'), # test overwrite
+            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --check', self.scene_count, 'Removing old index'), # test overwrite abd check
             (self.scene_dir, self.test_str, '--overwrite --custom-paths BP', self.scene_count, 'Done'), # test BP paths
             (self.scene_dir, self.test_str, '--overwrite --custom-paths PGC', self.scene_count,
              'Done'),  # test BP paths
             (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
              'Done'),  # test BP paths
+            (self.scene_dir, self.test_str, '--dsp-record-mode both --skip-region-lookup --overwrite',
+             self.scene_count, 'Done'),  # test dsp-record-mode both has no effect when record is not dsp
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -85,8 +87,8 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
-            print(se)
-            print(so)
+            # print(se)
+            # print(so)
 
             ## Test if ds exists and has correct number of records
             self.assertTrue(os.path.isfile(o))
@@ -104,7 +106,7 @@ class TestIndexerIO(unittest.TestCase):
             # Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
-    @unittest.skip("test")
+    # @unittest.skip("test")
     def testOutputGdb(self):
 
         self.test_str = os.path.join(self.output_dir, 'test.gdb', 'test_lyr')
@@ -143,7 +145,7 @@ class TestIndexerIO(unittest.TestCase):
             ##Test if stdout has proper error
             self.assertIn(msg, se.decode())
 
-    @unittest.skip("test")
+    # @unittest.skip("test")
     def testOutputPostgres(self):
 
         ## Get config info
@@ -261,11 +263,12 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.scenedsp_dir, self.test_str, '--dsp-record-mode dsp', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
-            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode orig --check', self.scenedsp_count, 'Done',
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode orig', self.scenedsp_count, 'Done',
              0.5),  # test as 50cm record
-            (
-            self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --check', self.scenedsp_count*2, 'Done',
-            None),  # test as 50cm and 2m records
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both', self.scenedsp_count*2,
+            'Done', None),  # test as 50cm and 2m records
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --status-dsp-record-mode-orig aws',
+            self.scenedsp_count * 2, 'Done', None),  # test as 50cm and 2m records with custom status
         )
 
         for i, o, options, result_cnt, msg, res in test_param_list:
@@ -302,6 +305,8 @@ class TestIndexerIO(unittest.TestCase):
                     self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
                 self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
                 self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
+                if '--status-dsp-record-mode-orig aws' in options:
+                    self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'online')
 
             ds, layer = None, None
 

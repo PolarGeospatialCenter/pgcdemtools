@@ -121,6 +121,7 @@ def main():
                             ', '.join([k+': '+v for k,v in DSP_OPTIONS.items()])
                         ))
     parser.add_argument('--status', help='custom value for status field')
+    parser.add_argument('--status-dsp-record-mode-orig', help='custom value for status field when dsp-record-mode is set to "orig"')
     parser.add_argument('--include-registration', action='store_true', default=False,
                         help='include registration info if present (mode=strip and tile only)')
     parser.add_argument('--search-masked', action='store_true', default=False,
@@ -182,7 +183,7 @@ def main():
             parser.error("Pickle file must be an existing file")
 
     if args.status and args.custom_paths == 'BP':
-        parser.error("--custom_paths BP sets status field to 'tape' and cannot be used with --status")
+        parser.error("--custom_paths BP sets status field to 'tape' and cannot be used with --status.  For dsp-record-mode=orig custom status, use --status-dsp-record-mode-orig")
 
     path_prefix = custom_path_prefixes[args.custom_paths] if args.custom_paths else None
 
@@ -293,6 +294,8 @@ def main():
             if len(pairs) == 0:
                 logger.warning("Cannot get region-pair lookup")
 
+                # TODO is custom paths = BP check needed here or should
+                #  we reconfgure the whole thing to use Danny's api?
                 if args.custom_paths == 'PGC':
                     logger.error("Region-pair lookup required for --custom_paths PGC option")
                     sys.exit()
@@ -365,9 +368,9 @@ def main():
         logger.info(src)
         src_fps.append(src)
     else:
-        for root,dirs,files in os.walk(src):
+        for root, dirs, files in os.walk(src, followlinks=True):
             for f in files:
-                if (f.endswith('.json') and args.read_json) or (f.endswith(suffix)):
+                if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
                     logger.debug(os.path.join(root,f))
                     src_fps.append(os.path.join(root,f))
 
@@ -382,9 +385,10 @@ def main():
             except RuntimeError as e:
                 logger.error( e )
             else:
-                if args.mode == 'scene' and not os.path.isfile(record.dspinfo) and\
-                        args.dsp_record_mode in ['orig', 'both']:
-                    logger.error("Record {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
+                ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
+                if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
+                        and args.dsp_record_mode in ['orig', 'both']:
+                    logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
                 else:
                     records.append(record)
 
@@ -447,6 +451,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
     else:
         status = 'online'
 
+    dsp_orig_status = args.status_dsp_record_mode_orig if args.status_dsp_record_mode_orig else status
+
     if ds is not None:
 
         ## Create table if it does not exist
@@ -487,6 +493,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             for groupid in groups:
                 for record in groups[groupid]:
                     for dsp_mode in dsp_modes:
+
+                        # skip writing a second "orig" record if the DEM is not a DSP DEM sene
+                        if args.mode == 'scene':
+                            if not record.is_dsp and dsp_mode == 'orig':
+                                continue
+
                         i+=1
                         if not args.np:
                             progress(i, total * len(dsp_modes), "features written")
@@ -498,9 +510,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         if args.mode == 'scene':
 
                             attrib_map = {
-                                'SCENEDEMID': record.dsp_sceneid if (dsp_mode == 'orig' and record.is_dsp) else record.sceneid,
-                                'STRIPDEMID': record.dsp_stripdemid if (dsp_mode == 'orig' and record.is_dsp) else record.stripdemid,
-                                'STATUS': status,
+                                'SCENEDEMID': record.dsp_sceneid if (dsp_mode == 'orig') else record.sceneid,
+                                'STRIPDEMID': record.dsp_stripdemid if (dsp_mode == 'orig') else record.stripdemid,
+                                'STATUS': dsp_orig_status if (dsp_mode == 'orig') else status,
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
                                 'SENSOR2': record.sensor2,
@@ -548,6 +560,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             if path_prefix:
                                 res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
+                                ## TODO set up region based BP paths
                                 if args.custom_paths == 'BP':
                                     # https://blackpearl-data2.pgc.umn.edu/dem/setsm/scene/WV02/2015/05/
                                     # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
