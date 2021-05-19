@@ -72,7 +72,7 @@ recordid_map = {
     'tile':  '{DEM_ID}|{TILE}|{LOCATION}|{INDEX_DATE}',
 }
 
-BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu/dems/setsm'
+BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu'
 PGC_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
 CSS_PATH_PREFIX = '/css/nga-dems/setsm'
 
@@ -174,6 +174,10 @@ def main():
     ## Check project
     if args.mode == 'tile' and not args.project:
         parser.error("--project option is required if when mode=tile")
+
+    ## Todo add Bp region lookup via API instead of Danco?
+    if args.skip_region_lookup and (args.custom_paths == 'PGC' or args.custom_paths == 'BP'):
+        logger.error('--skip-region-lookup is not compatible with --custom-paths = PGC or BP')
 
     if args.write_pickle:
         if not os.path.isdir(os.path.dirname(args.write_pickle)):
@@ -294,10 +298,8 @@ def main():
             if len(pairs) == 0:
                 logger.warning("Cannot get region-pair lookup")
 
-                # TODO is custom paths = BP check needed here or should
-                #  we reconfgure the whole thing to use Danny's api?
-                if args.custom_paths == 'PGC':
-                    logger.error("Region-pair lookup required for --custom_paths PGC option")
+                if args.custom_paths == 'PGC' or args.custom_path == 'BP':
+                    logger.error("Region-pair lookup required for --custom_paths PGC or BP option")
                     sys.exit()
 
         ## Save pickle if selected
@@ -551,7 +553,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             # Set region
                             try:
-                                region = pairs[record.pairname]
+                                region, bp_region = pairs[record.pairname]
                             except KeyError as e:
                                 region = None
                             else:
@@ -560,18 +562,25 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             if path_prefix:
                                 res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
-                                ## TODO set up region based BP paths
                                 if args.custom_paths == 'BP':
-                                    # https://blackpearl-data2.pgc.umn.edu/dem/setsm/scene/WV02/2015/05/
+                                    # https://blackpearl-data2.pgc.umn.edu/dem-scenes-2m-arceua/WV02/2015/05/
                                     # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
-                                    custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
-                                        path_prefix,
-                                        args.mode,               # mode (scene, strip, tile)
-                                        record.pairname[:4],     # sensor
-                                        record.pairname[5:9],    # year
-                                        record.pairname[9:11],   # month
-                                        groupid                  # mode-specific group ID
-                                    )
+
+                                    if not region:
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+                                        valid_record = False
+
+                                    else:
+                                        custom_path = "{}/dem-{}s-{}-{}/{}/{}/{}/{}.tar".format(
+                                            path_prefix,
+                                            args.mode,               # mode (scene, strip, tile)
+                                            record.res_str,
+                                            bp_region.split('-')[0],
+                                            record.pairname[:4],     # sensor
+                                            record.pairname[5:9],    # year
+                                            record.pairname[9:11],   # month
+                                            groupid                  # mode-specific group ID
+                                        )
 
                                 elif args.custom_paths == 'PGC':
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
@@ -642,7 +651,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             ## Set region
                             try:
-                                region = pairs[record.pairname]
+                                region, bp_region = pairs[record.pairname]
                             except KeyError as e:
                                 pass
                             else:
@@ -991,7 +1000,7 @@ def get_pair_region_dict(conn_info):
             logger.warning("Could not obtain public.pairname_with_earthdem_region layer")
             stereo_ds = None
         else:
-            pairs = {f["pairname"]:f["region_id"] for f in stereo_lyr}
+            pairs = {f["pairname"]:(f["region_id"],f["bp_region"]) for f in stereo_lyr}
 
     return pairs
 

@@ -70,11 +70,6 @@ class TestIndexerIO(unittest.TestCase):
             (self.scene_dir, self.test_str, '--skip-region-lookup', self.scene_count * 2,
              'Dst shapefile exists.  Use the --overwrite or --append options.'),  # test error message on existing
             (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --check', self.scene_count, 'Removing old index'), # test overwrite abd check
-            (self.scene_dir, self.test_str, '--overwrite --custom-paths BP', self.scene_count, 'Done'), # test BP paths
-            (self.scene_dir, self.test_str, '--overwrite --custom-paths PGC', self.scene_count,
-             'Done'),  # test BP paths
-            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
-             'Done'),  # test BP paths
             (self.scene_dir, self.test_str, '--dsp-record-mode both --skip-region-lookup --overwrite',
              self.scene_count, 'Done'),  # test dsp-record-mode both has no effect when record is not dsp
         )
@@ -101,6 +96,72 @@ class TestIndexerIO(unittest.TestCase):
                 srcfn = os.path.basename(feat.GetField('LOCATION'))
                 is_xtrack = 0 if srcfn.startswith(('WV', 'GE', 'QB')) else 1
                 self.assertEqual(feat.GetField('IS_XTRACK'), is_xtrack)
+            ds, layer = None, None
+
+            # Test if stdout has proper error
+            self.assertIn(msg, se.decode())
+
+    # @unittest.skip("test")
+    def testCustomPaths(self):
+
+        pairname_region_lookup = {
+            'WV02_20190419_103001008C4B0400_103001008EC59A00': ('arcticdem_05_greenland_northeast', 'arcgeu'),
+            'WV02_20190705_103001009505B700_10300100934D1000': ('arcticdem_10_canada_north_mainland', 'arcnam'),
+            'W1W1_20190426_102001008466F300_1020010089C2DB00': ('arcticdem_02_greenland_southeast', 'arcgeu')
+        }
+
+        PROJECTS = {
+            'arcticdem': 'ArcticDEM',
+            'rema': 'REMA',
+            'earthdem': 'EarthDEM',
+        }
+
+        ## Build shp
+        test_param_list = (
+            # input, output, args, result feature count, message
+            (self.scene_dir, self.test_str, '--custom-paths BP', self.scene_count, 'Done'), # test BP paths
+            (self.scene_dir, self.test_str, '--overwrite --custom-paths PGC', self.scene_count,
+             'Done'),  # test BP paths
+            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
+             'Done'),  # test BP paths
+            )
+
+        for i, o, options, result_cnt, msg in test_param_list:
+            cmd = 'python index_setsm.py {} {} {}'.format(
+                i,
+                o,
+                options
+            )
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (so, se) = p.communicate()
+            # print(se)
+            # print(so)
+
+            ## Test if ds exists and has correct number of records
+            self.assertTrue(os.path.isfile(o))
+            ds = ogr.Open(o, 0)
+            layer = ds.GetLayer()
+            self.assertIsNotNone(layer)
+            cnt = layer.GetFeatureCount()
+            self.assertEqual(cnt, result_cnt)
+            for feat in layer:
+                location = feat.GetField('LOCATION')
+                pairname = feat.GetField('PAIRNAME')
+                res = feat.GetField('DEM_RES')
+                res_str = '2m' if res == 2.0 else '50cm'
+                if '--custom-paths BP' in options:
+                    p = 'https://blackpearl-data2.pgc.umn.edu/dem-scenes-{}-{}/W'.format(
+                        res_str, pairname_region_lookup[pairname][1])
+                    self.assertTrue(location.startswith(p))
+                elif '--custom-paths PGC' in options:
+                    r = pairname_region_lookup[pairname][0]
+                    p = '/mnt/pgc/data/elev/dem/setsm/{}/region/{}/scenes/{}/W'.format(
+                        PROJECTS[r.split('_')[0]], r, res_str)
+                    self.assertTrue(location.startswith(p))
+                elif '--custom-paths CSS' in options:
+                    p = '/css/nga-dems/setsm/scene/{}/W'.format(res_str)
+                    self.assertTrue(location.startswith(p))
+
             ds, layer = None, None
 
             # Test if stdout has proper error
