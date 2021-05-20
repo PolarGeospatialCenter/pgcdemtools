@@ -97,10 +97,14 @@ except NameError:
     unicode = str
 
 
+class RawTextArgumentDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawTextHelpFormatter): pass
+
+
 def main():
 
     #### Set Up Arguments
     parser = argparse.ArgumentParser(
+        formatter_class=RawTextArgumentDefaultsHelpFormatter,
         description="build setsm DEM index"
         )
 
@@ -116,9 +120,8 @@ def main():
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
     parser.add_argument('--dsp-record-mode', choices=DSP_OPTIONS.keys(), default=DEFAULT_DSP_OPTION,
-                        help='resolution mode for downsampled product (dsp) record (mode=scene only): {}'.format(
-                            DEFAULT_DSP_OPTION,
-                            ', '.join([k+': '+v for k,v in DSP_OPTIONS.items()])
+                        help='resolution mode for downsampled product (dsp) record (mode=scene only):\n{}'.format(
+                            '\n'.join([k+': '+v for k,v in DSP_OPTIONS.items()])
                         ))
     parser.add_argument('--status', help='custom value for status field')
     parser.add_argument('--status-dsp-record-mode-orig', help='custom value for status field when dsp-record-mode is set to "orig"')
@@ -177,7 +180,7 @@ def main():
 
     ## Todo add Bp region lookup via API instead of Danco?
     if args.skip_region_lookup and (args.custom_paths == 'PGC' or args.custom_paths == 'BP'):
-        logger.error('--skip-region-lookup is not compatible with --custom-paths = PGC or BP')
+        parser.error('--skip-region-lookup is not compatible with --custom-paths = PGC or BP')
 
     if args.write_pickle:
         if not os.path.isdir(os.path.dirname(args.write_pickle)):
@@ -567,20 +570,21 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
 
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                            record.pairname))
                                         valid_record = False
 
                                     else:
-                                        custom_path = "{}/dem-{}s-{}-{}/{}/{}/{}/{}.tar".format(
+                                        bucket = 'dem-{}s-{}-{}'.format(
+                                            args.mode, record.res_str, bp_region.split('-')[0])
+                                        custom_path = '/'.join([
                                             path_prefix,
-                                            args.mode,               # mode (scene, strip, tile)
-                                            record.res_str,
-                                            bp_region.split('-')[0],
+                                            bucket,
                                             record.pairname[:4],     # sensor
                                             record.pairname[5:9],    # year
                                             record.pairname[9:11],   # month
-                                            groupid                  # mode-specific group ID
-                                        )
+                                            groupid+'.tar'           # mode-specific group ID
+                                        ])
 
                                 elif args.custom_paths == 'PGC':
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
@@ -589,25 +593,28 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # 504471479080_01_P001_504471481090_01_P001_2_meta.txt
 
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                            record.pairname))
                                         valid_record = False
 
                                     else:
                                         pretty_project = PROJECTS[region.split('_')[0]]
 
-                                        custom_path = "{}/{}/region/{}/scenes/{}/{}/{}".format(
+                                        custom_path = '/'.join([
                                             path_prefix,
                                             pretty_project,         # project (e.g. ArcticDEM)
+                                            'region',
                                             region,                 # region
+                                            'scenes',
                                             res_dir,                # e.g. 2m, 50cm, 2m_dsp
                                             groupid,                # strip ID
                                             record.srcfn            # file name (meta.txt)
-                                        )
+                                        ])
 
                                 elif args.custom_paths == 'CSS':
                                     # /css/nga-dems/setsm/scene/2m/2021/04/21/
                                     # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
-                                    custom_path = "{}/{}/{}/{}/{}/{}/{}/{}".format(
+                                    custom_path = '/'.join([
                                         path_prefix,
                                         args.mode,  # mode (scene, strip, tile)
                                         res_dir,  # e.g. 2m, 50cm, 2m_dsp
@@ -616,10 +623,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         record.pairname[9:11],  # month
                                         groupid,  # mode-specific group ID
                                         record.srcfn  # file name (meta.txt)
-                                    )
+                                    ])
 
                                 else:
-                                    logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    logger.error("Mode {} does not support the specified custom path option,\
+                                     skipping record".format(args.mode))
                                     valid_record = False
 
                         ## Fields for strip DEM
@@ -694,26 +702,29 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
 
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(record.pairname))
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                            record.pairname))
                                         valid_record = False
 
                                     else:
                                         pretty_project = PROJECTS[region.split('_')[0]]
                                         res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
-                                        custom_path = "{}/{}/region/{}/strips_v4/{}/{}/{}".format(
+                                        custom_path = '/'.join([
                                             path_prefix,
                                             pretty_project,         # project (e.g. ArcticDEM)
+                                            'region',
                                             region,                 # region
+                                            'strips_v4',
                                             res_dir,                # e.g. 2m, 50cm, 2m_dsp
                                             groupid,                # strip ID
                                             record.srcfn            # file name (meta.txt)
-                                        )
+                                        ])
 
                                 elif args.custom_paths == 'CSS':
                                     # /css/nga-dems/setsm/scene/2m/2021/04/21/
                                     # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
-                                    custom_path = "{}/{}/{}/{}/{}/{}/{}/{}".format(
+                                    custom_path = '/'.join([
                                         path_prefix,
                                         args.mode,  # mode (scene, strip, tile)
                                         res_dir,  # e.g. 2m, 50cm, 2m_dsp
@@ -722,10 +733,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         record.pairname[9:11],  # month
                                         groupid,  # mode-specific group ID
                                         record.srcfn  # file name (meta.txt)
-                                    )
+                                    ])
 
                                 else:
-                                    logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    logger.error("Mode {} does not support the specified custom path option,\
+                                     skipping record".format(args.mode))
                                     valid_record = False
 
                         ## Fields for tile DEM
@@ -758,16 +770,17 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             ## Set path folders for use if db_path_prefix specified
                             if path_prefix:
                                 if args.custom_paths == 'BP':
-                                    custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
+                                    custom_path = '.'.join([
                                         path_prefix,
                                         record.mode,               # mode (scene, strip, tile)
                                         args.project.lower(),    # project
                                         record.res,              # resolution
                                         version,                 # version
-                                        groupid                  # mode-specific group ID
-                                    )
+                                        groupid+'.tar'                  # mode-specific group ID
+                                    ])
                                 else:
-                                    logger.error("Mode {} does not support the specified custom path option, skipping record".format(args.mode))
+                                    logger.error("Mode {} does not support the specified custom path option,\
+                                     skipping record".format(args.mode))
                                     valid_record = False
 
                         ## Common fields

@@ -119,10 +119,11 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '--custom-paths BP', self.scene_count, 'Done'), # test BP paths
-            (self.scene_dir, self.test_str, '--overwrite --custom-paths PGC', self.scene_count,
-             'Done'),  # test BP paths
-            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
+            (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --custom-paths BP',
+             self.scene_count, 'Done'), # test BP paths
+            (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC',
+             self.scene_count, 'Done'),  # test BP paths
+            (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
              'Done'),  # test BP paths
             )
 
@@ -323,17 +324,19 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scenedsp_dir, self.test_str, '--dsp-record-mode dsp', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
-            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode orig', self.scenedsp_count, 'Done',
+            (self.scenedsp_dir, self.test_str, '--dsp-record-mode dsp --skip-region-lookup', self.scenedsp_count, 'Done', 2),  # test as 2m_dsp record
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode orig --skip-region-lookup', self.scenedsp_count, 'Done',
              0.5),  # test as 50cm record
-            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both', self.scenedsp_count*2,
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --skip-region-lookup', self.scenedsp_count*2,
             'Done', None),  # test as 50cm and 2m records
-            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --status-dsp-record-mode-orig aws',
+            (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --status-dsp-record-mode-orig aws --skip-region-lookup',
             self.scenedsp_count * 2, 'Done', None),  # test as 50cm and 2m records with custom status
+            (self.scenedsp_dir, self.test_str, '--overwrite --custom-paths BP --dsp-record-mode both --status-dsp-record-mode-orig aws --read-pickle tests/testdata/pair_region_lookup.p',
+             self.scenedsp_count * 2, 'Done', None),  # test as 50cm and 2m records with Bp paths and custom status
         )
 
         for i, o, options, result_cnt, msg, res in test_param_list:
-            cmd = 'python index_setsm.py {} {} --skip-region-lookup {}'.format(
+            cmd = 'python index_setsm.py {} {} {}'.format(
                 i,
                 o,
                 options
@@ -367,7 +370,10 @@ class TestIndexerIO(unittest.TestCase):
                 self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
                 self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
                 if '--status-dsp-record-mode-orig aws' in options:
-                    self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'online')
+                    if '--custom-paths BP' in options:
+                        self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'tape')
+                    else:
+                        self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'online')
 
             ds, layer = None, None
 
@@ -745,8 +751,6 @@ class TestIndexerIO(unittest.TestCase):
         ds, layer = None, None
 
 
-## test custom path behavior
-## test region lookup
 ## test bad config file
 
 
