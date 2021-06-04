@@ -28,8 +28,8 @@ def main():
     #### Optionsl Arguments
     parser.add_argument('--mdf-only', action='store_true', default=False,
                         help="build mdf and readme files only, do not archive")
-    parser.add_argument('--lsf', action='store_true', default=False,
-                        help="package LSF DEM instead of original DEM. Includes metadata flag.")
+    # parser.add_argument('--lsf', action='store_true', default=False,
+    #                     help="package LSF DEM instead of original DEM. Includes metadata flag.")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="filter dems with area < 5.6 sqkm and density < 0.1")
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
@@ -90,10 +90,10 @@ def main():
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
     
-    if args.lsf:   
-        logger.info('Packaging LSF DEMs')
-    else:
-        logger.info('Packaging non-LSF DEMs')
+    # if args.lsf:
+    #     logger.info('Packaging LSF DEMs')
+    # else:
+    #     logger.info('Packaging non-LSF DEMs')
     
     j=0
     scenes = []
@@ -287,7 +287,7 @@ def build_archive(src,scratch,args):
                         os.remove(raster.mdf)
                 try:
                     if not args.dryrun:
-                        raster.write_mdf_file(args.lsf)
+                        raster.write_mdf_file()
                 except RuntimeError as e:
                     logger.error(e)
             
@@ -310,25 +310,25 @@ def build_archive(src,scratch,args):
                             print("Cannot replace archive: %s" %dstfp)
             
                 if not os.path.isfile(dstfp):    
-                
-                    if args.lsf:
-                        components = (
-                            os.path.basename(raster.srcfp).replace("dem.tif","dem_smooth.tif"), # dem
-                            os.path.basename(raster.matchtag), # matchtag
-                            os.path.basename(raster.mdf), # mdf
-                            os.path.basename(raster.readme), # readme
-                            os.path.basename(raster.browse), # browse
-                            # index shp files
-                        )
-                    else:
-                        components = (
-                            os.path.basename(raster.srcfp), # dem
-                            os.path.basename(raster.matchtag), # matchtag
-                            os.path.basename(raster.mdf), # mdf
-                            os.path.basename(raster.readme), # readme
-                            os.path.basename(raster.browse), # browse
-                            # index shp files
-                        )
+
+                    # if args.lsf:
+                    #     components = (
+                    #         os.path.basename(raster.srcfp).replace("dem.tif","dem_smooth.tif"), # dem
+                    #         os.path.basename(raster.matchtag), # matchtag
+                    #         os.path.basename(raster.mdf), # mdf
+                    #         os.path.basename(raster.readme), # readme
+                    #         os.path.basename(raster.browse), # browse
+                    #         # index shp files
+                    #     )
+                    # else:
+                    components = (
+                        os.path.basename(raster.srcfp), # dem
+                        os.path.basename(raster.matchtag), # matchtag
+                        os.path.basename(raster.mdf), # mdf
+                        os.path.basename(raster.readme), # readme
+                        os.path.basename(raster.browse), # browse
+                        # index shp files
+                    )
     
                     optional_components = [os.path.basename(r) for r in raster.reg_files] #reg
                     
@@ -370,60 +370,100 @@ def build_archive(src,scratch,args):
                                         
                                     #print raster.stripid
                                     feat = ogr.Feature(lyr.GetLayerDefn())
-                                        
+                                    valid_record = True
+
                                     ## Set fields
-                                    feat.SetField("DEM_ID",raster.stripid)
-                                    feat.SetField("PAIRNAME",raster.pairname)
-                                    feat.SetField("SENSOR1",raster.sensor1)
-                                    feat.SetField("SENSOR2",raster.sensor2)
-                                    feat.SetField("ACQDATE1",raster.acqdate1.strftime("%Y-%m-%d"))
-                                    feat.SetField("ACQDATE2",raster.acqdate2.strftime("%Y-%m-%d"))
-                                    feat.SetField("CATALOGID1",raster.catid1)
-                                    feat.SetField("CATALOGID2",raster.catid2)
-                                    feat.SetField("ND_VALUE",raster.ndv)
-                                    feat.SetField("DEM_NAME",raster.srcfn)
-                                    feat.SetField("ALGM_VER",raster.algm_version)
-                                    res = (raster.xres + raster.yres) / 2.0
-                                    feat.SetField("DEM_RES",res)
-                                    feat.SetField("DENSITY",raster.density)
+                                    attrib_map = {
+                                        'DEM_ID': raster.stripid,
+                                        'STRIPDEMID': raster.stripdemid,
+                                        'PAIRNAME': raster.pairname,
+                                        'SENSOR1': raster.sensor1,
+                                        'SENSOR2': raster.sensor2,
+                                        'ACQDATE1': raster.acqdate1.strftime('%Y-%m-%d'),
+                                        'ACQDATE2': raster.acqdate2.strftime('%Y-%m-%d'),
+                                        'CATALOGID1': raster.catid1,
+                                        'CATALOGID2': raster.catid2,
+                                        'GEOCELL': raster.geocell,
+
+                                        'PROJ4': raster.proj4,
+                                        'EPSG': raster.epsg,
+                                        'ND_VALUE': raster.ndv,
+                                        'DEM_RES': (raster.xres + raster.yres) / 2.0,
+                                        'ALGM_VER': raster.algm_version,
+                                        'IS_LSF': int(raster.is_lsf),
+                                        'IS_XTRACK': int(raster.is_xtrack),
+                                        'EDGEMASK': int(raster.mask_tuple[0]),
+                                        'WATERMASK': int(raster.mask_tuple[1]),
+                                        'CLOUDMASK': int(raster.mask_tuple[2]),
+                                        'DENSITY': raster.density
+
+                                    }
                                     
                                     #### Set fields if populated (will not be populated if metadata file is not found)
                                     if raster.creation_date:
-                                        feat.SetField("CR_DATE",raster.creation_date.strftime("%Y-%m-%d"))
+                                        attrib_map["CR_DATE"] = raster.creation_date.strftime("%Y-%m-%d")
                             
-                                    ## transfrom and write geom
-                                    feat.SetField("PROJ4",raster.proj4)
-                                    feat.SetField("EPSG",raster.epsg)
-                                    
+                                    ## transform and write geom
                                     src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
                                     src_srs.ImportFromWkt(raster.proj)
-                                    
-                                    if raster.geom:
-                                        geom = raster.geom.Clone()
-                                        transform = osr.CoordinateTransformation(src_srs,tgt_srs)
-                                        geom.Transform(transform)
-                                        
-                                        centroid = geom.Centroid()
-                                        feat.SetField("CENT_LAT",centroid.GetY())
-                                        feat.SetField("CENT_LON",centroid.GetX())
-                        
-                                        feat.SetGeometry(geom)
-                                    
+
+                                    if not raster.geom:
+                                        logger.error('No valid geom found, feature skipped: {}'.format(raster.sceneid))
+                                        valid_record = False
                                     else:
-                                        logger.error('No valid geom found: {}'.format(raster.srcfp))
-                                
-                                    #### add new feature to layer
-                                    lyr.CreateFeature(feat)
-                                    
-                                    ## Close layer and dataset
-                                    lyr = None
+                                        temp_geom = raster.geom.Clone()
+                                        transform = osr.CoordinateTransformation(src_srs, tgt_srs)
+                                        try:
+                                            temp_geom.Transform(transform)
+                                        except TypeError as e:
+                                            logger.error('Geom transformation failed, feature skipped: {} {}'.format(e, raster.sceneid))
+                                            valid_record = False
+                                        else:
+
+                                            ## Get centroid coordinates
+                                            centroid = temp_geom.Centroid()
+                                            attrib_map['CENT_LAT'] = centroid.GetY()
+                                            attrib_map['CENT_LON'] = centroid.GetX()
+
+                                            ## If srs is geographic and geom crosses 180, split geom into 2 parts
+                                            if tgt_srs.IsGeographic:
+
+                                                ## Get Lat and Lon coords in arrays
+                                                lons = []
+                                                lats = []
+                                                ring = temp_geom.GetGeometryRef(0)  # assumes a 1 part polygon
+                                                for j in range(0, ring.GetPointCount()):
+                                                    pt = ring.GetPoint(j)
+                                                    lons.append(pt[0])
+                                                    lats.append(pt[1])
+
+                                                ## Test if image crosses 180
+                                                if max(lons) - min(lons) > 180:
+                                                    split_geom = wrap_180(temp_geom)
+                                                    feat_geom = split_geom
+                                                else:
+                                                    mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                                    feat_geom = mp_geom
+
+                                            else:
+                                                mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                                feat_geom = mp_geom
+
+                                    ## Add new feature to layer
+                                    if valid_record:
+                                        for fld, val in attrib_map.items():
+                                            feat.SetField(fld, val)
+                                        feat.SetGeometry(feat_geom)
+                                        lyr.CreateFeature(feat)
+
+                                    # Close layer and dataset
                                     ds = None
-                                    
+                                    lyr = None
+
                                     if os.path.isfile(index):
                                         ## Create archive
                                         if not args.dryrun:
                                             archive = tarfile.open(dstfp,"w:gz")
-                                            #archive = tarfile.open(dstfp,"w:")
                                             if not os.path.isfile(dstfp):
                                                 logger.error("Cannot create archive: {}".format(dstfn))
                                     
@@ -474,13 +514,69 @@ def build_archive(src,scratch,args):
                             logger.error("Cannot remove existing index: {}".format(index))       
                     else:
                         logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
-            
+
+
+def wrap_180(src_geom):
+
+    ## create 2 point lists for west component and east component
+    west_points = []
+    east_points = []
+
+    ## for each point in geom except final point
+    ring  = src_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
+    for i in range(0, ring.GetPointCount()-1):
+        pt1 = ring.GetPoint(i)
+        pt2 = ring.GetPoint(i+1)
+
+        ## test if point is > or < 0 and add to correct bin
+        if pt1[0] < 0:
+            west_points.append(pt1)
+        else:
+            east_points.append(pt1)
+
+        ## test if segment to next point crosses 180 (x is opposite sign)
+        if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
+
+            ## if segment crosses,calculate interesection point y value
+            pt3_y = calc_y_intersection_180(pt1, pt2)
+
+            ## add intersection point to both bins (make sureot change 180 to -180 for western list)
+            pt3_west = ( -180, pt3_y )
+            pt3_east = ( 180, pt3_y )
+
+            west_points.append(pt3_west)
+            east_points.append(pt3_east)
+
+
+    #print "west", len(west_points)
+    #for pt in west_points:
+    #    print pt[0], pt[1]
+    #
+    #print "east", len(east_points)
+    #for pt in east_points:
+    #    print pt[0], pt[1]
+
+    ## cat point lists to make multipolygon(remember to add 1st point to the end)
+    geom_multipoly = ogr.Geometry(ogr.wkbMultiPolygon)
+
+    for ring_points in west_points, east_points:
+        if len(ring_points) > 0:
+            poly = ogr.Geometry(ogr.wkbPolygon)
+            ring = ogr.Geometry(ogr.wkbLinearRing)
+
+            for pt in ring_points:
+                ring.AddPoint(pt[0],pt[1])
+
+            ring.AddPoint(ring_points[0][0],ring_points[0][1])
+
+            poly.AddGeometry(ring)
+            geom_multipoly.AddGeometry(poly)
+            del poly
+            del ring
+
+    #print geom_multipoly
+    return geom_multipoly
+
 
 if __name__ == '__main__':
     main()
-        
-            
-            
-        
-        
-        
