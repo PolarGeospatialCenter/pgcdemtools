@@ -496,7 +496,10 @@ class SetsmDem(object):
             self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
             self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
             self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
+            if not os.path.isfile(self.browse):
+                self.browse = os.path.join(self.srcdir, self.stripid + "_dem_10m_shade.tif")
             self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
+            self.bitmask = os.path.join(self.srcdir, self.stripid + "_bitmask.tif")
             self.reg_files = [
                 os.path.join(self.srcdir,self.stripid+"_reg.txt"),
                 os.path.join(self.srcdir,self.stripid+"_oibreg.txt"),
@@ -533,6 +536,7 @@ class SetsmDem(object):
                     else:
                         self.version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                    self.is_dsp = False # Todo modify when dsp strips are a thing
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -843,7 +847,7 @@ class SetsmDem(object):
         else:
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
 
-    def write_mdf_file(self,lsf_flag=False):
+    def write_mdf_file(self):
 
         if self.geom:
 
@@ -899,7 +903,7 @@ class SetsmDem(object):
                 ('minElevValue',self.stats[0]),
                 ('maxElevValue',self.stats[1]),
                 ('matchtagDensity',self.density),
-                ('lsfApplied',str(lsf_flag))
+                ('lsfApplied',str(self.is_lsf))
             ]
 
             mdf_contents3 = []
@@ -974,15 +978,21 @@ class SetsmDem(object):
                     logger.warning('Scene metadata missing from {}: {}, key: {}'.format(self.metapath,scene['scene_name'],'Seed DEM'))
 
                 if scene['scene_name'] in self.alignment_dct:
-                    rmse, dz, dx, dy = self.alignment_dct[scene['scene_name']]
+                    alignment_vals = self.alignment_dct[scene['scene_name']]
                     cont = cont + [
-                        ('BEGIN_GROUP','MOSAIC_ALIGNMENT'),
-                        ('rmse',rmse),
-                        ('dz',dz),
-                        ('dx',dx),
-                        ('dy',dy),
-                        ('END_GROUP','MOSAIC_ALIGNMENT')
+                        ('BEGIN_GROUP', 'MOSAIC_ALIGNMENT'),
+                        ('rmse', alignment_vals[0]),
+                        ('dz', alignment_vals[1]),
+                        ('dx', alignment_vals[2]),
+                        ('dy', alignment_vals[3])
                     ]
+                    if len(alignment_vals) == 7:
+                        cont = cont + [
+                            ('dz_err', alignment_vals[4]),
+                            ('dx_err', alignment_vals[5]),
+                            ('dy_err', alignment_vals[6])
+                        ]
+                    cont.append(('END_GROUP', 'MOSAIC_ALIGNMENT'))
 
                 cont.append(('END_GROUP','COMPONENT_{}'.format(i)))
 
@@ -1353,6 +1363,8 @@ class SetsmTile(object):
             self.id = self.tileid
 
             self.matchtag = os.path.join(self.srcdir,name_base + '_matchtag.tif')
+            if not os.path.isfile(self.matchtag):
+                self.matchtag = os.path.join(self.srcdir, name_base + '_countmt.tif')
             self.err = os.path.join(self.srcdir,name_base + '_err.tif')
             self.day = os.path.join(self.srcdir,name_base + '_day.tif')
             self.ortho = os.path.join(self.srcdir,name_base + '_ortho.tif')
