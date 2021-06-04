@@ -533,6 +533,7 @@ class SetsmDem(object):
                     else:
                         self.version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                    self.is_dsp = False # Todo modify when dsp strips are a thing
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))

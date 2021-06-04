@@ -65,9 +65,9 @@ MODES = {
                utils.TILE_DEM_ATTRIBUTE_DEFINITIONS, utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
 }
 
-id_flds = ['SCENEDEMID', 'STRIPDEMID', 'DEM_ID', 'TILE', 'LOCATION', 'INDEX_DATE']
+id_flds = ['SCENEDEMID', 'STRIPDEMID', 'DEM_ID', 'TILE', 'LOCATION', 'INDEX_DATE', 'IS_DSP']
 recordid_map = {
-    'scene': '{SCENEDEMID}|{STRIPDEMID}|{LOCATION}|{INDEX_DATE}',
+    'scene': '{SCENEDEMID}|{STRIPDEMID}|{IS_DSP}|{LOCATION}|{INDEX_DATE}',
     'strip': '{DEM_ID}|{STRIPDEMID}|{LOCATION}|{INDEX_DATE}',
     'tile':  '{DEM_ID}|{TILE}|{LOCATION}|{INDEX_DATE}',
 }
@@ -379,7 +379,12 @@ def main():
                     logger.debug(os.path.join(root,f))
                     src_fps.append(os.path.join(root,f))
 
+    total = len(src_fps)
+    i=0
     for src_fp in src_fps:
+        i+=1
+        if not args.np:
+            progress(i, total, "DEMs identified")
         if args.read_json:
             temp_records = read_json(os.path.join(src_fp),args.mode)
             records.extend(temp_records)
@@ -580,6 +585,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         custom_path = '/'.join([
                                             path_prefix,
                                             bucket,
+                                            res_dir,                 # e.g. 2m, 50cm, 2m_dsp
                                             record.pairname[:4],     # sensor
                                             record.pairname[5:9],    # year
                                             record.pairname[9:11],   # month
@@ -686,15 +692,26 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             ## Set path folders for use if path_prefix specified
                             if path_prefix:
+                                res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
+
                                 if args.custom_paths == 'BP':
-                                    custom_path = "{}/{}/{}/{}/{}/{}.tar".format(
-                                        path_prefix,
-                                        args.mode,               # mode (scene, strip, tile)
-                                        record.pairname[:4],     # sensor
-                                        record.pairname[5:9],    # year
-                                        record.pairname[9:11],   # month
-                                        groupid                  # mode-specific group ID
-                                    )
+                                    if not region:
+                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                                record.pairname))
+                                        valid_record = False
+
+                                    else:
+                                        bucket = 'dem-{}s-{}'.format(
+                                            args.mode, bp_region.split('-')[0])
+                                        custom_path = '/'.join([
+                                            path_prefix,
+                                            bucket,
+                                            res_dir,  # e.g. 2m, 50cm, 2m_dsp
+                                            record.pairname[:4],  # sensor
+                                            record.pairname[5:9],  # year
+                                            record.pairname[9:11],  # month
+                                            groupid + '.tar'  # mode-specific group ID
+                                        ])
 
                                 elif args.custom_paths == 'PGC':
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
@@ -708,7 +725,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                                     else:
                                         pretty_project = PROJECTS[region.split('_')[0]]
-                                        res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
                                         custom_path = '/'.join([
                                             path_prefix,

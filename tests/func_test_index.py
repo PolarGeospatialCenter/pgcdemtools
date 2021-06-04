@@ -104,10 +104,14 @@ class TestIndexerIO(unittest.TestCase):
     # @unittest.skip("test")
     def testCustomPaths(self):
 
+        self.test_str = os.path.join(self.output_dir, 'test.gdb', 'test_lyr')
+
         pairname_region_lookup = {
             'WV02_20190419_103001008C4B0400_103001008EC59A00': ('arcticdem_05_greenland_northeast', 'arcgeu'),
             'WV02_20190705_103001009505B700_10300100934D1000': ('arcticdem_10_canada_north_mainland', 'arcnam'),
-            'W1W1_20190426_102001008466F300_1020010089C2DB00': ('arcticdem_02_greenland_southeast', 'arcgeu')
+            'W1W1_20190426_102001008466F300_1020010089C2DB00': ('arcticdem_02_greenland_southeast', 'arcgeu'),
+            'WV01_20120317_10200100192B8400_102001001AC4FE00': ('arcticdem_07_canada_ellesmere', 'arcnam'),
+            'WV02_20140330_103001002F22FF00_103001002E1D1C00': ('arcticdem_20_russia_kamchatka', 'arcasa'),
         }
 
         PROJECTS = {
@@ -119,13 +123,17 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --custom-paths BP',
+            (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --custom-paths BP --check',
              self.scene_count, 'Done'), # test BP paths
             (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC',
-             self.scene_count, 'Done'),  # test BP paths
-            (self.scene_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS', self.scene_count,
-             'Done'),  # test BP paths
-            )
+             self.scene_count, 'Done'),  # test PGC paths
+            (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS',
+             self.scene_count, 'Done'),  # test CSS paths
+            (self.scenedsp_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths BP --check',
+             self.scenedsp_count, 'Done'),  # test 2m_dsp record
+            (self.scenedsp_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC',
+             self.scenedsp_count, 'Done'),  # test 2m_dsp record
+        )
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python index_setsm.py {} {} {}'.format(
@@ -135,13 +143,14 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
-            # print(se)
-            # print(so)
+            print(se)
+            print(so)
 
             ## Test if ds exists and has correct number of records
-            self.assertTrue(os.path.isfile(o))
-            ds = ogr.Open(o, 0)
-            layer = ds.GetLayer()
+            gdb, lyr = os.path.split(o)
+            self.assertTrue(os.path.isdir(gdb))
+            ds = ogr.Open(gdb, 0)
+            layer = ds.GetLayerByName(lyr)
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt, result_cnt)
@@ -149,18 +158,20 @@ class TestIndexerIO(unittest.TestCase):
                 location = feat.GetField('LOCATION')
                 pairname = feat.GetField('PAIRNAME')
                 res = feat.GetField('DEM_RES')
-                res_str = '2m' if res == 2.0 else '50cm'
+                is_dsp = feat.GetField('IS_DSP')
+                res_str2 = '2m' if res == 2.0 else '50cm'
+                res_dir = res_str2 + '_dsp' if is_dsp else res_str2
                 if '--custom-paths BP' in options:
-                    p = 'https://blackpearl-data2.pgc.umn.edu/dem-scenes-{}-{}/W'.format(
-                        res_str, pairname_region_lookup[pairname][1])
+                    p = 'https://blackpearl-data2.pgc.umn.edu/dem-scenes-{}-{}/{}/W'.format(
+                        res_str2, pairname_region_lookup[pairname][1], res_dir)
                     self.assertTrue(location.startswith(p))
                 elif '--custom-paths PGC' in options:
                     r = pairname_region_lookup[pairname][0]
                     p = '/mnt/pgc/data/elev/dem/setsm/{}/region/{}/scenes/{}/W'.format(
-                        PROJECTS[r.split('_')[0]], r, res_str)
+                        PROJECTS[r.split('_')[0]], r, res_dir)
                     self.assertTrue(location.startswith(p))
                 elif '--custom-paths CSS' in options:
-                    p = '/css/nga-dems/setsm/scene/{}/W'.format(res_str)
+                    p = '/css/nga-dems/setsm/scene/{}/W'.format(res_dir)
                     self.assertTrue(location.startswith(p))
 
             ds, layer = None, None
@@ -600,6 +611,77 @@ class TestIndexerIO(unittest.TestCase):
         cnt = layer.GetFeatureCount()
         self.assertEqual(cnt, self.strip_count)
         ds, layer = None, None
+
+    # @unittest.skip("test")
+    def testStripCustomPaths(self):
+
+        pairname_region_lookup = {
+            'W1W1_20190426_102001008466F300_1020010089C2DB00': ('arcticdem_02_greenland_southeast', 'arcgeu'),
+            'WV01_20140402_102001002C6AFA00_102001002D8B3100': ('arcticdem_01_iceland', 'arcgeu'),
+        }
+
+        PROJECTS = {
+            'arcticdem': 'ArcticDEM',
+            'rema': 'REMA',
+            'earthdem': 'EarthDEM',
+        }
+
+        ## Build shp
+        test_param_list = (
+            # input, output, args, result feature count, message
+            (self.strip_dir, self.test_str, '--read-pickle tests/testdata/pair_region_lookup.p --custom-paths BP',
+             self.strip_count, 'Done'),  # test BP paths
+            (self.strip_dir, self.test_str,
+             '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC',
+             self.strip_count, 'Done'),  # test PGC paths
+            (self.strip_dir, self.test_str,
+             '--read-pickle tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS',
+             self.strip_count,
+             'Done'),  # test CSS paths
+        )
+
+        for i, o, options, result_cnt, msg in test_param_list:
+            cmd = 'python index_setsm.py --mode strip {} {} {}'.format(
+                i,
+                o,
+                options
+            )
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (so, se) = p.communicate()
+            # print(se)
+            # print(so)
+
+            ## Test if ds exists and has correct number of records
+            self.assertTrue(os.path.isfile(o))
+            ds = ogr.Open(o, 0)
+            layer = ds.GetLayer()
+            self.assertIsNotNone(layer)
+            cnt = layer.GetFeatureCount()
+            self.assertEqual(cnt, result_cnt)
+            for feat in layer:
+                location = feat.GetField('LOCATION')
+                pairname = feat.GetField('PAIRNAME')
+                res = feat.GetField('DEM_RES')
+                #is_dsp = feat.GetField('IS_DSP')
+                res_dir = '2m' if res == 2.0 else '50cm'
+                #res_dir = res_dir + '_dsp' if is_dsp else res_dir
+                if '--custom-paths BP' in options:
+                    p = 'https://blackpearl-data2.pgc.umn.edu/dem-strips-{}/{}/W'.format(
+                        pairname_region_lookup[pairname][1], res_dir)
+                    self.assertTrue(location.startswith(p))
+                elif '--custom-paths PGC' in options:
+                    r = pairname_region_lookup[pairname][0]
+                    p = '/mnt/pgc/data/elev/dem/setsm/{}/region/{}/strips_v4/{}/W'.format(
+                        PROJECTS[r.split('_')[0]], r, res_dir)
+                    self.assertTrue(location.startswith(p))
+                elif '--custom-paths CSS' in options:
+                    p = '/css/nga-dems/setsm/strip/{}/W'.format(res_dir)
+                    self.assertTrue(location.startswith(p))
+
+            ds, layer = None, None
+
+            # Test if stdout has proper error
+            self.assertIn(msg, se.decode())
 
     # @unittest.skip("test")
     def testTile(self):
