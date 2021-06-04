@@ -499,6 +499,7 @@ class SetsmDem(object):
             if not os.path.isfile(self.browse):
                 self.browse = os.path.join(self.srcdir, self.stripid + "_dem_10m_shade.tif")
             self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
+            self.bitmask = os.path.join(self.srcdir, self.stripid + "_bitmask.tif")
             self.reg_files = [
                 os.path.join(self.srcdir,self.stripid+"_reg.txt"),
                 os.path.join(self.srcdir,self.stripid+"_oibreg.txt"),
