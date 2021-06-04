@@ -571,7 +571,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
                                 if args.custom_paths == 'BP':
-                                    # https://blackpearl-data2.pgc.umn.edu/dem-scenes-2m-arceua/WV02/2015/05/
+                                    # https://blackpearl-data2.pgc.umn.edu/dem-scenes-2m-arceua/2m/WV02/2015/05/
                                     # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
 
                                     if not region:
@@ -695,6 +695,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
                                 if args.custom_paths == 'BP':
+                                    # https://blackpearl-data2.pgc.umn.edu/dem-strips-arceua/2m/WV02/2015/05/
+                                    # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
                                     if not region:
                                         logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
                                                 record.pairname))
