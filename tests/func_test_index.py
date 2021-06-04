@@ -143,8 +143,8 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
-            print(se)
-            print(so)
+            # print(se)
+            # print(so)
 
             ## Test if ds exists and has correct number of records
             gdb, lyr = os.path.split(o)

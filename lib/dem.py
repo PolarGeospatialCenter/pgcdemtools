@@ -979,21 +979,20 @@ class SetsmDem(object):
 
                 if scene['scene_name'] in self.alignment_dct:
                     alignment_vals = self.alignment_dct[scene['scene_name']]
-                    if len(alignment_vals) == 4:
-                        rmse, dz, dx, dy = alignment_vals
-                    elif len(alignment_vals) == 7:
-                        rmse, dz, dx, dy, dz_err, dx_err, dy_err = alignment_vals
-                    else:
-                        rmse = None
-                    if rmse:
+                    cont = cont + [
+                        ('BEGIN_GROUP', 'MOSAIC_ALIGNMENT'),
+                        ('rmse', alignment_vals[0]),
+                        ('dz', alignment_vals[1]),
+                        ('dx', alignment_vals[2]),
+                        ('dy', alignment_vals[3])
+                    ]
+                    if len(alignment_vals) == 7:
                         cont = cont + [
-                            ('BEGIN_GROUP','MOSAIC_ALIGNMENT'),
-                            ('rmse',rmse),
-                            ('dz',dz),
-                            ('dx',dx),
-                            ('dy',dy),
-                            ('END_GROUP','MOSAIC_ALIGNMENT')
+                            ('dz_err', alignment_vals[4]),
+                            ('dx_err', alignment_vals[5]),
+                            ('dy_err', alignment_vals[6])
                         ]
+                    cont.append(('END_GROUP', 'MOSAIC_ALIGNMENT'))
 
                 cont.append(('END_GROUP','COMPONENT_{}'.format(i)))
 
