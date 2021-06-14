@@ -410,8 +410,9 @@ def main():
         logger.info("{} records found".format(total))
         ## Group into strips or tiles for json writing
         groups = {}
+        json_groupid_fld = 'stripdirname' if args.mode == 'strip' else groupid_fld
         for record in records:
-            groupid = getattr(record,groupid_fld)
+            groupid = getattr(record, json_groupid_fld)
             if groupid in groups:
                 groups[groupid].append(record)
             else:

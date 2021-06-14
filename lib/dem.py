@@ -475,6 +475,7 @@ class SetsmDem(object):
             self.srcdir, self.srcfn = os.path.split(self.srcfp)
             self.stripid = self.srcfn[:self.srcfn.find('_dem')]
             self.stripdemid = None
+            self.stripdirname = None
             self.id = self.stripid
             if 'lsf' in self.srcfn:
                 self.is_lsf = True
@@ -643,6 +644,11 @@ class SetsmDem(object):
 
             ## Make strip ID
             self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+            self.stripdirname = '_'.join((
+                self.pairname,
+                "{}{}".format(self.res_str, '_lsf' if self.is_lsf else ''),
+                version_str
+            ))
 
     def compute_density_and_statistics(self):
         #### If no mdf or mdf does not contain valid density key, compute
