@@ -999,7 +999,8 @@ def write_to_json(json_fd, groups, total, args):
 
             for item in items:
                 i+=1
-                progress(i,total,"records written")
+                if not args.np:
+                    progress(i,total,"records written")
 
                 # organize scene obj into dict and write to json
                 md[item.id] = item.__dict__
