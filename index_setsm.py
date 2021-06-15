@@ -31,6 +31,12 @@ handler=err.handler # Note don't pass class method directly or python segfaults
 gdal.PushErrorHandler(handler)
 gdal.UseExceptions() #Exceptions will get raised on anything >= gdal.CE_Failure
 
+# Script paths and execution
+SCRIPT_FILE = os.path.abspath(os.path.realpath(__file__))
+SCRIPT_FNAME = os.path.basename(SCRIPT_FILE)
+SCRIPT_NAME, SCRIPT_EXT = os.path.splitext(SCRIPT_FNAME)
+SCRIPT_DIR = os.path.dirname(SCRIPT_FILE)
+
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -115,7 +121,7 @@ def main():
     #### Optional Arguments
     parser.add_argument('--mode', choices=MODES.keys(), default='scene',
                         help="type of items to index {} default=scene".format(MODES.keys()))
-    parser.add_argument('--config', default=os.path.join(os.path.dirname(sys.argv[0]),'config.ini'),
+    parser.add_argument('--config', default=os.path.join(SCRIPT_DIR, 'config.ini'),
                         help="config file (default is config.ini in script dir")
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
@@ -410,8 +416,9 @@ def main():
         logger.info("{} records found".format(total))
         ## Group into strips or tiles for json writing
         groups = {}
+        json_groupid_fld = 'stripdirname' if args.mode == 'strip' else groupid_fld
         for record in records:
-            groupid = getattr(record,groupid_fld)
+            groupid = getattr(record, json_groupid_fld)
             if groupid in groups:
                 groups[groupid].append(record)
             else:
@@ -998,7 +1005,8 @@ def write_to_json(json_fd, groups, total, args):
 
             for item in items:
                 i+=1
-                progress(i,total,"records written")
+                if not args.np:
+                    progress(i,total,"records written")
 
                 # organize scene obj into dict and write to json
                 md[item.id] = item.__dict__
