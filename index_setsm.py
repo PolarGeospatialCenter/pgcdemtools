@@ -38,8 +38,21 @@ SCRIPT_NAME, SCRIPT_EXT = os.path.splitext(SCRIPT_FNAME)
 SCRIPT_DIR = os.path.dirname(SCRIPT_FILE)
 
 #### Create Logger
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+class InfoFilter(logging.Filter):
+    def filter(self, rec):
+        return rec.levelno in (logging.DEBUG, logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s', '%m-%d-%Y %H:%M:%S')
+h1 = logging.StreamHandler(sys.stdout)
+h1.setLevel(logging.DEBUG)
+h1.setFormatter(formatter)
+h1.addFilter(InfoFilter())
+h2 = logging.StreamHandler(sys.stderr)
+h2.setLevel(logging.WARNING)
+h2.setFormatter(formatter)
+logger.addHandler(h1)
+logger.addHandler(h2)
 
 FORMAT_OPTIONS = {
     'SHP':'ESRI Shapefile',
@@ -199,13 +212,6 @@ def main():
         parser.error("--custom_paths BP sets status field to 'tape' and cannot be used with --status.  For dsp-record-mode=orig custom status, use --status-dsp-record-mode-orig")
 
     path_prefix = custom_path_prefixes[args.custom_paths] if args.custom_paths else None
-
-    #### Set up loggers
-    lsh = logging.StreamHandler()
-    lsh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
-    lsh.setFormatter(formatter)
-    logger.addHandler(lsh)
 
     if args.log:
         if os.path.isdir(args.log):
