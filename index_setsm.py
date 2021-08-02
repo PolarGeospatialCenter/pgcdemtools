@@ -93,11 +93,13 @@ recordid_map = {
 
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu'
 PGC_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
+BW_PATH_PREFIX = '/scratch/sciteam/GS_bazu/elev/dem/setsm'
 CSS_PATH_PREFIX = '/css/nga-dems/setsm'
 
 custom_path_prefixes = {
     'BP': BP_PATH_PREFIX,
     'PGC': PGC_PATH_PREFIX,
+    'BW': BW_PATH_PREFIX,
     'CSS': CSS_PATH_PREFIX
 }
 
@@ -605,7 +607,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             groupid+'.tar'           # mode-specific group ID
                                         ])
 
-                                elif args.custom_paths == 'PGC':
+                                elif args.custom_paths in ('PGC', 'BW'):
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
                                     # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_
@@ -728,7 +730,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             groupid + '.tar'  # mode-specific group ID
                                         ])
 
-                                elif args.custom_paths == 'PGC':
+                                elif args.custom_paths in ('PGC', 'BW'):
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
                                     # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
