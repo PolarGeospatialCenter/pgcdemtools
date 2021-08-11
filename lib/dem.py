@@ -246,6 +246,8 @@ class SetsmScene(object):
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
                     break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, dsp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -590,6 +592,8 @@ class SetsmDem(object):
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
                     break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1260,6 +1264,8 @@ class AspDem(object):
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
                     break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1479,6 +1485,8 @@ class SetsmTile(object):
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
                     break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
