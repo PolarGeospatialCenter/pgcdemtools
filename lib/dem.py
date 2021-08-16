@@ -32,8 +32,8 @@ __all__ = [
 ]
 
 epsgs = [
-    3031,
     3413,
+    3031,
 ]
 
 srs_wgs84 = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
@@ -41,7 +41,7 @@ srs_wgs84.ImportFromEPSG(4326)
 
 ### build wgs84 utm epsgs
 for x in range(6,8):
-    for y in range(1,60):
+    for y in range(1,61):
         epsg = 32000 + x*100 + y
         epsgs.append(epsg)
 
@@ -245,6 +245,9 @@ class SetsmScene(object):
                 tgt_srs.ImportFromEPSG(epsg)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
+                    break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, dsp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -588,6 +591,9 @@ class SetsmDem(object):
                 tgt_srs.ImportFromEPSG(epsg)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
+                    break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1257,6 +1263,9 @@ class AspDem(object):
                 #print src_srs.IsSame(tgt_srs)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
+                    break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1475,6 +1484,9 @@ class SetsmTile(object):
                 #print src_srs.IsSame(tgt_srs)
                 if src_srs.IsSame(tgt_srs) == 1:
                     self.epsg = epsg
+                    break
+            if self.epsg == '':
+                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()

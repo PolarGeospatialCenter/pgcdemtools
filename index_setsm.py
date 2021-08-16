@@ -38,8 +38,21 @@ SCRIPT_NAME, SCRIPT_EXT = os.path.splitext(SCRIPT_FNAME)
 SCRIPT_DIR = os.path.dirname(SCRIPT_FILE)
 
 #### Create Logger
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+class InfoFilter(logging.Filter):
+    def filter(self, rec):
+        return rec.levelno in (logging.DEBUG, logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s', '%m-%d-%Y %H:%M:%S')
+h1 = logging.StreamHandler(sys.stdout)
+h1.setLevel(logging.DEBUG)
+h1.setFormatter(formatter)
+h1.addFilter(InfoFilter())
+h2 = logging.StreamHandler(sys.stderr)
+h2.setLevel(logging.WARNING)
+h2.setFormatter(formatter)
+logger.addHandler(h1)
+logger.addHandler(h2)
 
 FORMAT_OPTIONS = {
     'SHP':'ESRI Shapefile',
@@ -80,11 +93,13 @@ recordid_map = {
 
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu'
 PGC_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
+BW_PATH_PREFIX = '/scratch/sciteam/GS_bazu/elev/dem/setsm'
 CSS_PATH_PREFIX = '/css/nga-dems/setsm'
 
 custom_path_prefixes = {
     'BP': BP_PATH_PREFIX,
     'PGC': PGC_PATH_PREFIX,
+    'BW': BW_PATH_PREFIX,
     'CSS': CSS_PATH_PREFIX
 }
 
@@ -199,13 +214,6 @@ def main():
         parser.error("--custom_paths BP sets status field to 'tape' and cannot be used with --status.  For dsp-record-mode=orig custom status, use --status-dsp-record-mode-orig")
 
     path_prefix = custom_path_prefixes[args.custom_paths] if args.custom_paths else None
-
-    #### Set up loggers
-    lsh = logging.StreamHandler()
-    lsh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
-    lsh.setFormatter(formatter)
-    logger.addHandler(lsh)
 
     if args.log:
         if os.path.isdir(args.log):
@@ -599,7 +607,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             groupid+'.tar'           # mode-specific group ID
                                         ])
 
-                                elif args.custom_paths == 'PGC':
+                                elif args.custom_paths in ('PGC', 'BW'):
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
                                     # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_
@@ -722,7 +730,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             groupid + '.tar'  # mode-specific group ID
                                         ])
 
-                                elif args.custom_paths == 'PGC':
+                                elif args.custom_paths in ('PGC', 'BW'):
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
                                     # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
