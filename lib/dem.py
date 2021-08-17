@@ -528,6 +528,8 @@ class SetsmDem(object):
                     self.catid2 = groups['catid2']
                     self.acqdate1 = datetime.strptime(groups['timestamp'], '%Y%m%d') # if present, the metadata file value will overwrite this
                     self.acqdate2 = self.acqdate1
+                    self.avg_acqtime1 = None
+                    self.avg_acqtime2 = None
                     self.sensor1 = groups['sensor'] # if present, the metadata file value will overwrite this
                     self.sensor2 = self.sensor1
                     self.res = groups['res']
@@ -541,6 +543,7 @@ class SetsmDem(object):
                         self.version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
+                    self.rmse = -2 # if present, the metadata file value will overwrite this
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -722,20 +725,61 @@ class SetsmDem(object):
             if len(values) > 0:
                 self.algm_version = 'SETSM {}'.format(values[0])
 
-            ## get acqdates
+            ## get scene coregistration rmse
+            values = []
+            for scene_name, align_stats in self.alignment_dct.items():
+                scene_rmse = align_stats[0]
+                if scene_rmse != 'nan':
+                    scene_rmse = float(scene_rmse)
+                    if scene_rmse != 0:
+                        values.append(scene_rmse)
+            if len(values) > 0:
+                self.rmse = numpy.mean(numpy.array(values))
+            else:
+                self.rmse = -1
+
+            ## get acqdates and acqtimes
             values = []
             for x in range(len(self.scenes)):
-                if 'Image_1_Acquisition_time' in self.scenes[x]:
-                    values.append(self.scenes[x]['Image_1_Acquisition_time'])
+                acqtime_str = None
+                for acqtime_key in ('Image_1_Acquisition_time', 'Image 1 Acquisition time'):
+                    if acqtime_key in self.scenes[x]:
+                        acqtime_str = self.scenes[x][acqtime_key]
+                        acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                        values.append(acqtime_dt)
+                        break
+                if acqtime_str is None:
+                    for img_key in ('Image 1', 'Image_1'):
+                        if img_key in self.scenes[x]:
+                            img1_path = self.scenes[x][img_key]
+                            acqtime_str = os.path.basename(img1_path).split('_')[1]
+                            acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
+                            values.append(acqtime_dt)
+                            break
             if len(values) > 0:
-                self.acqdate1 = datetime.strptime(values[0], "%Y-%m-%dT%H:%M:%S.%fZ")
+                self.acqdate1 = values[0]
+                self.avg_acqtime1 = datetime.fromtimestamp(sum(map(datetime.timestamp, values)) / len(values))
 
             values = []
             for x in range(len(self.scenes)):
-                if 'Image_2_Acquisition_time' in self.scenes[x]:
-                    values.append(self.scenes[x]['Image_2_Acquisition_time'])
+                acqtime_str = None
+                for acqtime_key in ('Image_2_Acquisition_time', 'Image 2 Acquisition time'):
+                    if acqtime_key in self.scenes[x]:
+                        acqtime_str = self.scenes[x][acqtime_key]
+                        acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                        values.append(acqtime_dt)
+                        break
+                if acqtime_str is None:
+                    for img_key in ('Image 2', 'Image_2'):
+                        if img_key in self.scenes[x]:
+                            img1_path = self.scenes[x][img_key]
+                            acqtime_str = os.path.basename(img1_path).split('_')[1]
+                            acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
+                            values.append(acqtime_dt)
+                            break
             if len(values) > 0:
-                self.acqdate2 = datetime.strptime(values[0], "%Y-%m-%dT%H:%M:%S.%fZ")
+                self.acqdate2 = values[0]
+                self.avg_acqtime2 = datetime.fromtimestamp(sum(map(datetime.timestamp, values)) / len(values))
 
             ## get sensors
             values = []
@@ -842,6 +886,14 @@ class SetsmDem(object):
                 self.acqdate1 = datetime.strptime(metad['STRIP_DEM_acqDate'], "%Y-%m-%d")
                 self.acqdate2 = self.acqdate1
 
+            ## acqtime
+            try:
+                self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime1'], "%Y-%m-%d %H:%M:%S")
+                self.avg_acqtime2 = datetime.strptime(metad['STRIP_DEM_avgAcqTime2'], "%Y-%m-%d %H:%M:%S")
+            except KeyError as e:
+                self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime'], "%Y-%m-%d %H:%M:%S")
+                self.avg_acqtime2 = self.avg_acqtime1
+
             ## registration info (code assumes only one registration source in mdf)
             self.reginfo_list = []
             try:
@@ -887,6 +939,8 @@ class SetsmDem(object):
                 ('catId2','"{}"'.format(self.catid2)),
                 ('acqDate1',self.acqdate1.strftime("%Y-%m-%d")),
                 ('acqDate2',self.acqdate2.strftime("%Y-%m-%d")),
+                ('avgAcqTime1',self.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S")),
+                ('avgAcqTime2',self.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S")),
             ]
 
             #### make list of points
@@ -1157,6 +1211,8 @@ class SetsmDem(object):
     key_attribs = (
         'acqdate1',
         'acqdate2',
+        'avg_acqtime1',
+        'avg_acqtime2',
         'algm_version',
         'alignment_dct',
         'archive',
@@ -1192,6 +1248,7 @@ class SetsmDem(object):
         'reginfo_list',
         'res',
         'res_str',
+        'rmse',
         'scenes',
         'sensor1',
         'sensor2',
