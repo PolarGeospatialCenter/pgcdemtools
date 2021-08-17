@@ -8,7 +8,7 @@ import sys
 
 from osgeo import gdal, osr, ogr
 
-from lib import utils, dem
+from lib import utils, dem, walk
 
 try:
     import ConfigParser
@@ -154,6 +154,8 @@ def main():
                         help='search for json files instead of images to populate the index')
     parser.add_argument('--write-json', action='store_true', default=False,
                         help='write results to json files in dst folder')
+    parser.add_argument('--maxdepth', type=float, default=float('inf'),
+                        help='maximum depth into source directory to be searched')
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -387,7 +389,7 @@ def main():
         logger.info(src)
         src_fps.append(src)
     else:
-        for root, dirs, files in os.walk(src, followlinks=True):
+        for root, dirs, files in walk.walk(src, maxdepth=args.maxdepth):
             for f in files:
                 if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
                     logger.debug(os.path.join(root,f))
@@ -415,6 +417,8 @@ def main():
                     logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
                 else:
                     records.append(record)
+    if not args.np:
+        print('')
 
     total = len(records)
 
@@ -928,6 +932,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             raise RuntimeError(err.err_level, err.err_no, err.err_msg)
                                     finally:
                                         gdal.PopErrorHandler()
+            if not args.np:
+                print('')
 
             if invalid_record_cnt > 0:
                 logger.info("{} invalid records skipped".format(invalid_record_cnt))
@@ -1018,9 +1024,10 @@ def write_to_json(json_fd, groups, total, args):
                 i+=1
                 if not args.np:
                     progress(i,total,"records written")
-
                 # organize scene obj into dict and write to json
                 md[item.id] = item.__dict__
+            if not args.np:
+                print('')
 
             json_txt = json.dumps(md, default=encode_json)
             #print json_txt
