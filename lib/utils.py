@@ -7,6 +7,8 @@ demtools utilties and constants
 import logging
 import os
 import re
+import sys
+
 import numpy as np
 from collections import namedtuple
 
@@ -127,6 +129,10 @@ DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
 ]
 
+DEM_ATTRIBUTE_DEFINITION_RELVER = [
+    StandardAttribute("REL_VER", ogr.OFTString, 32, 0)
+]
+
 SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
@@ -173,11 +179,10 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
     StandardAttribute("DEM_ID", ogr.OFTString, 80, 0),
-    StandardAttribute("TILE", ogr.OFTString, 10, 0),
+    StandardAttribute("TILE", ogr.OFTString, 20, 0),
     StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
-    StandardAttribute("REL_VER", ogr.OFTString, 32, 0),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
     StandardAttribute("NUM_COMP", ogr.OFTInteger, 8, 8),
 ]
@@ -427,3 +432,13 @@ def gdalReadAsArraySetsmSceneBand(raster_band, make_nodata_nan=False):
         raise RasterIOError("`raster_band.ReadAsArray()` returned None")
 
     return array_data
+
+def progress(count, total, suffix=''):
+    bar_len = 60
+    filled_len = int(round(bar_len * count / float(total)))
+
+    percents = round(100.0 * count / float(total), 1)
+    bar = '=' * filled_len + '-' * (bar_len - filled_len)
+
+    sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
+    sys.stdout.flush()  # As suggested by Rom Ruben

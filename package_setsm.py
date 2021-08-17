@@ -94,69 +94,52 @@ def main():
     #     logger.info('Packaging LSF DEMs')
     # else:
     #     logger.info('Packaging non-LSF DEMs')
-    
-    j=0
-    scenes = []
+
     #### ID rasters
     logger.info('Identifying DEMs')
+    scene_paths = []
     if os.path.isfile(src) and src.endswith('.tif'):
         logger.debug(src)
-        try:
-            raster = dem.SetsmDem(src)
-        except RuntimeError as e:
-            logger.error( e )
-        else:
-            j+=1
-            if args.overwrite or args.force_filter_dems:
-                scenes.append(src)
-            elif args.mdf_only:
-                if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
-                    scenes.append(src)
-            elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
-                scenes.append(src)
-                
+        scene_paths.append(src)
+
     elif os.path.isfile(src) and src.endswith('.txt'):
         fh = open(src,'r')
         for line in fh.readlines():
             sceneid = line.strip()
-            
-            try:
-                raster = dem.SetsmDem(sceneid)
-            except RuntimeError as e:
-                logger.error( e )
-            else:
-                j+=1
-                if args.overwrite or args.force_filter_dems:
-                    scenes.append(sceneid)
-                elif args.mdf_only:
-                    if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
-                        scenes.append(sceneid)
-                elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
-                    scenes.append(sceneid)
-    
+            scene_paths.append(sceneid)
+
     elif os.path.isdir(src):
         for root,dirs,files in os.walk(src):
             for f in files:
                 if f.endswith("_dem.tif") and "m_" in f:
                     srcfp = os.path.join(root,f)
                     logger.debug(srcfp)
-                    try:
-                        raster = dem.SetsmDem(srcfp)
-                    except RuntimeError as e:
-                        logger.error( e )
-                    else:
-                        j+=1
-                        if args.overwrite or args.force_filter_dems:
-                            scenes.append(srcfp)
-                        elif args.mdf_only:
-                            if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
-                                scenes.append(srcfp)
-                        elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
-                            scenes.append(srcfp)
-                            
+                    scene_paths.append(srcfp)
+
     else:
-        logger.error( "src must be a directory, a strip dem, or a text file")
-    
+        logger.error("src must be a directory, a strip dem, or a text file")
+
+    logger.info('Reading rasters')
+    j = 0
+    total = len(scene_paths)
+    scenes = []
+    for sp in scene_paths:
+        try:
+            raster = dem.SetsmDem(sp)
+        except RuntimeError as e:
+            logger.error( e )
+        else:
+            j+=1
+            utils.progress(j, total, "DEMs identified")
+
+            if args.overwrite or args.force_filter_dems:
+                scenes.append(sp)
+            elif args.mdf_only:
+                if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
+                    scenes.append(sp)
+            elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
+                scenes.append(sp)
+
     scenes = list(set(scenes))
     logger.info('Number of src rasters: {}'.format(j))
     logger.info('Number of incomplete tasks: {}'.format(len(scenes)))

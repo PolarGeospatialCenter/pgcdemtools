@@ -10,6 +10,8 @@ logger.setLevel(logging.DEBUG)
 
 ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
 
+default_epsg = 4326
+
 def main():
 
     #### Set Up Arguments
@@ -23,8 +25,8 @@ def main():
 
     #### Optionsl Arguments
     parser.add_argument('--log', help="directory for log output")
-    parser.add_argument('--epsg', type=int, default=3413,
-                        help="egsg code for output index projection (default epsg:3413)")
+    parser.add_argument('--epsg', type=int, default=default_epsg,
+                        help="egsg code for output index projection (default epsg:{})".format(default_epsg))
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -246,7 +248,7 @@ def build_archive(raster,scratch,args):
 
                         if lyr is not None:
 
-                            for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC:
+                            for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
 
                                 field = ogr.FieldDefn(field_def.fname, field_def.ftype)
                                 field.SetWidth(field_def.fwidth)
@@ -258,7 +260,7 @@ def build_archive(raster,scratch,args):
 
                             ## Set fields
                             feat.SetField("DEM_ID",raster.tileid)
-                            feat.SetField("TILE",raster.tilename)
+                            feat.SetField("TILE",raster.supertile_id)
                             feat.SetField("ND_VALUE",raster.ndv)
                             feat.SetField("DEM_NAME",raster.srcfn)
                             res = (raster.xres + raster.yres) / 2.0

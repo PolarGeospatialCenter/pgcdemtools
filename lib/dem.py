@@ -75,7 +75,7 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     )_
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     (lsf_)?
-                                    (?P<partnum>[SEG\d]+)_
+                                    (?P<partnum>SEG\d+)_
                                     ((?P<version>v[\d/.]+)_)?
                                     (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
                                     .(tif|jpg))\Z""", re.I | re.X)
@@ -86,7 +86,7 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     (?P<catid1>[A-Z0-9]{16})_
                                     (?P<catid2>[A-Z0-9]{16})
                                     )_
-                                    (?P<partnum>[SEG\d]+)_
+                                    (?P<partnum>SEG\d+)_
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     ((?P<version>v[\d/.]+)_)?
                                     (lsf_)?
@@ -103,7 +103,7 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (?P<tile>\d+_\d+)_
                                    ((?P<subtile>\d+_\d+)_)?
                                    (?P<res>(\d+|0\.\d+)c?m)_
-                                   ((?P<version>v[\d/.]+)_)?
+                                   ((?P<version>v[\d\.]+)_)?
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
 
@@ -1008,7 +1008,7 @@ class SetsmDem(object):
     def write_readme_file(self):
         #### general info
         readme_contents = [
-            ('licenseText','"Acknowledgment for the SETSM surface models should be present in any publication, proceeding, presentation, etc. You must notify Ian Howat at The Ohio State University if you are to use the surface models in any of those forms. Please note, the SETSM mosaics are currently in BETA release. The dataset authors make no guarantees of product accuracy and cannot be held liable for any errors, events, etc. arising from its use."'),
+            ('licenseText','"Acknowledgment for the SETSM surface models should be present in any publication, proceeding, presentation, etc. You must notify Ian Howat at The Ohio State University if you are to use the surface models in any of those forms. The dataset authors make no guarantees of product accuracy and cannot be held liable for any errors, events, etc. arising from its use."'),
             ('contact','"Polar Geospatial Center, University of Minnesota, 612-626-0505, www.pgc.umn.edu"'),
             ('BEGIN_GROUP','PRODUCT_1'),
             ('demFilename','{}'.format(self.srcfn)),
@@ -1388,6 +1388,7 @@ class SetsmTile(object):
                 self.res = groups['res']
                 self.version = groups['version']
                 self.subtile = groups['subtile']
+                self.scheme = groups['scheme']
 
                 if self.subtile:
                     metabase = self.tileid.replace('_'+self.subtile,'')
@@ -1405,7 +1406,10 @@ class SetsmTile(object):
                         raise RuntimeError("Meta file not found for {}".format(self.srcfp))
                     self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
 
-                self.supertile_id = '{}_{}'.format(self.tilename,self.res)
+                if self.scheme:
+                    self.supertile_id = '_'.join([self.scheme,self.tilename,self.res])
+                else:
+                    self.supertile_id = '_'.join([self.tilename,self.res])
 
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
@@ -1522,7 +1526,7 @@ class SetsmTile(object):
 
             if get_stats:
                 try:
-                    self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                    self.stats = ds.GetRasterBand(1).GetStatistics(False, True)
                 except RuntimeError as e:
                     logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
                     self.stats = (None, None, None, None)
@@ -1536,6 +1540,7 @@ class SetsmTile(object):
 
         metad = self._parse_metadata_file()
         self.alignment_dct = metad['alignment_dct']
+        self.component_list = metad['component_list']
 
         if 'Creation Date' in metad:
             self.creation_date = datetime.strptime(metad['Creation Date'],"%d-%b-%Y %H:%M:%S")
@@ -1543,6 +1548,8 @@ class SetsmTile(object):
             raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
 
         self.num_components = len(self.alignment_dct)
+        if self.num_components == 0:
+            self.num_components = len(self.component_list)
 
         self.sum_gcps = 0
         self.mean_resid_z = None
@@ -1569,6 +1576,7 @@ class SetsmTile(object):
 
         mdf = open(self.metapath,'r')
         alignment_dct = {}
+        component_list = []
         for line in mdf.readlines():
             l = line.strip()
 
@@ -1586,7 +1594,11 @@ class SetsmTile(object):
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
 
+                elif l[:2] in ['WV','GE']:
+                    component_list.append(l)
+
         metad['alignment_dct'] = alignment_dct
+        metad['component_list'] = component_list
 
         mdf.close()
 
