@@ -544,6 +544,8 @@ class SetsmDem(object):
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
                     self.rmse = -2 # if present, the metadata file value will overwrite this
+                    self.min_elev_value = None
+                    self.max_elev_value = None
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -796,9 +798,18 @@ class SetsmDem(object):
             if len(values) > 0:
                 self.sensor2 = values[0]
 
-            #### If density file exists, get density from there
+            ## density and stats
             self.density = None
             self.stats = (None, None, None, None)
+
+            if 'Output Data Density' in metad:
+                self.density = metad['Output Data Density']
+            if 'Minimum elevation value' in metad:
+                self.min_elev_value = metad['Minimum elevation value']
+            if 'Maximum elevation value' in metad:
+                self.max_elev_value = metad['Maximum elevation value']
+
+            #### If density file exists, get density and stats from there
             if os.path.isfile(self.density_file):
                 fh = open(self.density_file,'r')
                 lines = fh.readlines()
@@ -966,8 +977,8 @@ class SetsmDem(object):
                 ('horizontalResolution',(self.xres+self.yres)/2.0),
                 ('verticalCoordSys','"WGS84 Ellipsoidal Height"'),
                 ('verticalCoordSysUnits','"meters"'),
-                ('minElevValue',self.stats[0]),
-                ('maxElevValue',self.stats[1]),
+                ('minElevValue',self.stats[0] if self.stats[0] is not None else self.min_elev_value),
+                ('maxElevValue',self.stats[1] if self.stats[1] is not None else self.max_elev_value),
                 ('matchtagDensity',self.density),
                 ('lsfApplied',str(self.is_lsf))
             ]
@@ -1237,6 +1248,8 @@ class SetsmDem(object):
         'matchtag',
         'mdf',
         'metapath',
+        'min_elev_value',
+        'max_elev_value',
         'ndv',
         'ortho',
         'pairname',
