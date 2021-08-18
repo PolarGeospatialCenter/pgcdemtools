@@ -317,7 +317,7 @@ def main():
             if len(pairs) == 0:
                 logger.warning("Cannot get region-pair lookup")
 
-                if args.custom_paths == 'PGC' or args.custom_path == 'BP':
+                if args.custom_paths == 'PGC' or args.custom_paths == 'BP':
                     logger.error("Region-pair lookup required for --custom_paths PGC or BP option")
                     sys.exit()
 
