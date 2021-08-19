@@ -382,6 +382,8 @@ def build_archive(src,scratch,args):
                                         'SENSOR2': raster.sensor2,
                                         'ACQDATE1': raster.acqdate1.strftime('%Y-%m-%d'),
                                         'ACQDATE2': raster.acqdate2.strftime('%Y-%m-%d'),
+                                        'AVGACQTM1': raster.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S"),
+                                        'AVGACQTM2': raster.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S"),
                                         'CATALOGID1': raster.catid1,
                                         'CATALOGID2': raster.catid2,
                                         'GEOCELL': raster.geocell,
@@ -396,7 +398,8 @@ def build_archive(src,scratch,args):
                                         'EDGEMASK': int(raster.mask_tuple[0]),
                                         'WATERMASK': int(raster.mask_tuple[1]),
                                         'CLOUDMASK': int(raster.mask_tuple[2]),
-                                        'DENSITY': raster.density
+                                        'DENSITY': raster.density,
+                                        'RMSE': raster.rmse
 
                                     }
                                     
