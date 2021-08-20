@@ -8,7 +8,7 @@ import sys
 
 from osgeo import gdal, osr, ogr
 
-from lib import utils, dem
+from lib import utils, dem, walk
 
 try:
     import ConfigParser
@@ -31,9 +31,28 @@ handler=err.handler # Note don't pass class method directly or python segfaults
 gdal.PushErrorHandler(handler)
 gdal.UseExceptions() #Exceptions will get raised on anything >= gdal.CE_Failure
 
+# Script paths and execution
+SCRIPT_FILE = os.path.abspath(os.path.realpath(__file__))
+SCRIPT_FNAME = os.path.basename(SCRIPT_FILE)
+SCRIPT_NAME, SCRIPT_EXT = os.path.splitext(SCRIPT_FNAME)
+SCRIPT_DIR = os.path.dirname(SCRIPT_FILE)
+
 #### Create Logger
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+class InfoFilter(logging.Filter):
+    def filter(self, rec):
+        return rec.levelno in (logging.DEBUG, logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s', '%m-%d-%Y %H:%M:%S')
+h1 = logging.StreamHandler(sys.stdout)
+h1.setLevel(logging.DEBUG)
+h1.setFormatter(formatter)
+h1.addFilter(InfoFilter())
+h2 = logging.StreamHandler(sys.stderr)
+h2.setLevel(logging.WARNING)
+h2.setFormatter(formatter)
+logger.addHandler(h1)
+logger.addHandler(h2)
 
 FORMAT_OPTIONS = {
     'SHP':'ESRI Shapefile',
@@ -74,11 +93,13 @@ recordid_map = {
 
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu'
 PGC_PATH_PREFIX = '/mnt/pgc/data/elev/dem/setsm'
+BW_PATH_PREFIX = '/scratch/sciteam/GS_bazu/elev/dem/setsm'
 CSS_PATH_PREFIX = '/css/nga-dems/setsm'
 
 custom_path_prefixes = {
     'BP': BP_PATH_PREFIX,
     'PGC': PGC_PATH_PREFIX,
+    'BW': BW_PATH_PREFIX,
     'CSS': CSS_PATH_PREFIX
 }
 
@@ -115,7 +136,7 @@ def main():
     #### Optional Arguments
     parser.add_argument('--mode', choices=MODES.keys(), default='scene',
                         help="type of items to index {} default=scene".format(MODES.keys()))
-    parser.add_argument('--config', default=os.path.join(os.path.dirname(sys.argv[0]),'config.ini'),
+    parser.add_argument('--config', default=os.path.join(SCRIPT_DIR, 'config.ini'),
                         help="config file (default is config.ini in script dir")
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
@@ -135,6 +156,8 @@ def main():
                         help='search for json files instead of images to populate the index')
     parser.add_argument('--write-json', action='store_true', default=False,
                         help='write results to json files in dst folder')
+    parser.add_argument('--maxdepth', type=float, default=float('inf'),
+                        help='maximum depth into source directory to be searched')
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -195,13 +218,6 @@ def main():
         parser.error("--custom_paths BP sets status field to 'tape' and cannot be used with --status.  For dsp-record-mode=orig custom status, use --status-dsp-record-mode-orig")
 
     path_prefix = custom_path_prefixes[args.custom_paths] if args.custom_paths else None
-
-    #### Set up loggers
-    lsh = logging.StreamHandler()
-    lsh.setLevel(logging.INFO)
-    formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
-    lsh.setFormatter(formatter)
-    logger.addHandler(lsh)
 
     if args.log:
         if os.path.isdir(args.log):
@@ -303,7 +319,7 @@ def main():
             if len(pairs) == 0:
                 logger.warning("Cannot get region-pair lookup")
 
-                if args.custom_paths == 'PGC' or args.custom_path == 'BP':
+                if args.custom_paths == 'PGC' or args.custom_paths == 'BP':
                     logger.error("Region-pair lookup required for --custom_paths PGC or BP option")
                     sys.exit()
 
@@ -377,7 +393,7 @@ def main():
         logger.info(src)
         src_fps.append(src)
     else:
-        for root, dirs, files in os.walk(src, followlinks=True):
+        for root, dirs, files in walk.walk(src, maxdepth=args.maxdepth):
             for f in files:
                 if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
                     logger.debug(os.path.join(root,f))
@@ -405,6 +421,8 @@ def main():
                     logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
                 else:
                     records.append(record)
+    if not args.np:
+        print('')
 
     total = len(records)
 
@@ -414,8 +432,9 @@ def main():
         logger.info("{} records found".format(total))
         ## Group into strips or tiles for json writing
         groups = {}
+        json_groupid_fld = 'stripdirname' if args.mode == 'strip' else groupid_fld
         for record in records:
-            groupid = getattr(record,groupid_fld)
+            groupid = getattr(record, json_groupid_fld)
             if groupid in groups:
                 groups[groupid].append(record)
             else:
@@ -596,7 +615,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             groupid+'.tar'           # mode-specific group ID
                                         ])
 
-                                elif args.custom_paths == 'PGC':
+                                elif args.custom_paths in ('PGC', 'BW'):
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/scenes/
                                     # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_
@@ -650,6 +669,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'SENSOR2': record.sensor2,
                                 'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
                                 'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
+                                'AVGACQTM1': record.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S"),
+                                'AVGACQTM2': record.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S"),
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
                                 'IS_LSF': int(record.is_lsf),
@@ -658,6 +679,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'WATERMASK': int(record.mask_tuple[1]),
                                 'CLOUDMASK': int(record.mask_tuple[2]),
                                 'ALGM_VER': record.algm_version,
+                                'RMSE': record.rmse,
                                 'FILESZ_DEM': record.filesz_dem,
                                 'FILESZ_MT': record.filesz_mt,
                                 'FILESZ_OR': record.filesz_or,
@@ -719,7 +741,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             groupid + '.tar'  # mode-specific group ID
                                         ])
 
-                                elif args.custom_paths == 'PGC':
+                                elif args.custom_paths in ('PGC', 'BW'):
                                     # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
                                     # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
@@ -914,6 +936,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             raise RuntimeError(err.err_level, err.err_no, err.err_msg)
                                     finally:
                                         gdal.PopErrorHandler()
+            if not args.np:
+                print('')
 
             if invalid_record_cnt > 0:
                 logger.info("{} invalid records skipped".format(invalid_record_cnt))
@@ -1002,10 +1026,13 @@ def write_to_json(json_fd, groups, total, args):
 
             for item in items:
                 i+=1
-                utils.progress(i,total,"records written")
+                if not args.np:
+                    utils.progress(i,total,"records written")
 
                 # organize scene obj into dict and write to json
                 md[item.id] = item.__dict__
+            if not args.np:
+                print('')
 
             json_txt = json.dumps(md, default=encode_json)
             #print json_txt

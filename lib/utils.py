@@ -80,6 +80,8 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
     StandardAttribute("ACQDATE1", ogr.OFTString, 32, 0),
     StandardAttribute("ACQDATE2", ogr.OFTString, 32, 0),
+    StandardAttribute("AVGACQTM1", ogr.OFTString, 32, 0),
+    StandardAttribute("AVGACQTM2", ogr.OFTString, 32, 0),
     StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
     StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
     StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
@@ -100,6 +102,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("WATERMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
+    StandardAttribute("RMSE", ogr.OFTReal, 0, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
@@ -111,6 +114,7 @@ DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
     StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
 ]
 
+# FIXME: This collection of attributes seems to be misplaced/miscopied?
 DEM_ATTRIBUTE_DEFINITIONS_MASKING = [
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
     StandardAttribute("DX", ogr.OFTReal, 0, 0),
