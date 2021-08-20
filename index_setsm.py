@@ -78,7 +78,7 @@ MODES = {
     ## mode : (class, suffix, groupid_fld, field_def)
     'scene': (dem.SetsmScene, '_meta.txt', 'stripdemid',
                utils.SCENE_ATTRIBUTE_DEFINITIONS, utils.SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION),
-    'strip': (dem.SetsmDem, '_dem.tif', 'stripdemid',
+    'strip': (dem.SetsmDem, '_dem.tif', 'stripdirname',
                utils.DEM_ATTRIBUTE_DEFINITIONS, utils.DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
     'tile':  (dem.SetsmTile, '_dem.tif', 'supertile_id',
                utils.TILE_DEM_ATTRIBUTE_DEFINITIONS, utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
@@ -432,9 +432,8 @@ def main():
         logger.info("{} records found".format(total))
         ## Group into strips or tiles for json writing
         groups = {}
-        json_groupid_fld = 'stripdirname' if args.mode == 'strip' else groupid_fld
         for record in records:
-            groupid = getattr(record, json_groupid_fld)
+            groupid = getattr(record, groupid_fld)
             if groupid in groups:
                 groups[groupid].append(record)
             else:
