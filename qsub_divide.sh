@@ -12,8 +12,8 @@ echo $PBS_O_HOST
 echo $PBS_NODEFILE
 echo $a1
 
-module load gdal/2.1.3
-
+source ~/.bashrc
+conda activate pgc
 
 echo $p1
 python $p1

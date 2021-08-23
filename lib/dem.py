@@ -546,30 +546,36 @@ class SetsmDem(object):
                     self.rmse = -2 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
                     self.max_elev_value = None
+                    self.density = None
+                    self.stats = (None, None, None, None)
+                    self.reginfo_list = None
+                    self.geocell = None
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
     def get_geocell(self):
+        if not self.geocell:
 
-        centroid = self.geom.Centroid()
+            centroid = self.geom.Centroid()
 
-        ## Convert to wgs84
-        srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-        rc = srs.ImportFromProj4(self.proj4_meta)
-        if not srs_wgs84.IsSame(srs):
-            ctf = osr.CoordinateTransformation(srs, srs_wgs84)
-            centroid.Transform(ctf)
+            ## Convert to wgs84
+            srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+            rc = srs.ImportFromProj4(self.proj4_meta)
+            if not srs_wgs84.IsSame(srs):
+                ctf = osr.CoordinateTransformation(srs, srs_wgs84)
+                centroid.Transform(ctf)
 
-        lat = centroid.GetY()
-        lon = centroid.GetX()
-        lat_letter = 'n' if lat>=0 else 's'
-        lon_letter = 'e' if lon>=0 else 'w'
+            lat = centroid.GetY()
+            lon = centroid.GetX()
+            lat_letter = 'n' if lat>=0 else 's'
+            lon_letter = 'e' if lon>=0 else 'w'
 
-        self.geocell = '{}{:02d}{}{:03d}'.format(lat_letter, int(abs(math.floor(lat))), lon_letter, int(abs(math.floor(lon))))
+            self.geocell = '{}{:02d}{}{:03d}'.format(lat_letter, int(abs(math.floor(lat))), lon_letter, int(abs(math.floor(lon))))
         return self.geocell
 
     def get_dem_info(self):
+        ## Also calls self.get_metafile_info() and self.get_geocell()
 
         for k, v in self.filesz_attrib_map.items():
             try:
@@ -662,9 +668,10 @@ class SetsmDem(object):
             ))
 
     def compute_density_and_statistics(self):
-        #### If no mdf or mdf does not contain valid density key, compute
-        if self.density is None or self.density == 'None':
-            self.density = None
+        ## If neither metadata, mdf, nor density file contain valid density info, compute it.
+        ## This should never be run before self.get_metafile_info()
+
+        if self.density is None:  # Density=0.0 requires this more verbose syntax
 
             #### If matchtag exists, get matchtag density within data boundary
             if not os.path.isfile(self.matchtag):
@@ -672,13 +679,12 @@ class SetsmDem(object):
             else:
                 self.density = get_matchtag_density(self.matchtag, self.geom.Area())
 
-        if self.stats[0] is None or self.stats[0] == 'None':
+        if self.stats[0] is None:
             ds = gdal.Open(self.srcfp)
             try:
-                self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
+                self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
             except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
-                self.stats = (None, None, None, None)
 
         fh = open(self.density_file, 'w')
         fh.write('{}\n'.format(self.density))
@@ -799,50 +805,12 @@ class SetsmDem(object):
                 self.sensor2 = values[0]
 
             ## density and stats
-            self.density = None
-            self.stats = (None, None, None, None)
-
             if 'Output Data Density' in metad:
                 self.density = metad['Output Data Density']
             if 'Minimum elevation value' in metad:
                 self.min_elev_value = metad['Minimum elevation value']
             if 'Maximum elevation value' in metad:
                 self.max_elev_value = metad['Maximum elevation value']
-
-            #### If density file exists, get density and stats from there
-            if os.path.isfile(self.density_file):
-                fh = open(self.density_file,'r')
-                lines = fh.readlines()
-                density = lines[0].strip()
-                self.density = float(density)
-                stats = lines[1].strip().split(',')
-                try:
-                    self.stats = [float(stat) for stat in stats]
-                except ValueError:
-                    self.stats = (None,None,None,None)
-                fh.close()
-
-            #### If reg.txt file exists, parse it for registration info
-            self.reginfo_list = []
-
-            for reg_file in self.reg_files:
-                dx, dy, dz, num_gcps, mean_resid_z = [None, None, None, None, None]
-                if os.path.isfile(reg_file):
-                    fh = open(reg_file, 'r')
-                    for line in fh.readlines():
-                        if line.startswith("Translation Vector (dz,dx,dy)"):
-                            vectors = line.split('=')[1].split(',')
-                            dz, dx, dy = [float(v.strip()) for v in vectors]
-                        elif line.startswith("Mean Vertical Residual"):
-                            mean_resid_z = line.split('=')[1].strip()
-                        elif line.startswith("# GCPs"):
-                            num_gcps = line.split('=')[1].strip()
-                    if dx is not None and num_gcps is not None and mean_resid_z is not None:
-                        self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, reg_file))
-                    else:
-                        logger.error("Registration file cannot be parsed: {}".format(reg_file))
-                    #logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
-                    fh.close()
 
         ## If mdf exists without metafile
         elif os.path.isfile(self.mdf):
@@ -906,7 +874,6 @@ class SetsmDem(object):
                 self.avg_acqtime2 = self.avg_acqtime1
 
             ## registration info (code assumes only one registration source in mdf)
-            self.reginfo_list = []
             try:
                 dx = float(metad['STRIP_DEM_REGISTRATION_registrationDX'])
                 dy = float(metad['STRIP_DEM_REGISTRATION_registrationDY'])
@@ -921,6 +888,43 @@ class SetsmDem(object):
 
         else:
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
+
+        #### If density file exists, get density and stats from there
+        if self.density is None or self.stats[0] is None:
+            if os.path.isfile(self.density_file):
+                fh = open(self.density_file, 'r')
+                lines = fh.readlines()
+                density = lines[0].strip()
+                self.density = float(density)
+                stats = lines[1].strip().split(',')
+                try:
+                    self.stats = [float(stat) for stat in stats]
+                    self.min_elev_value = self.stats[0]
+                    self.max_elev_value = self.stats[1]
+                except ValueError:
+                    pass
+                fh.close()
+
+        #### If reg.txt file exists, parse it for registration info
+        if self.reginfo_list is None:
+            for reg_file in self.reg_files:
+                dx, dy, dz, num_gcps, mean_resid_z = [None, None, None, None, None]
+                if os.path.isfile(reg_file):
+                    fh = open(reg_file, 'r')
+                    for line in fh.readlines():
+                        if line.startswith("Translation Vector (dz,dx,dy)"):
+                            vectors = line.split('=')[1].split(',')
+                            dz, dx, dy = [float(v.strip()) for v in vectors]
+                        elif line.startswith("Mean Vertical Residual"):
+                            mean_resid_z = line.split('=')[1].strip()
+                        elif line.startswith("# GCPs"):
+                            num_gcps = line.split('=')[1].strip()
+                    if dx is not None and num_gcps is not None and mean_resid_z is not None:
+                        self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, reg_file))
+                    else:
+                        logger.error("Registration file cannot be parsed: {}".format(reg_file))
+                    # logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
+                    fh.close()
 
     def write_mdf_file(self):
 
@@ -1495,10 +1499,10 @@ class SetsmTile(object):
                     self.supertile_id = '_'.join([self.scheme,self.tilename,self.res])
                 else:
                     self.supertile_id = '_'.join([self.tilename,self.res])
+                self.density = None
 
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
-
 
     def get_dem_info(self):
 
@@ -1514,7 +1518,6 @@ class SetsmTile(object):
             self.get_metafile_info()
 
         #### If density file exists, get density from there
-        self.density = None
         if os.path.isfile(self.density_file):
             fh = open(self.density_file,'r')
             lines = fh.readlines()
@@ -1525,8 +1528,6 @@ class SetsmTile(object):
     def compute_density_and_statistics(self):
         #### If no density file, compute
         if not os.path.isfile(self.density_file):
-            self.density = None
-
             #### If dem exists, get dem density within data boundary
             self.density = get_matchtag_density(self.matchtag, self.geom.Area())
 

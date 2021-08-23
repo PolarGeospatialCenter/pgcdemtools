@@ -13,12 +13,11 @@ tgt_srs = osr.SpatialReference()
 tgt_srs.ImportFromEPSG(4326)
 
 
-
 def main():
     
     #### Set Up Arguments 
     parser = argparse.ArgumentParser(
-        description="calculate density for setsm strip DEMS and save to a density.txt file"
+        description="Calculate density for setsm strip DEMS and save to a density.txt file"
         )
     
     #### Positional Arguments
@@ -80,34 +79,20 @@ def main():
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
       
-    j=0
+    srcfps = []
     scenes = []
     #### ID rasters
     logger.info('Identifying DEMs')
     if os.path.isfile(src) and src.endswith('.tif'):
         logger.debug(src)
-        try:
-            raster = dem.SetsmDem(src)
-        except RuntimeError as e:
-            logger.error( e )
-        else:
-            j+=1
-            if not os.path.isfile(raster.density_file):
-                scenes.append(src)
-                
+        srcfps.append(src)
+
     elif os.path.isfile(src) and src.endswith('.txt'):
         fh = open(src,'r')
         for line in fh.readlines():
             sceneid = line.strip()
-            
-            try:
-                raster = dem.SetsmDem(sceneid)
-            except RuntimeError as e:
-                logger.error( e )
-            else:
-                j+=1
-                if not os.path.isfile(raster.density_file):
-                    scenes.append(sceneid)
+            logger.debug(sceneid)
+            srcfps.append(sceneid)
     
     elif os.path.isdir(src):
         for root,dirs,files in os.walk(src):
@@ -115,20 +100,24 @@ def main():
                 if f.endswith("_dem.tif") and "m_" in f:
                     srcfp = os.path.join(root,f)
                     logger.debug(srcfp)
-                    try:
-                        raster = dem.SetsmDem(srcfp)
-                    except RuntimeError as e:
-                        logger.error( e )
-                    else:
-                        j+=1
-                        if not os.path.isfile(raster.density_file):
-                            scenes.append(srcfp)
-                            
+                    srcfps.append(srcfp)
+
     else:
-        logger.error( "src must be a directory, a strip dem, or a text file")
-    
-    scenes = list(set(scenes))
-    logger.info('Number of src rasters: {}'.format(j))
+        logger.error("src must be a directory, a strip dem raster, or a text file")
+
+    srcfps = list(set(srcfps))
+    logger.info('Number of src rasters: {}'.format(len(srcfps)))
+
+    for srcfp in srcfps:
+        try:
+            raster = dem.SetsmDem(srcfp)
+            raster.get_metafile_info()
+        except RuntimeError as e:
+            logger.error(e)
+        else:
+            if raster.density is None:
+                scenes.append(srcfp)
+
     logger.info('Number of incomplete tasks: {}'.format(len(scenes)))
     
     tm = datetime.now()
@@ -143,7 +132,7 @@ def main():
         if args.tasks_per_job:
             # bundle tasks into text files in the dst dir and pass the text file in as src
             scenes_in_job_count+=1
-            src_txt = os.path.join(scratch,'src_dems_{}_{}.txt'.format(tm.strftime("%Y%m%d%H%M%S"),job_count))
+            src_txt = os.path.join(scratch, 'src_dems_{}_{}.txt'.format(tm.strftime("%Y%m%d%H%M%S"),job_count))
             
             if scenes_in_job_count == 1:
                 # remove text file if dst already exists
@@ -206,30 +195,21 @@ def main():
     
     else:
         logger.info("No tasks found to process")
-        
+
+
 def build_archive(src,scratch,args):
 
     logger.info("Calculating density of raster: {}".format(src))
     raster = dem.SetsmDem(src)
-    
-    try:
-        raster.get_dem_info()
-    except RuntimeError as e:
-        logger.error(e)
-    else:
-        ## get raster density if not precomputed
-        if raster.density is None:
-            try:
-                raster.compute_density_and_statistics()
-            except RuntimeError as e:
-                logger.warning(e)
+    raster.get_metafile_info()
+
+    if raster.density is None:
+        try:
+            raster.compute_density_and_statistics()
+        except RuntimeError as e:
+            logger.warning(e)
                 
 
 if __name__ == '__main__':
     main()
-        
-            
-            
-        
-        
-        
+
