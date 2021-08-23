@@ -1614,7 +1614,7 @@ class SetsmTile(object):
 
             if get_stats:
                 try:
-                    self.stats = ds.GetRasterBand(1).GetStatistics(False, True)
+                    self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
                 except RuntimeError as e:
                     logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
                     self.stats = (None, None, None, None)
