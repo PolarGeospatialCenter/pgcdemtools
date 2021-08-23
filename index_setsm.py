@@ -78,7 +78,7 @@ MODES = {
     ## mode : (class, suffix, groupid_fld, field_def)
     'scene': (dem.SetsmScene, '_meta.txt', 'stripdemid',
                utils.SCENE_ATTRIBUTE_DEFINITIONS, utils.SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION),
-    'strip': (dem.SetsmDem, '_dem.tif', 'stripdemid',
+    'strip': (dem.SetsmDem, '_dem.tif', 'stripdirname',
                utils.DEM_ATTRIBUTE_DEFINITIONS, utils.DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
     'tile':  (dem.SetsmTile, '_dem.tif', 'supertile_id',
                utils.TILE_DEM_ATTRIBUTE_DEFINITIONS, utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION),
@@ -148,6 +148,8 @@ def main():
     parser.add_argument('--status-dsp-record-mode-orig', help='custom value for status field when dsp-record-mode is set to "orig"')
     parser.add_argument('--include-registration', action='store_true', default=False,
                         help='include registration info if present (mode=strip and tile only)')
+    parser.add_argument('--include-relver', action='store_true', default=False,
+                        help='include release version info if present (mode=strip and tile only)')
     parser.add_argument('--search-masked', action='store_true', default=False,
                         help='search for masked and unmasked DEMs (mode=strip only)')
     parser.add_argument('--read-json', action='store_true', default=False,
@@ -381,8 +383,10 @@ def main():
     if args.mode == 'strip' and args.search_masked:
         suffix = mask_strip_suffixes + tuple([suffix])
     fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base
+    fld_defs = fld_defs + utils.DEM_ATTRIBUTE_DEFINITION_RELVER if args.include_relver else fld_defs
     src_fps = []
     records = []
+    logger.info('Source: {}'.format(src))
     logger.info('Identifying DEMs')
 
     if os.path.isfile(src):
@@ -400,7 +404,7 @@ def main():
     for src_fp in src_fps:
         i+=1
         if not args.np:
-            progress(i, total, "DEMs identified")
+            utils.progress(i, total, "DEMs identified")
         if args.read_json:
             temp_records = read_json(os.path.join(src_fp),args.mode)
             records.extend(temp_records)
@@ -428,9 +432,8 @@ def main():
         logger.info("{} records found".format(total))
         ## Group into strips or tiles for json writing
         groups = {}
-        json_groupid_fld = 'stripdirname' if args.mode == 'strip' else groupid_fld
         for record in records:
-            groupid = getattr(record, json_groupid_fld)
+            groupid = getattr(record, groupid_fld)
             if groupid in groups:
                 groups[groupid].append(record)
             else:
@@ -530,7 +533,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         i+=1
                         if not args.np:
-                            progress(i, total * len(dsp_modes), "features written")
+                            utils.progress(i, total * len(dsp_modes), "features written")
                         feat = ogr.Feature(layer.GetLayerDefn())
                         valid_record = True
 
@@ -693,7 +696,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             else:
                                 attrib_map['REGION'] = region
 
-                            if record.version:
+                            if record.version and 'REL_VER' in fld_list:
                                 attrib_map['REL_VER'] = record.version
                             if record.density:
                                 attrib_map['DENSITY'] = record.density
@@ -784,13 +787,13 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         if args.mode == 'tile':
                             attrib_map = {
                                 'DEM_ID': record.tileid,
-                                'TILE': record.tilename,
+                                'TILE': record.supertile_id,
                                 'NUM_COMP': record.num_components,
                                 'FILESZ_DEM': record.filesz_dem,
                             }
 
                             ## Optional attributes
-                            if record.version:
+                            if record.version and 'REL_VER' in fld_list:
                                 attrib_map['REL_VER'] = record.version
                                 version = record.version
                             else:
@@ -1023,7 +1026,8 @@ def write_to_json(json_fd, groups, total, args):
             for item in items:
                 i+=1
                 if not args.np:
-                    progress(i,total,"records written")
+                    utils.progress(i,total,"records written")
+
                 # organize scene obj into dict and write to json
                 md[item.id] = item.__dict__
             if not args.np:
@@ -1060,17 +1064,6 @@ def get_pair_region_dict(conn_info):
             pairs = {f["pairname"]:(f["region_id"],f["bp_region"]) for f in stereo_lyr}
 
     return pairs
-
-
-def progress(count, total, suffix=''):
-    bar_len = 60
-    filled_len = int(round(bar_len * count / float(total)))
-
-    percents = round(100.0 * count / float(total), 1)
-    bar = '=' * filled_len + '-' * (bar_len - filled_len)
-
-    sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
-    sys.stdout.flush()  # As suggested by Rom Ruben
 
 
 def wrap_180(src_geom):

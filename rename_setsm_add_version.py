@@ -72,8 +72,12 @@ def rename(raster, args):
     creation_date_str = raster.creation_date.strftime("%Y%m%d")
 
     # glob and rename files
-    for ifp in glob.glob(os.path.join(raster.srcdir, raster.stripid+"*")):
+    glob1 = glob.glob(os.path.join(raster.srcdir, raster.stripid) + "_*")
+    glob1.append(os.path.join(raster.srcdir, raster.stripid) + ".tar.gz")
+
+    for ifp in glob1:
         dirp, fn = os.path.split(ifp)
+        #print(ifp)
 
         ofn = "SETSM_{}_{}{}".format(fn[:len(raster.stripid)], args.version, fn[len(raster.stripid):])
         ofp = os.path.join(dirp, ofn)

@@ -112,8 +112,11 @@ def main():
         if not os.path.isdir(dst_dir):
             if not args.dryrun:
                 os.makedirs(dst_dir)
-        
-        for ifp in glob.glob(os.path.join(raster.srcdir,raster.stripid)+"*"):
+
+        glob1 = glob.glob(os.path.join(raster.srcdir, raster.stripid) + "_*")
+        glob1.append(os.path.join(raster.srcdir, raster.stripid) + ".tar.gz")
+
+        for ifp in glob1:
             ofp = os.path.join(dst_dir,os.path.basename(ifp))
             if os.path.isfile(ofp) and args.overwrite:
                 logger.debug("Copying {} to {}".format(ifp,ofp))
