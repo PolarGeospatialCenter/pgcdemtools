@@ -10,18 +10,17 @@ import logging
 import math
 import os
 import re
-from datetime import *
+import time
+from datetime import datetime
 
 import numpy
 from osgeo import gdal, osr, ogr
 
 from lib import utils
 
+logger = utils.get_logger()
+utils.setup_gdal_error_handler()
 gdal.UseExceptions()
-
-#### Create Logger
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
 
 __all__ = [
     "SetsmDem",
@@ -759,14 +758,14 @@ class SetsmDem(object):
                 if acqtime_str is None:
                     for img_key in ('Image 1', 'Image_1'):
                         if img_key in self.scenes[x]:
-                            img1_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img1_path).split('_')[1]
+                            img_path = self.scenes[x][img_key]
+                            acqtime_str = os.path.basename(img_path).split('_')[1]
                             acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
                             values.append(acqtime_dt)
                             break
             if len(values) > 0:
                 self.acqdate1 = values[0]
-                self.avg_acqtime1 = datetime.fromtimestamp(sum(map(datetime.timestamp, values)) / len(values))
+                self.avg_acqtime1 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
             values = []
             for x in range(len(self.scenes)):
@@ -780,14 +779,14 @@ class SetsmDem(object):
                 if acqtime_str is None:
                     for img_key in ('Image 2', 'Image_2'):
                         if img_key in self.scenes[x]:
-                            img1_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img1_path).split('_')[1]
+                            img_path = self.scenes[x][img_key]
+                            acqtime_str = os.path.basename(img_path).split('_')[1]
                             acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
                             values.append(acqtime_dt)
                             break
             if len(values) > 0:
                 self.acqdate2 = values[0]
-                self.avg_acqtime2 = datetime.fromtimestamp(sum(map(datetime.timestamp, values)) / len(values))
+                self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
             ## get sensors
             values = []
@@ -1615,7 +1614,7 @@ class SetsmTile(object):
 
             if get_stats:
                 try:
-                    self.stats = ds.GetRasterBand(1).GetStatistics(False, True)
+                    self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
                 except RuntimeError as e:
                     logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
                     self.stats = (None, None, None, None)

@@ -15,44 +15,15 @@ try:
 except ImportError:
     import configparser as ConfigParser
 
-class GdalErrorHandler(object):
-    def __init__(self):
-        self.err_level=gdal.CE_None
-        self.err_no=0
-        self.err_msg=''
-
-    def handler(self, err_level, err_no, err_msg):
-        self.err_level=err_level
-        self.err_no=err_no
-        self.err_msg=err_msg
-
-err=GdalErrorHandler()
-handler=err.handler # Note don't pass class method directly or python segfaults
-gdal.PushErrorHandler(handler)
-gdal.UseExceptions() #Exceptions will get raised on anything >= gdal.CE_Failure
+logger = utils.get_logger()
+utils.setup_gdal_error_handler()
+gdal.UseExceptions()
 
 # Script paths and execution
 SCRIPT_FILE = os.path.abspath(os.path.realpath(__file__))
 SCRIPT_FNAME = os.path.basename(SCRIPT_FILE)
 SCRIPT_NAME, SCRIPT_EXT = os.path.splitext(SCRIPT_FNAME)
 SCRIPT_DIR = os.path.dirname(SCRIPT_FILE)
-
-#### Create Logger
-class InfoFilter(logging.Filter):
-    def filter(self, rec):
-        return rec.levelno in (logging.DEBUG, logging.INFO)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s', '%m-%d-%Y %H:%M:%S')
-h1 = logging.StreamHandler(sys.stdout)
-h1.setLevel(logging.DEBUG)
-h1.setFormatter(formatter)
-h1.addFilter(InfoFilter())
-h2 = logging.StreamHandler(sys.stderr)
-h2.setLevel(logging.WARNING)
-h2.setFormatter(formatter)
-logger.addHandler(h1)
-logger.addHandler(h2)
 
 FORMAT_OPTIONS = {
     'SHP':'ESRI Shapefile',
@@ -171,11 +142,15 @@ def main():
     parser.add_argument("--read-pickle", help='read region lookup from a pickle file. skipped if --write-json is used')
     parser.add_argument("--custom-paths", choices=custom_path_prefixes.keys(), help='Use custom path schema')
     parser.add_argument('--project', choices=PROJECTS.keys(), help='project name (required when writing tiles)')
+    parser.add_argument('--debug', action='store_true', default=False, help='print DEBUG level logger messages to terminal')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
     parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
 
     #### Parse Arguments
     args = parser.parse_args()
+
+    if args.debug:
+        utils.logger_streamhandler_debug()
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
@@ -491,11 +466,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         layer = ds.GetLayerByName(dst_lyr)
         fld_list = [f.fname for f in fld_defs]
 
-        err.err_level = gdal.CE_None
         tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         tgt_srs.ImportFromEPSG(args.epsg)
-        if err.err_level >= gdal.CE_Warning:
-            raise RuntimeError(err.err_level, err.err_no, err.err_msg)
 
         if not layer:
             logger.info("Creating table...")
@@ -920,7 +892,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     recordids.append(recordid_map[args.mode].format(**attrib_map))
 
                                     # Append record
-                                    err.err_level = gdal.CE_None
                                     try:
                                         if ogr_driver_str in ('PostgreSQL'):
                                             layer.StartTransaction()
@@ -930,11 +901,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             layer.CreateFeature(feat)
                                     except Exception as e:
                                         raise e
-                                    else:
-                                        if err.err_level >= gdal.CE_Warning:
-                                            raise RuntimeError(err.err_level, err.err_no, err.err_msg)
-                                    finally:
-                                        gdal.PopErrorHandler()
             if not args.np:
                 print('')
 
@@ -1030,8 +996,6 @@ def write_to_json(json_fd, groups, total, args):
 
                 # organize scene obj into dict and write to json
                 md[item.id] = item.__dict__
-            if not args.np:
-                print('')
 
             json_txt = json.dumps(md, default=encode_json)
             #print json_txt
@@ -1042,6 +1006,8 @@ def write_to_json(json_fd, groups, total, args):
 
         else:
             logger.info("Json file already exists {}. Use --overwrite to overwrite".format(json_fp))
+    if not args.np:
+        print('')
 
 
 def get_pair_region_dict(conn_info):
