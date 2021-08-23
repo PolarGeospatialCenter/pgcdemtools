@@ -18,11 +18,9 @@ from osgeo import gdal, osr, ogr
 
 from lib import utils
 
+logger = utils.get_logger()
+utils.setup_gdal_error_handler()
 gdal.UseExceptions()
-
-#### Create Logger
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
 
 __all__ = [
     "SetsmDem",

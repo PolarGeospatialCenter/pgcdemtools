@@ -14,9 +14,131 @@ from collections import namedtuple
 
 from osgeo import osr, ogr, gdalconst, gdal
 
-#### Create Logger
-logger = logging.getLogger("logger")
-logger.setLevel(logging.DEBUG)
+gdal.UseExceptions()
+
+
+## Shared logger setup
+class LoggerInfoFilter(logging.Filter):
+    def filter(self, rec):
+        return rec.levelno in (logging.DEBUG, logging.INFO)
+
+LOGGER = None
+LOGGER_STREAM_HANDLER = None
+def get_logger():
+    global LOGGER, LOGGER_STREAM_HANDLER
+    if LOGGER is not None:
+        return LOGGER
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s', '%m-%d-%Y %H:%M:%S')
+    h1 = logging.StreamHandler(sys.stdout)
+    h1.setLevel(logging.INFO)
+    h1.setFormatter(formatter)
+    h1.addFilter(LoggerInfoFilter())
+    h2 = logging.StreamHandler(sys.stderr)
+    h2.setLevel(logging.WARNING)
+    h2.setFormatter(formatter)
+    logger.addHandler(h1)
+    logger.addHandler(h2)
+    LOGGER = logger
+    LOGGER_STREAM_HANDLER = h1
+    return LOGGER
+
+def set_logger_streamhandler_level(level):
+    global LOGGER_STREAM_HANDLER
+    get_logger()
+    LOGGER_STREAM_HANDLER.setLevel(level)
+
+def logger_streamhandler_debug():
+    set_logger_streamhandler_level(logging.DEBUG)
+def logger_streamhandler_info():
+    set_logger_streamhandler_level(logging.INFO)
+
+logger = get_logger()
+
+
+## GDAL error handler setup
+class GdalErrorHandler(object):
+    def __init__(self, catch_warnings=None, print_uncaught_warnings=None):
+        self.err_level = gdal.CE_None
+        self.err_no = 0
+        self.err_msg = ''
+        self.catch_warnings = catch_warnings if catch_warnings is not None else True
+        self.print_warnings = print_uncaught_warnings if print_uncaught_warnings is not None else True
+
+    def handler(self, err_level, err_no, err_msg):
+        self.err_level = err_level
+        self.err_no = err_no
+        self.err_msg = err_msg
+        error_message = (
+            "Caught GDAL error (err_level={}, err_no={}) "
+            "where level >= gdal.CE_Warning({}); error message below:\n{}".format(
+                self.err_level, self.err_no, gdal.CE_Warning, self.err_msg
+            )
+        )
+        if self.err_level == gdal.CE_Warning:
+            if self.catch_warnings:
+                raise RuntimeError(error_message)
+            elif self.print_warnings:
+                logger.warning(error_message)
+        elif self.err_level > gdal.CE_Warning:
+            raise RuntimeError(error_message)
+
+GDAL_ERROR_HANDLER = None
+def setup_gdal_error_handler(catch_warnings=None, print_uncaught_warnings=None):
+    global GDAL_ERROR_HANDLER
+    if GDAL_ERROR_HANDLER is None:
+        err = GdalErrorHandler(catch_warnings, print_uncaught_warnings)
+        handler = err.handler  # Note: Don't pass class method directly or python segfaults
+        gdal.PushErrorHandler(handler)
+        gdal.UseExceptions()  # Exceptions will get raised on anything >= gdal.CE_Failure
+        GDAL_ERROR_HANDLER = err
+    else:
+        if catch_warnings is not None:
+            GDAL_ERROR_HANDLER.catch_warnings = catch_warnings
+        if print_uncaught_warnings is not None:
+            GDAL_ERROR_HANDLER.print_warnings = print_uncaught_warnings
+
+def get_gdal_error_handler():
+    setup_gdal_error_handler()
+    return GDAL_ERROR_HANDLER
+
+class GdalHandleWarnings(object):
+    def __init__(self, catch_warnings, print_warnings=None):
+        setup_gdal_error_handler()
+        self.catch_warnings = catch_warnings
+        self.print_warnings = print_warnings
+        self.catch_warnings_backup = None
+        self.print_warnings_backup = None
+    def __enter__(self):
+        global GDAL_ERROR_HANDLER
+        if self.print_warnings is None:
+            self.print_warnings = GDAL_ERROR_HANDLER.print_warnings
+        self.catch_warnings_backup = GDAL_ERROR_HANDLER.catch_warnings
+        self.print_warnings_backup = GDAL_ERROR_HANDLER.print_warnings
+        GDAL_ERROR_HANDLER.catch_warnings = self.catch_warnings
+        GDAL_ERROR_HANDLER.print_warnings = self.print_warnings
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        global GDAL_ERROR_HANDLER
+        GDAL_ERROR_HANDLER.catch_warnings = self.catch_warnings_backup
+        GDAL_ERROR_HANDLER.print_warnings = self.print_warnings_backup
+
+# Use the following classes in a 'with' statement to wrap a code block
+# -- Example --
+# with GdalCatchWarnings():
+#     ...
+class GdalCatchWarnings(GdalHandleWarnings):
+    def __init__(self, print_warnings=None):
+        super(GdalCatchWarnings, self).__init__(catch_warnings=True, print_warnings=print_warnings)
+class GdalAllowWarnings(GdalHandleWarnings):
+    def __init__(self, print_warnings=None):
+        super(GdalAllowWarnings, self).__init__(catch_warnings=False, print_warnings=print_warnings)
+
+# Setup GDAL error handler for all scripts that import this module.
+# If this behavior is not desired, you can instead call this setup
+# at the top of only the scripts in which you want to handle warnings.
+setup_gdal_error_handler(catch_warnings=True, print_uncaught_warnings=True)
+
 
 # Copy DEM global vars
 deliv_suffixes = (
