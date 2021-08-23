@@ -10,7 +10,8 @@ import logging
 import math
 import os
 import re
-from datetime import *
+import time
+from datetime import datetime
 
 import numpy
 from osgeo import gdal, osr, ogr
@@ -753,14 +754,14 @@ class SetsmDem(object):
                 if acqtime_str is None:
                     for img_key in ('Image 1', 'Image_1'):
                         if img_key in self.scenes[x]:
-                            img1_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img1_path).split('_')[1]
+                            img_path = self.scenes[x][img_key]
+                            acqtime_str = os.path.basename(img_path).split('_')[1]
                             acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
                             values.append(acqtime_dt)
                             break
             if len(values) > 0:
                 self.acqdate1 = values[0]
-                self.avg_acqtime1 = datetime.fromtimestamp(sum(map(datetime.timestamp, values)) / len(values))
+                self.avg_acqtime1 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
             values = []
             for x in range(len(self.scenes)):
@@ -774,14 +775,14 @@ class SetsmDem(object):
                 if acqtime_str is None:
                     for img_key in ('Image 2', 'Image_2'):
                         if img_key in self.scenes[x]:
-                            img1_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img1_path).split('_')[1]
+                            img_path = self.scenes[x][img_key]
+                            acqtime_str = os.path.basename(img_path).split('_')[1]
                             acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
                             values.append(acqtime_dt)
                             break
             if len(values) > 0:
                 self.acqdate2 = values[0]
-                self.avg_acqtime2 = datetime.fromtimestamp(sum(map(datetime.timestamp, values)) / len(values))
+                self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
             ## get sensors
             values = []
