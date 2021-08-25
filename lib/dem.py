@@ -547,7 +547,7 @@ class SetsmDem(object):
                     self.max_elev_value = None
                     self.density = None
                     self.stats = (None, None, None, None)
-                    self.reginfo_list = None
+                    self.reginfo_list = []
                     self.geocell = None
                     break
             if not match:
@@ -905,7 +905,7 @@ class SetsmDem(object):
                 fh.close()
 
         #### If reg.txt file exists, parse it for registration info
-        if self.reginfo_list is None:
+        if len(self.reginfo_list) == 0:
             for reg_file in self.reg_files:
                 dx, dy, dz, num_gcps, mean_resid_z = [None, None, None, None, None]
                 if os.path.isfile(reg_file):
@@ -1251,8 +1251,8 @@ class SetsmDem(object):
         'matchtag',
         'mdf',
         'metapath',
-        'min_elev_value',
-        'max_elev_value',
+        # 'min_elev_value',
+        # 'max_elev_value',
         'ndv',
         'ortho',
         'pairname',
