@@ -670,10 +670,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             if record.version and 'REL_VER' in fld_list:
                                 attrib_map['REL_VER'] = record.version
-                            if record.density:
-                                attrib_map['DENSITY'] = record.density
-                            else:
-                                attrib_map['DENSITY'] = -9999
+
+                            attrib_map['DENSITY'] = record.density if record.density else -9999
+                            attrib_map['MASK_DENS'] = record.masked_density if record.masked_density else -9999
 
                             ## If registration info exists
                             if args.include_registration:
@@ -770,10 +769,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 version = record.version
                             else:
                                 version = 'novers'
-                            if record.density:
-                                attrib_map['DENSITY'] = record.density
-                            else:
-                                attrib_map['DENSITY'] = -9999
+
+                            attrib_map['DENSITY'] = record.density if record.density else -9999
 
                             if args.include_registration:
                                 if record.reg_src:

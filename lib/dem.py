@@ -357,7 +357,8 @@ class SetsmScene(object):
         if os.path.isfile(self.dspinfo):
             dspmetad = self._parse_metadata_file(self.dspinfo)
             if len(dspmetad) != 7:
-                raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(len(self.dspmetad)))
+                raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(
+                    len(dspmetad)))
             for k in self.filesz_attrib_map:
                 k2 = "dsp_{}".format(k)
                 try:
@@ -546,7 +547,7 @@ class SetsmDem(object):
                     self.min_elev_value = None
                     self.max_elev_value = None
                     self.density = None
-                    self.stats = (None, None, None, None)
+                    self.masked_density = None
                     self.reginfo_list = []
                     self.geocell = None
                     break
@@ -676,19 +677,28 @@ class SetsmDem(object):
             if not os.path.isfile(self.matchtag):
                 raise RuntimeError("Matchtag file does not exist for DEM: {}".format(self.srcfp))
             else:
-                self.density = get_matchtag_density(self.matchtag, self.geom.Area())
+                self.density = get_raster_density(self.matchtag, self.geom.Area())
 
-        if self.stats[0] is None:
+        if self.masked_density is None:
+            #### If bitmask exists, get  density within data boundary
+            if not os.path.isfile(self.bitmask):
+                raise RuntimeError("Bitmask file does not exist for DEM: {}".format(self.srcfp))
+            else:
+                self.masked_density = get_raster_density(self.matchtag, self.geom.Area(), bitmask_fp=self.bitmask)
+
+        stats = []
+        if self.min_elev_value is None or self.max_elev_value is None:
             ds = gdal.Open(self.srcfp)
             try:
-                self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                self.min_elev_value, self.max_elev_value, _, _ = stats
             except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
 
         fh = open(self.density_file, 'w')
         fh.write('{}\n'.format(self.density))
-        stats_str = [str(stat) for stat in self.stats]
-        fh.write('{}\n'.format(','.join(stats_str)))
+        fh.write('{}\n'.format(self.masked_density))
+        fh.write('{}\n'.format(','.join([str(stat) for stat in stats])))
         fh.close()
 
     def get_metafile_info(self):
@@ -806,6 +816,8 @@ class SetsmDem(object):
             ## density and stats
             if 'Output Data Density' in metad:
                 self.density = metad['Output Data Density']
+            if 'Fully Masked Data Density' in metad:
+                self.masked_density = metad['Fully Masked Data Density']
             if 'Minimum elevation value' in metad:
                 self.min_elev_value = metad['Minimum elevation value']
             if 'Maximum elevation value' in metad:
@@ -838,16 +850,20 @@ class SetsmDem(object):
                 self.density = float(metad['STRIP_DEM_matchtagDensity'])
             except ValueError as e:
                 logger.info("Cannot convert density value ({}) to float for {}".format(metad['STRIP_DEM_matchtagDensity'], self.srcfp))
-                self.density = None
 
             try:
-                min_elev = float(metad['STRIP_DEM_minElevValue'])
-                max_elev = float(metad['STRIP_DEM_maxElevValue'])
+                self.masked_density = float(metad['STRIP_DEM_maskedMatchtagDensity'])
             except ValueError as e:
-                logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
-                min_elev, max_elev = None, None
+                logger.info("Cannot convert bitmask density value ({}) to float for {}".format(
+                    metad['STRIP_DEM_maskedMatchtagDensity'], self.srcfp))
 
-            self.stats = (min_elev, max_elev, None, None)
+            try:
+                self.min_elev_value = float(metad['STRIP_DEM_minElevValue'])
+                self.max_elev_value = float(metad['STRIP_DEM_maxElevValue'])
+            except ValueError as e:
+                logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(
+                    metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
+
             self.proj4_meta = metad['STRIP_DEM_horizontalCoordSysProj4'].replace("'","")
             self.creation_date = datetime.strptime(metad['STRIP_DEM_stripCreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
 
@@ -889,17 +905,22 @@ class SetsmDem(object):
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
 
         #### If density file exists, get density and stats from there
-        if self.density is None or self.stats[0] is None:
+        needed_attribs = (self.density, self.masked_density, self.max_elev_value, self.min_elev_value)
+        if any([a is None for a in needed_attribs]):
             if os.path.isfile(self.density_file):
                 fh = open(self.density_file, 'r')
                 lines = fh.readlines()
-                density = lines[0].strip()
-                self.density = float(density)
-                stats = lines[1].strip().split(',')
+                stats_line = 1
                 try:
-                    self.stats = [float(stat) for stat in stats]
-                    self.min_elev_value = self.stats[0]
-                    self.max_elev_value = self.stats[1]
+                    self.density = float(lines[0].strip())
+                    if ',' not in lines[1]:
+                        stats_line = 2
+                        self.masked_density = float(lines[1].strip())
+                    stats = lines[stats_line].strip().split(',')
+                    self.min_elev_value = float(stats[0])
+                    self.max_elev_value = float(stats[1])
+                except IndexError:
+                    pass
                 except ValueError:
                     pass
                 fh.close()
@@ -980,9 +1001,10 @@ class SetsmDem(object):
                 ('horizontalResolution',(self.xres+self.yres)/2.0),
                 ('verticalCoordSys','"WGS84 Ellipsoidal Height"'),
                 ('verticalCoordSysUnits','"meters"'),
-                ('minElevValue',self.stats[0] if self.stats[0] is not None else self.min_elev_value),
-                ('maxElevValue',self.stats[1] if self.stats[1] is not None else self.max_elev_value),
+                ('minElevValue', self.min_elev_value),
+                ('maxElevValue', self.max_elev_value),
                 ('matchtagDensity',self.density),
+                ('maskedMatchtagDensity', self.masked_density),
                 ('lsfApplied',str(self.is_lsf))
             ]
 
@@ -1142,10 +1164,9 @@ class SetsmDem(object):
             l = line.strip()
 
             if l:
-                #print l, in_header
-                #### Set scene number marker
+                scene_num = 0
+                ## Set scene number marker
                 if l == 'Scene Metadata':
-                    scene_num = 0
                     in_header = False
                 elif l.startswith("scene ") and not in_header:
                     scene_num +=1
@@ -1272,7 +1293,6 @@ class SetsmDem(object):
         'srcfn',
         'srcfp',
         'srs',
-        'stats',
         'stripid',
         'wkt_esri',
         'xres',
@@ -1310,6 +1330,8 @@ class AspDem(object):
             self.creation_date = None
             self.algm_version = 'ASP'
             self.geom = None
+            self.max_elev_value = None
+            self.min_elev_value = None
         else:
             raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
@@ -1348,10 +1370,9 @@ class AspDem(object):
             self.datatype_readable = gdal.GetDataTypeName(self.datatype)
             self.ndv = ds.GetRasterBand(1).GetNoDataValue()
             try:
-                self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
+                self.min_elev_value, self.max_elev_value, _, _ = ds.GetRasterBand(1).GetStatistics(True,True)
             except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
-                self.stats = (None, None, None, None)
 
             num_gcps = ds.GetGCPCount()
 
@@ -1499,6 +1520,8 @@ class SetsmTile(object):
                 else:
                     self.supertile_id = '_'.join([self.tilename,self.res])
                 self.density = None
+                self.min_elev_value = None
+                self.max_elev_value = None
 
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
@@ -1528,7 +1551,7 @@ class SetsmTile(object):
         #### If no density file, compute
         if not os.path.isfile(self.density_file):
             #### If dem exists, get dem density within data boundary
-            self.density = get_matchtag_density(self.matchtag, self.geom.Area())
+            self.density = get_raster_density(self.matchtag, self.geom.Area())
 
             fh = open(self.density_file, 'w')
             fh.write('{}\n'.format(self.density))
@@ -1614,10 +1637,10 @@ class SetsmTile(object):
 
             if get_stats:
                 try:
-                    self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                    stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                    self.min_elev_value, self.max_elev_value, _, _ = stats
                 except RuntimeError as e:
                     logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
-                    self.stats = (None, None, None, None)
 
         else:
             raise RuntimeError("Cannot open image: %s" %self.srcfp)
@@ -1757,7 +1780,6 @@ class SetsmTile(object):
         'srcfn',
         'srcfp',
         'srs',
-        'stats',
         'tileid',
         'tilename',
         'wkt_esri',
@@ -1818,28 +1840,38 @@ def format_as_imd(contents):
     return text
 
 
-def get_matchtag_density(matchtag, geom_area=None):
-    ds = gdal.Open(matchtag)
+def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
+    ds = gdal.Open(raster_fp)
     b = ds.GetRasterBand(1)
     gtf = ds.GetGeoTransform()
-    matchtag_res_x = gtf[1]
-    matchtag_res_y = gtf[5]
-    matchtag_size_x = ds.RasterXSize
-    matchtag_size_y = ds.RasterYSize
-    matchtag_ndv = b.GetNoDataValue()
+    res_x = gtf[1]
+    res_y = gtf[5]
+    size_x = ds.RasterXSize
+    size_y = ds.RasterYSize
     data = utils.gdalReadAsArraySetsmSceneBand(b)
     err = gdal.GetLastErrorNo()
     if err != 0:
-        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), matchtag))
+        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), raster_fp))
     else:
-        data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
+        if bitmask_fp:
+            ds2 = gdal.Open(bitmask_fp)
+            b2 = ds2.GetRasterBand(1)
+            bm_data = utils.gdalReadAsArraySetsmSceneBand(b2)
+            err = gdal.GetLastErrorNo()
+            if err != 0:
+                raise RuntimeError("Bitmask dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), bitmask_fp))
+            masked_data_array = numpy.logical_and(data, bm_data == 0)
+            data_pixel_count = numpy.count_nonzero(masked_data_array)
+
+        else:
+            data_pixel_count = numpy.count_nonzero(data)
         # If geom area is available, use that as the denominator to exclude collar pixes
         if geom_area:
-            data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
+            data_area = abs(data_pixel_count * res_x * res_y)
             density = data_area / geom_area
         # If geom area is not available, assume there is no collar and use total pixel count
         else:
-            total_pixel_count = matchtag_size_x * matchtag_size_y
+            total_pixel_count = size_x * size_y
             density = data_pixel_count / float(total_pixel_count)
 
         return density

@@ -12,6 +12,8 @@ ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
 tgt_srs = osr.SpatialReference()
 tgt_srs.ImportFromEPSG(4326)
 
+AREA_THRESHOLD = 5500000  # Filter threshold in sq meters
+DENSITY_THRESHOLD = 0.1   # Masked matchtag density threshold
 
 
 def main():
@@ -31,13 +33,16 @@ def main():
     # parser.add_argument('--lsf', action='store_true', default=False,
     #                     help="package LSF DEM instead of original DEM. Includes metadata flag.")
     parser.add_argument('--filter-dems', action='store_true', default=False,
-                        help="filter dems with area < 5.6 sqkm and density < 0.1")
+                        help="filter dems with area < {} sqkm or density < {}".format(
+                            AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
-                        help="filter dems where tar has already been built with area < 5.6 sqkm and density < 0.1")
+                        help="filter dems where tar has already been built with area < {} sqkm or density < {}".format(
+                            AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
-    parser.add_argument("--tasks-per-job", type=int, help="number of tasks to bundle into a single job (requires pbs option)")
+    parser.add_argument("--tasks-per-job", type=int,
+                        help="number of tasks to bundle into a single job (requires pbs option)")
     parser.add_argument("--pbs", action='store_true', default=False,
                         help="submit tasks to PBS")
     parser.add_argument("--parallel-processes", type=int, default=1,
@@ -237,22 +242,22 @@ def build_archive(src,scratch,args):
         process = True
         
         ## get raster density if not precomputed
-        if raster.density is None:
+        needed_attribs = (raster.density, raster.masked_density, raster.max_elev_value, raster.min_elev_value)
+        if any([a is None for a in needed_attribs]):
             try:
                 raster.compute_density_and_statistics()
             except RuntimeError as e:
                 logger.warning(e)
         
         if args.filter_dems or args.force_filter_dems:
-            # filter dems with area < 5.5 sqkm and density < .1
+            # filter dems with small area or low density
             
             area = raster.geom.Area()
-            # logger.info(raster.density)
-            if area < 5500000:
-                logger.info("Raster area {} falls below threshold: {}".format(area,raster.srcfp))
+            if area < AREA_THRESHOLD:
+                logger.info("Raster area {} falls below threshold: {}".format(area, raster.srcfp))
                 process = False
-            elif raster.density < 0.1:
-                logger.info("Raster density {} falls below threshold: {}".format(raster.density,raster.srcfp))
+            elif raster.masked_density < DENSITY_THRESHOLD:
+                logger.info("Raster density {} falls below threshold: {}".format(raster.density, raster.srcfp))
                 process = False
                 
             if not process:
@@ -381,9 +386,9 @@ def build_archive(src,scratch,args):
                                         'EDGEMASK': int(raster.mask_tuple[0]),
                                         'WATERMASK': int(raster.mask_tuple[1]),
                                         'CLOUDMASK': int(raster.mask_tuple[2]),
-                                        'DENSITY': raster.density,
+                                        'DENSITY': raster.density if raster.density is not None else -9999,
+                                        'MASK_DENS': raster.masked_density if raster.masked_density is not None else -9999,
                                         'RMSE': raster.rmse
-
                                     }
                                     
                                     #### Set fields if populated (will not be populated if metadata file is not found)
