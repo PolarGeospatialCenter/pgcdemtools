@@ -657,10 +657,10 @@ class TestIndexerIO(unittest.TestCase):
             (self.strip_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --custom-paths BP'.format(root_dir),
              self.strip_count, 'Done'),  # test BP paths
             (self.strip_dir, self.test_str,
-             '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC',
+             '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(root_dir),
              self.strip_count, 'Done'),  # test PGC paths
             (self.strip_dir, self.test_str,
-             '--read-pickle tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS',
+             '--read-pickle {}/tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS'.format(root_dir),
              self.strip_count,
              'Done'),  # test CSS paths
         )
@@ -674,6 +674,7 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
+            # print(cmd)
             # print(se)
             # print(so)
 
