@@ -124,6 +124,9 @@ class SetsmScene(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
+            ## Check if epsg is valid and recalculate if not - catch effects of a jsons build with a bug
+            if not self.epsg:
+                self.epsg = get_epsg(self.proj4)
 
         else:
             self.srcdir, self.srcfn = os.path.split(metapath)
@@ -237,16 +240,11 @@ class SetsmScene(object):
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
-            self.epsg = ''
 
-            for epsg in epsgs:
-                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-                tgt_srs.ImportFromEPSG(epsg)
-                if src_srs.IsSame(tgt_srs) == 1:
-                    self.epsg = epsg
-                    break
-            if self.epsg == '':
-                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, dsp))
+            try:
+                self.epsg = get_epsg(src_srs)
+            except RuntimeError as e:
+                raise RuntimeError(e)
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -471,6 +469,9 @@ class SetsmDem(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
+            ## Check if epsg is valid and recalculate if not - catch effects of a jsons build with a bug
+            if not self.epsg:
+                self.epsg = get_epsg(self.proj4)
 
         else:
             self.srcfp = filepath
@@ -594,16 +595,11 @@ class SetsmDem(object):
             src_srs.ImportFromWkt(self.proj)
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
-            self.epsg = ''
 
-            for epsg in epsgs:
-                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-                tgt_srs.ImportFromEPSG(epsg)
-                if src_srs.IsSame(tgt_srs) == 1:
-                    self.epsg = epsg
-                    break
-            if self.epsg == '':
-                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
+            try:
+                self.epsg = get_epsg(src_srs)
+            except RuntimeError as e:
+                raise RuntimeError(e)
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1327,18 +1323,10 @@ class AspDem(object):
             src_srs.ImportFromWkt(self.proj)
             self.proj4 = src_srs.ExportToProj4()
             #print self.proj4
-            self.epsg = ''
-
-            for epsg in epsgs:
-                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-                tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
-                if src_srs.IsSame(tgt_srs) == 1:
-                    self.epsg = epsg
-                    break
-            if self.epsg == '':
-                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
+            try:
+                self.epsg = get_epsg(src_srs)
+            except RuntimeError as e:
+                raise RuntimeError(e)
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1549,18 +1537,10 @@ class SetsmTile(object):
             self.srs = src_srs
             self.proj4 = src_srs.ExportToProj4()
             #print self.proj4
-            self.epsg = ''
-
-            for epsg in epsgs:
-                tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-                tgt_srs.ImportFromEPSG(epsg)
-                #print epsg
-                #print src_srs.IsSame(tgt_srs)
-                if src_srs.IsSame(tgt_srs) == 1:
-                    self.epsg = epsg
-                    break
-            if self.epsg == '':
-                raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
+            try:
+                self.epsg = get_epsg(src_srs)
+            except RuntimeError as e:
+                raise RuntimeError(e)
 
             src_srs.MorphToESRI()
             self.wkt_esri = src_srs.ExportToWkt()
@@ -1843,3 +1823,35 @@ def get_matchtag_density(matchtag, geom_area=None):
             density = data_pixel_count / float(total_pixel_count)
 
         return density
+
+def get_epsg(src_srs):
+    '''
+    Returns epsg code
+    Input: osr spatial reference or proj4 string
+    Output: EPSG code (int)
+    '''
+
+    valid_srs = True
+    if isinstance(src_srs, str):
+        srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+        srs.ImportFromProj4(src_srs)
+    elif isinstance(src_srs, osr.SpatialReference):
+        srs = src_srs
+    else:
+        valid_srs = False
+
+    if not valid_srs:
+        raise RuntimeError("Input is not a osr.SpatialReference object or proj4 string")
+
+    raster_epsg = None
+    for epsg in epsgs:
+        tgt_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+        tgt_srs.ImportFromEPSG(epsg)
+        if srs.IsSame(tgt_srs) == 1:
+            raster_epsg = epsg
+            break
+    if not raster_epsg:
+        raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
+
+    return raster_epsg
+
