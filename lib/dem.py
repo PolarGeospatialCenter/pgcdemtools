@@ -75,7 +75,7 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     (lsf_)?
                                     (?P<partnum>SEG\d+)_
-                                    ((?P<version>v[\d/.]+)_)?
+                                    ((?P<relversion>v[\d/.]+)_)?
                                     (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
                                     .(tif|jpg))\Z""", re.I | re.X)
 
@@ -87,7 +87,7 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     )_
                                     (?P<partnum>SEG\d+)_
                                     (?P<res>(\d+|0\.\d+)c?m)_
-                                    ((?P<version>v[\d/.]+)_)?
+                                    ((?P<relversion>v[\d/.]+)_)?
                                     (lsf_)?
                                     (?P<suffix>dem.(tif|jpg))\Z""", re.I | re.X)
 
@@ -102,7 +102,7 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (?P<tile>\d+_\d+)_
                                    ((?P<subtile>\d+_\d+)_)?
                                    (?P<res>(\d+|0\.\d+)c?m)_
-                                   ((?P<version>v[\d\.]+)_)?
+                                   ((?P<relversion>v[\d\.]+)_)?
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
 
@@ -178,6 +178,7 @@ class SetsmScene(object):
                 self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                 self.geom = None
                 self.group_version = None
+                self.version = None
                 self.is_dsp = None
                 self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                 self.subtile = groups['subtile'] if 'subtile' in groups else None
@@ -188,22 +189,17 @@ class SetsmScene(object):
             self.get_metafile_info()
 
             ## Build res_str
-            scene_dem_resstr_lookup = { a: b for (a,b) in scene_dem_res_lookup.values()}
+            scene_dem_resstr_lookup = {a: b for (a,b) in scene_dem_res_lookup.values()}
             self.res_str = scene_dem_resstr_lookup[self.res]
 
-            ## Get version str with ability to handle 1-3 parts of semantic version
+            ## Get version key
             if self.group_version:
-                vp = self.group_version.split('.')
+                self.algm_version_key = semver2verkey(self.group_version)
             else:
-                vp = self.version.split('.')
-
-            vl = [0,0,0]
-            for i in range(len(vp)):
-                vl[i] = int(vp[i])
-            version_str = 'v{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
+                self.algm_version_key = semver2verkey(self.version)
 
             ## Make strip ID
-            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+            self.stripdemid = '_'.join((self.pairname, self.res_str, self.algm_version_key))
 
             if self.is_dsp:
                 sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
@@ -211,7 +207,7 @@ class SetsmScene(object):
                 src_sceneid_res_subtile_suffix = sceneid_resstr+dsp_sceneid_res_subtile_suffix[1:]
                 dsp_sceneid_no_suffix = self.sceneid[:-(len(dsp_sceneid_res_subtile_suffix)+1)]
                 self.dsp_sceneid = '{}_{}'.format(dsp_sceneid_no_suffix, src_sceneid_res_subtile_suffix)
-                self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
+                self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, self.algm_version_key))
 
     def get_dem_info(self):
 
@@ -537,11 +533,12 @@ class SetsmDem(object):
                     self.res_str = groups['res']
                     self.creation_date = None
                     self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
+                    self.algm_version_key = None
                     self.geom = None
-                    if 'version' in groups:
-                        self.version = groups['version']
+                    if 'relversion' in groups:
+                        self.release_version = groups['relversion']
                     else:
-                        self.version = None
+                        self.release_version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
                     self.rmse = -2 # if present, the metadata file value will overwrite this
@@ -646,22 +643,16 @@ class SetsmDem(object):
         self.get_metafile_info()
         self.get_geocell()
 
-        ## Get version str with ability to handle 1-3 parts of semantic version
-        if len(self.algm_version) > 6:
-            vp = self.algm_version[6:].split('.')
-
-            vl = [0, 0, 0]
-            for i in range(len(vp)):
-                vl[i] = int(vp[i])
-            version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
-
-            ## Make strip ID
-            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+        ## Make strip ID
+        if self.algm_version_key:
+            self.stripdemid = '_'.join((self.pairname, self.res_str, self.algm_version_key))
             self.stripdirname = '_'.join((
                 self.pairname,
                 "{}{}".format(self.res_str, '_lsf' if self.is_lsf else ''),
-                version_str
+                self.algm_version_key
             ))
+        else:
+            raise RuntimeError("Cannot determine SETSM version")
 
     def compute_density_and_statistics(self):
         ## If neither metadata, mdf, nor density file contain valid density info, compute it.
@@ -689,7 +680,13 @@ class SetsmDem(object):
                 stats = ds.GetRasterBand(1).GetStatistics(True, True)
                 self.min_elev_value, self.max_elev_value, _, _ = stats
             except RuntimeError as e:
-                logger.warning("Cannot get stats for image: {}".format(e))
+                try:
+                    # Use approx=False for stats calc if earlier calc failed
+                    stats = ds.GetRasterBand(1).GetStatistics(True, False)
+                    self.min_elev_value, self.max_elev_value, _, _ = stats
+                except RuntimeError as e:
+                    logger.warning("Cannot get stats for image: {}".format(e))
+
 
         fh = open(self.density_file, 'w')
         fh.write('{}\n'.format(self.density))
@@ -730,13 +727,21 @@ class SetsmDem(object):
             else:
                 raise RuntimeError('Key "Strip creation date" not found in meta dict from {}'.format(self.metapath))
 
-            # get version
-            values = []
-            for x in range(len(self.scenes)):
-                if 'SETSM Version' in self.scenes[x]:
-                    values.append(self.scenes[x]['SETSM Version'])
-            if len(values) > 0:
-                self.algm_version = 'SETSM {}'.format(values[0])
+            # Get version from metafile if available.  Otherwise default to first scene version
+            #  Also calculate other algorithm version formats
+            if 'Strip DEM ID' in metad:
+                stripdemid_meta = metad['Strip DEM ID']
+                self.algm_version_key = stripdemid_meta.split('_')[5]
+                self.algm_version = 'SETSM {}'.format(verstr2semver(self.algm_version_key))
+
+            else:
+                values = []
+                for x in range(len(self.scenes)):
+                    if 'SETSM Version' in self.scenes[x]:
+                        values.append(self.scenes[x]['SETSM Version'])
+                if len(values) > 0:
+                    self.algm_version = 'SETSM {}'.format(values[0])
+                    self.algm_version_key = semver2verkey(values[0])
 
             ## get scene coregistration rmse
             values = []
@@ -864,9 +869,15 @@ class SetsmDem(object):
             self.creation_date = datetime.strptime(metad['STRIP_DEM_stripCreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
 
             try:
-                self.algm_version = metad['COMPONENT_1_setsmVersion']
+                stripdemid_meta = metad['StripDemGroupId']
+                self.algm_version_key = stripdemid_meta.split('_')[5]
+                self.algm_version = 'SETSM {}'.format(verstr2semver(self.algm_version_key))
             except KeyError as e:
-                pass
+                try:
+                    self.algm_version = metad['COMPONENT_1_setsmVersion']
+                    self.algm_version_key = semver2verkey(self.algm_version)
+                except KeyError as e:
+                    pass
 
             ## acqdate
             try:
@@ -960,9 +971,10 @@ class SetsmDem(object):
 
                 #### Strip DEM info
                 ('BEGIN_GROUP','STRIP_DEM'),
-                ('stripDemId','"{}"'.format(self.stripid)),
+                ('DemId','"{}"'.format(self.stripid)),
+                ('StripDemGroupId','"{}"'.format(self.stripdemid)),
                 ('stripCreationTime',(self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
-                ('releaseVersion','"{}"'.format(self.version if self.version else 'NA')),
+                ('releaseVersion','"{}"'.format(self.release_version if self.release_version else 'NA')),
                 ('noDataValue',self.ndv),
                 ('platform1','"{}"'.format(self.sensor1)),
                 ('platform2','"{}"'.format(self.sensor2)),
@@ -1033,6 +1045,9 @@ class SetsmDem(object):
                     cont.append(('setsmVersion',scene['SETSM Version']))
                 else:
                     logger.warning('Scene metadata missing from {}: {}, key: {}'.format(self.metapath,scene['scene_name'],'SETSM Version'))
+
+                if 'Group Version' in scene:
+                    cont.append(('setsmGroupVersion',scene['Group Version']))
 
                 if 'Creation Date' in scene:
                     cont.append(('sceneCreationDate',self._parse_creation_date(scene['Creation Date'])))
@@ -1483,7 +1498,7 @@ class SetsmTile(object):
                 groups = match.groupdict()
                 self.tilename = groups['tile']
                 self.res = groups['res']
-                self.version = groups['version']
+                self.release_version = groups['relversion']
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
 
@@ -1887,3 +1902,17 @@ def get_epsg(src_srs):
 
     return raster_epsg
 
+
+def semver2verkey(semver):
+    semver = semver.replace('SETSM ', '')
+    vp = semver.split('.')
+
+    vl = [0, 0, 0]
+    for i in range(len(vp)):
+        vl[i] = int(vp[i])
+    version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
+    return version_str
+
+def verstr2semver(verstr):
+    semver = '{}.{}.{}'.format(int(verstr[1:3]), int(verstr[3:5]), int(verstr[5:7]))
+    return semver

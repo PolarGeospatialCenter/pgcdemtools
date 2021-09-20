@@ -129,15 +129,18 @@ def main():
                         help='write results to json files in dst folder')
     parser.add_argument('--maxdepth', type=float, default=float('inf'),
                         help='maximum depth into source directory to be searched')
-    parser.add_argument('--log', help="directory for log output")
+    parser.add_argument('--log', help="directory for log output (debug messages written here)")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
     parser.add_argument('--append', action='store_true', default=False,
                         help="append records to existing index")
     parser.add_argument('--check', action='store_true', default=False,
-                        help='verify new records exist in target index (not compatible with --write-json)')
+                        help='verify new records exist in target index (not compatible with --write-json or --dryrun)')
     parser.add_argument('--skip-region-lookup', action='store_true', default=False,
-                        help="skip region lookup on danco (used for testing)")
+                        help="skip region lookup on danco")
+    parser.add_argument('--skip-records-missing-dsp-original-info', action='store_true', default=False,
+                        help="skip adding records where the file info on the source DEM for a dsp product is missing"
+                             " (valid only if --dsp-record-mode is orig or both)")
     parser.add_argument("--write-pickle", help="store region lookup in a pickle file. skipped if --write-json is used")
     parser.add_argument("--read-pickle", help='read region lookup from a pickle file. skipped if --write-json is used')
     parser.add_argument("--custom-paths", choices=custom_path_prefixes.keys(), help='Use custom path schema')
@@ -202,7 +205,7 @@ def main():
             parser.error('log folder does not exist: {}'.format(args.log))
 
         lfh = logging.FileHandler(logfile)
-        lfh.setLevel(logging.INFO)
+        lfh.setLevel(logging.DEBUG)
         formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
@@ -540,9 +543,14 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             # Test if filesz attr is valid for dsp original res records
                             if dsp_mode == 'orig':
                                 if attrib_map['FILESZ_DEM'] is None:
-                                    logger.error(
-                                        "Original res filesz_dem is empty for {}. Record skipped".format(record.sceneid))
-                                    valid_record = False
+                                    if not args.skip_records_missing_dsp_original_info:
+                                        logger.debug(
+                                            "Original res filesz_dem is empty for {}. Record will still be written".format(
+                                                record.sceneid))
+                                    else:
+                                        logger.error(
+                                            "Original res filesz_dem is empty for {}. Record skipped".format(record.sceneid))
+                                        valid_record = False
                                 elif attrib_map['FILESZ_DEM'] == 0:
                                     logger.warning(
                                         "Original res filesz_dem is 0 for {}. Record will still be written".format(record.sceneid))
@@ -668,8 +676,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             else:
                                 attrib_map['REGION'] = region
 
-                            if record.version and 'REL_VER' in fld_list:
-                                attrib_map['REL_VER'] = record.version
+                            if record.release_version and 'REL_VER' in fld_list:
+                                attrib_map['REL_VER'] = record.release_version
 
                             attrib_map['DENSITY'] = record.density if record.density else -9999
                             attrib_map['MASK_DENS'] = record.masked_density if record.masked_density else -9999
@@ -764,9 +772,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             }
 
                             ## Optional attributes
-                            if record.version and 'REL_VER' in fld_list:
-                                attrib_map['REL_VER'] = record.version
-                                version = record.version
+                            if record.release_version and 'REL_VER' in fld_list:
+                                attrib_map['REL_VER'] = record.release_version
+                                version = record.release_version
                             else:
                                 version = 'novers'
 

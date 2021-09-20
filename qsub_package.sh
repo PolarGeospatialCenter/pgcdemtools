@@ -1,9 +1,10 @@
 #!/bin/bash
 
-#PBS -l walltime=40:00:00,nodes=1:ppn=4,mem=16gb
+#PBS -l walltime=40:00:00,nodes=1:ppn=4,mem=32gb
 #PBS -m n
 #PBS -k oe
 #PBS -j oe
+#PBS -q new
 
 cd $PBS_O_WORKDIR
 
