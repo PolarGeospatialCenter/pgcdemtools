@@ -687,7 +687,6 @@ class SetsmDem(object):
                 except RuntimeError as e:
                     logger.warning("Cannot get stats for image: {}".format(e))
 
-
         fh = open(self.density_file, 'w')
         fh.write('{}\n'.format(self.density))
         fh.write('{}\n'.format(self.masked_density))
@@ -1898,7 +1897,7 @@ def get_epsg(src_srs):
             raster_epsg = epsg
             break
     if not raster_epsg:
-        raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
+        raise RuntimeError("No EPSG match for DEM spatial ref '{}'".format(src_srs))
 
     return raster_epsg
 
