@@ -381,6 +381,7 @@ def build_archive(src,scratch,args):
                                         'ND_VALUE': raster.ndv,
                                         'DEM_RES': (raster.xres + raster.yres) / 2.0,
                                         'ALGM_VER': raster.algm_version,
+                                        'S2S_VER': raster.s2s_version,
                                         'IS_LSF': int(raster.is_lsf),
                                         'IS_XTRACK': int(raster.is_xtrack),
                                         'EDGEMASK': int(raster.mask_tuple[0]),

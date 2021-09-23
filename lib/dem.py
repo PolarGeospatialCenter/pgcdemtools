@@ -107,6 +107,7 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    dem.tif\Z""", re.I| re.X)
 
 xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
+s2s_version_pattern = re.compile("Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
 
 strip_masks = {
     ## name: (edgemask, watermask, cloudmask)
@@ -469,6 +470,8 @@ class SetsmDem(object):
             ## Check if epsg is valid and recalculate if not - catch effects of a jsons build with a bug
             if not self.epsg:
                 self.epsg = get_epsg(self.proj4)
+            if 's2s_version' not in md:
+                self.s2s_version = '4'
 
         else:
             self.srcfp = filepath
@@ -548,6 +551,7 @@ class SetsmDem(object):
                     self.masked_density = None
                     self.reginfo_list = []
                     self.geocell = None
+                    self.s2s_version = None
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -720,6 +724,7 @@ class SetsmDem(object):
                     self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
 
             self.proj4_meta = metad['Strip projection (proj4)'].replace("'","")
+            self.s2s_version = metad['s2s_version']
 
             if 'Strip creation date' in metad:
                 self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
@@ -856,6 +861,8 @@ class SetsmDem(object):
             except ValueError as e:
                 logger.info("Cannot convert bitmask density value ({}) to float for {}".format(
                     metad['STRIP_DEM_maskedMatchtagDensity'], self.srcfp))
+            except KeyError:
+                pass
 
             try:
                 self.min_elev_value = float(metad['STRIP_DEM_minElevValue'])
@@ -866,6 +873,12 @@ class SetsmDem(object):
 
             self.proj4_meta = metad['STRIP_DEM_horizontalCoordSysProj4'].replace("'","")
             self.creation_date = datetime.strptime(metad['STRIP_DEM_stripCreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+
+            try:
+                s2s_version = metad['STRIP_DEM_scenes2stripsVersion']
+                self.s2s_version = None if s2s_version == 'None' else s2s_version
+            except KeyError:
+                pass
 
             try:
                 stripdemid_meta = metad['StripDemGroupId']
@@ -890,9 +903,12 @@ class SetsmDem(object):
             try:
                 self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime1'], "%Y-%m-%d %H:%M:%S")
                 self.avg_acqtime2 = datetime.strptime(metad['STRIP_DEM_avgAcqTime2'], "%Y-%m-%d %H:%M:%S")
-            except KeyError as e:
-                self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime'], "%Y-%m-%d %H:%M:%S")
-                self.avg_acqtime2 = self.avg_acqtime1
+            except KeyError:
+                try:
+                    self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime'], "%Y-%m-%d %H:%M:%S")
+                    self.avg_acqtime2 = self.avg_acqtime1
+                except KeyError:
+                    logger.warning('Strip DEM avg acquisition times not found in MDF file: {}'.format(self.mdf))
 
             ## registration info (code assumes only one registration source in mdf)
             try:
@@ -902,8 +918,8 @@ class SetsmDem(object):
                 mean_resid_z = float(metad['STRIP_DEM_REGISTRATION_registrationMeanVerticalResidual'])
                 num_gcps = int(metad['STRIP_DEM_REGISTRATION_registrationNumGCPs'])
                 name = metad['STRIP_DEM_REGISTRATION_registrationSource']
-            except KeyError as e:
-                logger.warning("Registration info not found in {}".format(self.srcfp))
+            except KeyError:
+                pass
             else:
                 self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
 
@@ -973,6 +989,7 @@ class SetsmDem(object):
                 ('DemId','"{}"'.format(self.stripid)),
                 ('StripDemGroupId','"{}"'.format(self.stripdemid)),
                 ('stripCreationTime',(self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
+                ('scenes2stripsVersion', self.s2s_version if self.s2s_version else 'None'),
                 ('releaseVersion','"{}"'.format(self.release_version if self.release_version else 'NA')),
                 ('noDataValue',self.ndv),
                 ('platform1','"{}"'.format(self.sensor1)),
@@ -1199,6 +1216,11 @@ class SetsmDem(object):
                         alignment_stats = l.split()
                         scene_id = os.path.splitext(alignment_stats[0])[0]
                         alignment_dct[scene_id] = alignment_stats[1:]
+
+                    elif 'Strip Metadata' in l:
+                        m = s2s_version_pattern.match(l)
+                        if m:
+                            metad['s2s_version'] = m.group('s2sversion')
 
                 #### scene metadata info
                 if not in_header:

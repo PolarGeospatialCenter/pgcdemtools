@@ -648,8 +648,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'SENSOR2': record.sensor2,
                                 'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
                                 'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
-                                'AVGACQTM1': record.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S"),
-                                'AVGACQTM2': record.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S"),
+                                'AVGACQTM1': record.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S") if record.avg_acqtime1 else None,
+                                'AVGACQTM2': record.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S") if record.avg_acqtime2 else None,
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
                                 'IS_LSF': int(record.is_lsf),
@@ -658,6 +658,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'WATERMASK': int(record.mask_tuple[1]),
                                 'CLOUDMASK': int(record.mask_tuple[2]),
                                 'ALGM_VER': record.algm_version,
+                                'S2S_VER': record.s2s_version,
                                 'RMSE': record.rmse,
                                 'FILESZ_DEM': record.filesz_dem,
                                 'FILESZ_MT': record.filesz_mt,
@@ -885,8 +886,13 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
                                     fld = fld.encode('utf-8')
                                     val = val if not isinstance(val, unicode) else val.encode('utf-8')
-                                feat.SetField(fld, val)
-                            feat.SetGeometry(feat_geom)
+
+                                if valid_record:
+                                    feat.SetField(fld, val)
+                                else:
+                                    break
+                            if valid_record:
+                                feat.SetGeometry(feat_geom)
 
                             ## Add new feature to layer
                             if not valid_record:
