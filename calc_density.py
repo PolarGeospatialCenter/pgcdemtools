@@ -115,7 +115,8 @@ def main():
         except RuntimeError as e:
             logger.error(e)
         else:
-            if raster.density is None:
+            needed_attribs = (raster.density, raster.masked_density, raster.max_elev_value, raster.min_elev_value)
+            if any([a is None for a in needed_attribs]):
                 scenes.append(srcfp)
 
     logger.info('Number of incomplete tasks: {}'.format(len(scenes)))
@@ -197,18 +198,22 @@ def main():
         logger.info("No tasks found to process")
 
 
-def build_archive(src,scratch,args):
+def build_archive(src, scratch, args):
 
     logger.info("Calculating density of raster: {}".format(src))
     raster = dem.SetsmDem(src)
     raster.get_metafile_info()
 
-    if raster.density is None:
+    needed_attribs = (raster.density, raster.masked_density, raster.max_elev_value, raster.min_elev_value)
+    if any([a is None for a in needed_attribs]):
         try:
             raster.compute_density_and_statistics()
         except RuntimeError as e:
             logger.warning(e)
-                
+
+    needed_attribs = (raster.density, raster.masked_density, raster.max_elev_value, raster.min_elev_value)
+    if any([a is None for a in needed_attribs]):
+        logger.warning("Density or stats calculation failed")
 
 if __name__ == '__main__':
     main()

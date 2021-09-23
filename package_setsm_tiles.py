@@ -268,8 +268,8 @@ def build_archive(raster,scratch,args):
                             feat.SetField("DENSITY",raster.density)
                             feat.SetField("NUM_COMP",raster.num_components)
 
-                            if raster.version:
-                                feat.SetField("REL_VER",raster.version)
+                            if raster.release_version:
+                                feat.SetField("REL_VER",raster.release_version)
 
                             if raster.reg_src:
                                 feat.SetField("REG_SRC",raster.reg_src)

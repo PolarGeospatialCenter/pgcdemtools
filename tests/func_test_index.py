@@ -37,6 +37,7 @@ class TestIndexerIO(unittest.TestCase):
         self.scene50cm_dir = os.path.join(testdata_dir, 'setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
         self.strip_dir = os.path.join(testdata_dir, 'setsm_strip')
+        self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
         self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
         self.tile_dir = os.path.join(testdata_dir, 'setsm_tile')
         self.output_dir = os.path.join(testdata_dir, 'output')
@@ -48,6 +49,7 @@ class TestIndexerIO(unittest.TestCase):
         self.scenedsp_count = 102
         self.strip_count = 4
         self.stripmasked_count = 3
+        self.strip_mixedver_count = 4
 
     def tearDown(self):
         ## Clean up output
@@ -550,6 +552,7 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
+            (self.strip_mixedver_dir, self.test_str, '--overwrite', self.strip_mixedver_count, 'Done'),  # test mixed version
             (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'), # test index of masked strips
             (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
         )
@@ -572,6 +575,7 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
+            # print(cmd)
             # print(se)
             # print(so)
 
@@ -583,7 +587,10 @@ class TestIndexerIO(unittest.TestCase):
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt, result_cnt)
             for feat in layer:
-                srcfn = os.path.basename(feat.GetField('LOCATION'))
+                srcfp = feat.GetField('LOCATION')
+                srcdir, srcfn = os.path.split(srcfp)
+                stripdemid = feat.GetField('STRIPDEMID')
+                self.assertEqual(os.path.basename(srcdir).replace('_lsf',''),stripdemid)
                 dem_suffix = srcfn[srcfn.find('_dem'):]
                 masks = strip_masks[dem_suffix]
                 self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
@@ -657,10 +664,10 @@ class TestIndexerIO(unittest.TestCase):
             (self.strip_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --custom-paths BP'.format(root_dir),
              self.strip_count, 'Done'),  # test BP paths
             (self.strip_dir, self.test_str,
-             '--read-pickle tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC',
+             '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(root_dir),
              self.strip_count, 'Done'),  # test PGC paths
             (self.strip_dir, self.test_str,
-             '--read-pickle tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS',
+             '--read-pickle {}/tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS'.format(root_dir),
              self.strip_count,
              'Done'),  # test CSS paths
         )
@@ -674,6 +681,7 @@ class TestIndexerIO(unittest.TestCase):
             )
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
+            # print(cmd)
             # print(se)
             # print(so)
 

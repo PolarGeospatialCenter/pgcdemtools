@@ -224,6 +224,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("WATERMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
+    StandardAttribute("MASK_DENS", ogr.OFTReal, 0, 0),
     StandardAttribute("RMSE", ogr.OFTReal, 0, 0),
 ]
 

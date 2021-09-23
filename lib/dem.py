@@ -75,7 +75,7 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     (lsf_)?
                                     (?P<partnum>SEG\d+)_
-                                    ((?P<version>v[\d/.]+)_)?
+                                    ((?P<relversion>v[\d/.]+)_)?
                                     (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
                                     .(tif|jpg))\Z""", re.I | re.X)
 
@@ -87,7 +87,7 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                     )_
                                     (?P<partnum>SEG\d+)_
                                     (?P<res>(\d+|0\.\d+)c?m)_
-                                    ((?P<version>v[\d/.]+)_)?
+                                    ((?P<relversion>v[\d/.]+)_)?
                                     (lsf_)?
                                     (?P<suffix>dem.(tif|jpg))\Z""", re.I | re.X)
 
@@ -102,7 +102,7 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (?P<tile>\d+_\d+)_
                                    ((?P<subtile>\d+_\d+)_)?
                                    (?P<res>(\d+|0\.\d+)c?m)_
-                                   ((?P<version>v[\d\.]+)_)?
+                                   ((?P<relversion>v[\d\.]+)_)?
                                    (reg_)?
                                    dem.tif\Z""", re.I| re.X)
 
@@ -178,6 +178,7 @@ class SetsmScene(object):
                 self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                 self.geom = None
                 self.group_version = None
+                self.version = None
                 self.is_dsp = None
                 self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                 self.subtile = groups['subtile'] if 'subtile' in groups else None
@@ -188,22 +189,17 @@ class SetsmScene(object):
             self.get_metafile_info()
 
             ## Build res_str
-            scene_dem_resstr_lookup = { a: b for (a,b) in scene_dem_res_lookup.values()}
+            scene_dem_resstr_lookup = {a: b for (a,b) in scene_dem_res_lookup.values()}
             self.res_str = scene_dem_resstr_lookup[self.res]
 
-            ## Get version str with ability to handle 1-3 parts of semantic version
+            ## Get version key
             if self.group_version:
-                vp = self.group_version.split('.')
+                self.algm_version_key = semver2verkey(self.group_version)
             else:
-                vp = self.version.split('.')
-
-            vl = [0,0,0]
-            for i in range(len(vp)):
-                vl[i] = int(vp[i])
-            version_str = 'v{:02}{:02}{:02}'.format(vl[0],vl[1],vl[2])
+                self.algm_version_key = semver2verkey(self.version)
 
             ## Make strip ID
-            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+            self.stripdemid = '_'.join((self.pairname, self.res_str, self.algm_version_key))
 
             if self.is_dsp:
                 sceneid_resstr, stripid_resstr = scene_dem_res_lookup[self.dsp_dem_res]
@@ -211,7 +207,7 @@ class SetsmScene(object):
                 src_sceneid_res_subtile_suffix = sceneid_resstr+dsp_sceneid_res_subtile_suffix[1:]
                 dsp_sceneid_no_suffix = self.sceneid[:-(len(dsp_sceneid_res_subtile_suffix)+1)]
                 self.dsp_sceneid = '{}_{}'.format(dsp_sceneid_no_suffix, src_sceneid_res_subtile_suffix)
-                self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, version_str))
+                self.dsp_stripdemid = '_'.join((self.pairname, stripid_resstr, self.algm_version_key))
 
     def get_dem_info(self):
 
@@ -355,7 +351,8 @@ class SetsmScene(object):
         if os.path.isfile(self.dspinfo):
             dspmetad = self._parse_metadata_file(self.dspinfo)
             if len(dspmetad) != 7:
-                raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(len(self.dspmetad)))
+                raise RuntimeError("Dsp info file has incorrect number of values ({}/7)".format(
+                    len(dspmetad)))
             for k in self.filesz_attrib_map:
                 k2 = "dsp_{}".format(k)
                 try:
@@ -536,18 +533,19 @@ class SetsmDem(object):
                     self.res_str = groups['res']
                     self.creation_date = None
                     self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
+                    self.algm_version_key = None
                     self.geom = None
-                    if 'version' in groups:
-                        self.version = groups['version']
+                    if 'relversion' in groups:
+                        self.release_version = groups['relversion']
                     else:
-                        self.version = None
+                        self.release_version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
                     self.rmse = -2 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
                     self.max_elev_value = None
                     self.density = None
-                    self.stats = (None, None, None, None)
+                    self.masked_density = None
                     self.reginfo_list = []
                     self.geocell = None
                     break
@@ -645,22 +643,16 @@ class SetsmDem(object):
         self.get_metafile_info()
         self.get_geocell()
 
-        ## Get version str with ability to handle 1-3 parts of semantic version
-        if len(self.algm_version) > 6:
-            vp = self.algm_version[6:].split('.')
-
-            vl = [0, 0, 0]
-            for i in range(len(vp)):
-                vl[i] = int(vp[i])
-            version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
-
-            ## Make strip ID
-            self.stripdemid = '_'.join((self.pairname, self.res_str, version_str))
+        ## Make strip ID
+        if self.algm_version_key:
+            self.stripdemid = '_'.join((self.pairname, self.res_str, self.algm_version_key))
             self.stripdirname = '_'.join((
                 self.pairname,
                 "{}{}".format(self.res_str, '_lsf' if self.is_lsf else ''),
-                version_str
+                self.algm_version_key
             ))
+        else:
+            raise RuntimeError("Cannot determine SETSM version")
 
     def compute_density_and_statistics(self):
         ## If neither metadata, mdf, nor density file contain valid density info, compute it.
@@ -672,19 +664,33 @@ class SetsmDem(object):
             if not os.path.isfile(self.matchtag):
                 raise RuntimeError("Matchtag file does not exist for DEM: {}".format(self.srcfp))
             else:
-                self.density = get_matchtag_density(self.matchtag, self.geom.Area())
+                self.density = get_raster_density(self.matchtag, self.geom.Area())
 
-        if self.stats[0] is None:
+        if self.masked_density is None:
+            #### If bitmask exists, get  density within data boundary
+            if not os.path.isfile(self.bitmask):
+                raise RuntimeError("Bitmask file does not exist for DEM: {}".format(self.srcfp))
+            else:
+                self.masked_density = get_raster_density(self.matchtag, self.geom.Area(), bitmask_fp=self.bitmask)
+
+        stats = []
+        if self.min_elev_value is None or self.max_elev_value is None:
             ds = gdal.Open(self.srcfp)
             try:
-                self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                self.min_elev_value, self.max_elev_value, _, _ = stats
             except RuntimeError as e:
-                logger.warning("Cannot get stats for image: {}".format(e))
+                try:
+                    # Use approx=False for stats calc if earlier calc failed
+                    stats = ds.GetRasterBand(1).GetStatistics(True, False)
+                    self.min_elev_value, self.max_elev_value, _, _ = stats
+                except RuntimeError as e:
+                    logger.warning("Cannot get stats for image: {}".format(e))
 
         fh = open(self.density_file, 'w')
         fh.write('{}\n'.format(self.density))
-        stats_str = [str(stat) for stat in self.stats]
-        fh.write('{}\n'.format(','.join(stats_str)))
+        fh.write('{}\n'.format(self.masked_density))
+        fh.write('{}\n'.format(','.join([str(stat) for stat in stats])))
         fh.close()
 
     def get_metafile_info(self):
@@ -720,13 +726,21 @@ class SetsmDem(object):
             else:
                 raise RuntimeError('Key "Strip creation date" not found in meta dict from {}'.format(self.metapath))
 
-            # get version
-            values = []
-            for x in range(len(self.scenes)):
-                if 'SETSM Version' in self.scenes[x]:
-                    values.append(self.scenes[x]['SETSM Version'])
-            if len(values) > 0:
-                self.algm_version = 'SETSM {}'.format(values[0])
+            # Get version from metafile if available.  Otherwise default to first scene version
+            #  Also calculate other algorithm version formats
+            if 'Strip DEM ID' in metad:
+                stripdemid_meta = metad['Strip DEM ID']
+                self.algm_version_key = stripdemid_meta.split('_')[5]
+                self.algm_version = 'SETSM {}'.format(verstr2semver(self.algm_version_key))
+
+            else:
+                values = []
+                for x in range(len(self.scenes)):
+                    if 'SETSM Version' in self.scenes[x]:
+                        values.append(self.scenes[x]['SETSM Version'])
+                if len(values) > 0:
+                    self.algm_version = 'SETSM {}'.format(values[0])
+                    self.algm_version_key = semver2verkey(values[0])
 
             ## get scene coregistration rmse
             values = []
@@ -802,6 +816,8 @@ class SetsmDem(object):
             ## density and stats
             if 'Output Data Density' in metad:
                 self.density = metad['Output Data Density']
+            if 'Fully Masked Data Density' in metad:
+                self.masked_density = metad['Fully Masked Data Density']
             if 'Minimum elevation value' in metad:
                 self.min_elev_value = metad['Minimum elevation value']
             if 'Maximum elevation value' in metad:
@@ -834,23 +850,33 @@ class SetsmDem(object):
                 self.density = float(metad['STRIP_DEM_matchtagDensity'])
             except ValueError as e:
                 logger.info("Cannot convert density value ({}) to float for {}".format(metad['STRIP_DEM_matchtagDensity'], self.srcfp))
-                self.density = None
 
             try:
-                min_elev = float(metad['STRIP_DEM_minElevValue'])
-                max_elev = float(metad['STRIP_DEM_maxElevValue'])
+                self.masked_density = float(metad['STRIP_DEM_maskedMatchtagDensity'])
             except ValueError as e:
-                logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
-                min_elev, max_elev = None, None
+                logger.info("Cannot convert bitmask density value ({}) to float for {}".format(
+                    metad['STRIP_DEM_maskedMatchtagDensity'], self.srcfp))
 
-            self.stats = (min_elev, max_elev, None, None)
+            try:
+                self.min_elev_value = float(metad['STRIP_DEM_minElevValue'])
+                self.max_elev_value = float(metad['STRIP_DEM_maxElevValue'])
+            except ValueError as e:
+                logger.info("Cannot convert min or max elev values (min={}, max={}) to float for {}".format(
+                    metad['STRIP_DEM_minElevValue'], metad['STRIP_DEM_maxElevValue'], self.srcfp))
+
             self.proj4_meta = metad['STRIP_DEM_horizontalCoordSysProj4'].replace("'","")
             self.creation_date = datetime.strptime(metad['STRIP_DEM_stripCreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
 
             try:
-                self.algm_version = metad['COMPONENT_1_setsmVersion']
+                stripdemid_meta = metad['StripDemGroupId']
+                self.algm_version_key = stripdemid_meta.split('_')[5]
+                self.algm_version = 'SETSM {}'.format(verstr2semver(self.algm_version_key))
             except KeyError as e:
-                pass
+                try:
+                    self.algm_version = metad['COMPONENT_1_setsmVersion']
+                    self.algm_version_key = semver2verkey(self.algm_version)
+                except KeyError as e:
+                    pass
 
             ## acqdate
             try:
@@ -885,17 +911,22 @@ class SetsmDem(object):
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
 
         #### If density file exists, get density and stats from there
-        if self.density is None or self.stats[0] is None:
+        needed_attribs = (self.density, self.masked_density, self.max_elev_value, self.min_elev_value)
+        if any([a is None for a in needed_attribs]):
             if os.path.isfile(self.density_file):
                 fh = open(self.density_file, 'r')
                 lines = fh.readlines()
-                density = lines[0].strip()
-                self.density = float(density)
-                stats = lines[1].strip().split(',')
+                stats_line = 1
                 try:
-                    self.stats = [float(stat) for stat in stats]
-                    self.min_elev_value = self.stats[0]
-                    self.max_elev_value = self.stats[1]
+                    self.density = float(lines[0].strip())
+                    if ',' not in lines[1]:
+                        stats_line = 2
+                        self.masked_density = float(lines[1].strip())
+                    stats = lines[stats_line].strip().split(',')
+                    self.min_elev_value = float(stats[0])
+                    self.max_elev_value = float(stats[1])
+                except IndexError:
+                    pass
                 except ValueError:
                     pass
                 fh.close()
@@ -939,9 +970,10 @@ class SetsmDem(object):
 
                 #### Strip DEM info
                 ('BEGIN_GROUP','STRIP_DEM'),
-                ('stripDemId','"{}"'.format(self.stripid)),
+                ('DemId','"{}"'.format(self.stripid)),
+                ('StripDemGroupId','"{}"'.format(self.stripdemid)),
                 ('stripCreationTime',(self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
-                ('releaseVersion','"{}"'.format(self.version if self.version else 'NA')),
+                ('releaseVersion','"{}"'.format(self.release_version if self.release_version else 'NA')),
                 ('noDataValue',self.ndv),
                 ('platform1','"{}"'.format(self.sensor1)),
                 ('platform2','"{}"'.format(self.sensor2)),
@@ -976,9 +1008,10 @@ class SetsmDem(object):
                 ('horizontalResolution',(self.xres+self.yres)/2.0),
                 ('verticalCoordSys','"WGS84 Ellipsoidal Height"'),
                 ('verticalCoordSysUnits','"meters"'),
-                ('minElevValue',self.stats[0] if self.stats[0] is not None else self.min_elev_value),
-                ('maxElevValue',self.stats[1] if self.stats[1] is not None else self.max_elev_value),
+                ('minElevValue', self.min_elev_value),
+                ('maxElevValue', self.max_elev_value),
                 ('matchtagDensity',self.density),
+                ('maskedMatchtagDensity', self.masked_density),
                 ('lsfApplied',str(self.is_lsf))
             ]
 
@@ -1011,6 +1044,9 @@ class SetsmDem(object):
                     cont.append(('setsmVersion',scene['SETSM Version']))
                 else:
                     logger.warning('Scene metadata missing from {}: {}, key: {}'.format(self.metapath,scene['scene_name'],'SETSM Version'))
+
+                if 'Group Version' in scene:
+                    cont.append(('setsmGroupVersion',scene['Group Version']))
 
                 if 'Creation Date' in scene:
                     cont.append(('sceneCreationDate',self._parse_creation_date(scene['Creation Date'])))
@@ -1138,10 +1174,9 @@ class SetsmDem(object):
             l = line.strip()
 
             if l:
-                #print l, in_header
-                #### Set scene number marker
+                scene_num = 0
+                ## Set scene number marker
                 if l == 'Scene Metadata':
-                    scene_num = 0
                     in_header = False
                 elif l.startswith("scene ") and not in_header:
                     scene_num +=1
@@ -1268,7 +1303,6 @@ class SetsmDem(object):
         'srcfn',
         'srcfp',
         'srs',
-        'stats',
         'stripid',
         'wkt_esri',
         'xres',
@@ -1306,6 +1340,8 @@ class AspDem(object):
             self.creation_date = None
             self.algm_version = 'ASP'
             self.geom = None
+            self.max_elev_value = None
+            self.min_elev_value = None
         else:
             raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
@@ -1336,10 +1372,9 @@ class AspDem(object):
             self.datatype_readable = gdal.GetDataTypeName(self.datatype)
             self.ndv = ds.GetRasterBand(1).GetNoDataValue()
             try:
-                self.stats = ds.GetRasterBand(1).GetStatistics(True,True)
+                self.min_elev_value, self.max_elev_value, _, _ = ds.GetRasterBand(1).GetStatistics(True,True)
             except RuntimeError as e:
                 logger.warning("Cannot get stats for image: {}".format(e))
-                self.stats = (None, None, None, None)
 
             num_gcps = ds.GetGCPCount()
 
@@ -1462,7 +1497,7 @@ class SetsmTile(object):
                 groups = match.groupdict()
                 self.tilename = groups['tile']
                 self.res = groups['res']
-                self.version = groups['version']
+                self.release_version = groups['relversion']
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
 
@@ -1487,6 +1522,8 @@ class SetsmTile(object):
                 else:
                     self.supertile_id = '_'.join([self.tilename,self.res])
                 self.density = None
+                self.min_elev_value = None
+                self.max_elev_value = None
 
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
@@ -1516,7 +1553,7 @@ class SetsmTile(object):
         #### If no density file, compute
         if not os.path.isfile(self.density_file):
             #### If dem exists, get dem density within data boundary
-            self.density = get_matchtag_density(self.matchtag, self.geom.Area())
+            self.density = get_raster_density(self.matchtag, self.geom.Area())
 
             fh = open(self.density_file, 'w')
             fh.write('{}\n'.format(self.density))
@@ -1594,10 +1631,10 @@ class SetsmTile(object):
 
             if get_stats:
                 try:
-                    self.stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                    stats = ds.GetRasterBand(1).GetStatistics(True, True)
+                    self.min_elev_value, self.max_elev_value, _, _ = stats
                 except RuntimeError as e:
                     logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
-                    self.stats = (None, None, None, None)
 
         else:
             raise RuntimeError("Cannot open image: %s" %self.srcfp)
@@ -1737,7 +1774,6 @@ class SetsmTile(object):
         'srcfn',
         'srcfp',
         'srs',
-        'stats',
         'tileid',
         'tilename',
         'wkt_esri',
@@ -1798,28 +1834,38 @@ def format_as_imd(contents):
     return text
 
 
-def get_matchtag_density(matchtag, geom_area=None):
-    ds = gdal.Open(matchtag)
+def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
+    ds = gdal.Open(raster_fp)
     b = ds.GetRasterBand(1)
     gtf = ds.GetGeoTransform()
-    matchtag_res_x = gtf[1]
-    matchtag_res_y = gtf[5]
-    matchtag_size_x = ds.RasterXSize
-    matchtag_size_y = ds.RasterYSize
-    matchtag_ndv = b.GetNoDataValue()
+    res_x = gtf[1]
+    res_y = gtf[5]
+    size_x = ds.RasterXSize
+    size_y = ds.RasterYSize
     data = utils.gdalReadAsArraySetsmSceneBand(b)
     err = gdal.GetLastErrorNo()
     if err != 0:
-        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), matchtag))
+        raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), raster_fp))
     else:
-        data_pixel_count = numpy.count_nonzero(data != matchtag_ndv)
+        if bitmask_fp:
+            ds2 = gdal.Open(bitmask_fp)
+            b2 = ds2.GetRasterBand(1)
+            bm_data = utils.gdalReadAsArraySetsmSceneBand(b2)
+            err = gdal.GetLastErrorNo()
+            if err != 0:
+                raise RuntimeError("Bitmask dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), bitmask_fp))
+            masked_data_array = numpy.logical_and(data, bm_data == 0)
+            data_pixel_count = numpy.count_nonzero(masked_data_array)
+
+        else:
+            data_pixel_count = numpy.count_nonzero(data)
         # If geom area is available, use that as the denominator to exclude collar pixes
         if geom_area:
-            data_area = abs(data_pixel_count * matchtag_res_x * matchtag_res_y)
+            data_area = abs(data_pixel_count * res_x * res_y)
             density = data_area / geom_area
         # If geom area is not available, assume there is no collar and use total pixel count
         else:
-            total_pixel_count = matchtag_size_x * matchtag_size_y
+            total_pixel_count = size_x * size_y
             density = data_pixel_count / float(total_pixel_count)
 
         return density
@@ -1851,7 +1897,21 @@ def get_epsg(src_srs):
             raster_epsg = epsg
             break
     if not raster_epsg:
-        raise RuntimeError("No EPSG match for DEM proj4 '{}': {}".format(self.proj4, self.srcfp))
+        raise RuntimeError("No EPSG match for DEM spatial ref '{}'".format(src_srs))
 
     return raster_epsg
 
+
+def semver2verkey(semver):
+    semver = semver.replace('SETSM ', '')
+    vp = semver.split('.')
+
+    vl = [0, 0, 0]
+    for i in range(len(vp)):
+        vl[i] = int(vp[i])
+    version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
+    return version_str
+
+def verstr2semver(verstr):
+    semver = '{}.{}.{}'.format(int(verstr[1:3]), int(verstr[3:5]), int(verstr[5:7]))
+    return semver
