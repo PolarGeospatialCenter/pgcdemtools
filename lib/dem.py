@@ -477,6 +477,14 @@ class SetsmDem(object):
                 self.s2s_version = '4'
             if 'release_version' not in md:
                 self.release_version = md['version']
+            if 'masked_density' not in md:
+                self.masked_density = -9999
+            if 'avg_acqtime1' not in md:
+                self.set_acqtime_attribs()
+            if 'rmse' not in md:
+                self.set_rmse_attrib()
+            elif self.rmse == -2:
+                self.rmse = -9999
 
         else:
             self.srcfp = filepath
@@ -549,7 +557,7 @@ class SetsmDem(object):
                         self.release_version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
-                    self.rmse = -2 # if present, the metadata file value will overwrite this
+                    self.rmse = -9999 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
                     self.max_elev_value = None
                     self.density = None
@@ -753,60 +761,10 @@ class SetsmDem(object):
                     self.algm_version_key = semver2verkey(values[0])
 
             ## get scene coregistration rmse
-            values = []
-            for scene_name, align_stats in self.alignment_dct.items():
-                scene_rmse = align_stats[0]
-                if scene_rmse != 'nan':
-                    scene_rmse = float(scene_rmse)
-                    if scene_rmse != 0:
-                        values.append(scene_rmse)
-            if len(values) > 0:
-                self.rmse = numpy.mean(numpy.array(values))
-            else:
-                self.rmse = -1
+            self.set_rmse_attrib()
 
             ## get acqdates and acqtimes
-            values = []
-            for x in range(len(self.scenes)):
-                acqtime_str = None
-                for acqtime_key in ('Image_1_Acquisition_time', 'Image 1 Acquisition time'):
-                    if acqtime_key in self.scenes[x]:
-                        acqtime_str = self.scenes[x][acqtime_key]
-                        acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-                        values.append(acqtime_dt)
-                        break
-                if acqtime_str is None:
-                    for img_key in ('Image 1', 'Image_1'):
-                        if img_key in self.scenes[x]:
-                            img_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img_path).split('_')[1]
-                            acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
-                            values.append(acqtime_dt)
-                            break
-            if len(values) > 0:
-                self.acqdate1 = values[0]
-                self.avg_acqtime1 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
-
-            values = []
-            for x in range(len(self.scenes)):
-                acqtime_str = None
-                for acqtime_key in ('Image_2_Acquisition_time', 'Image 2 Acquisition time'):
-                    if acqtime_key in self.scenes[x]:
-                        acqtime_str = self.scenes[x][acqtime_key]
-                        acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-                        values.append(acqtime_dt)
-                        break
-                if acqtime_str is None:
-                    for img_key in ('Image 2', 'Image_2'):
-                        if img_key in self.scenes[x]:
-                            img_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img_path).split('_')[1]
-                            acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
-                            values.append(acqtime_dt)
-                            break
-            if len(values) > 0:
-                self.acqdate2 = values[0]
-                self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
+            self.set_acqtime_attribs()
 
             ## get sensors
             values = []
@@ -968,6 +926,62 @@ class SetsmDem(object):
                         logger.error("Registration file cannot be parsed: {}".format(reg_file))
                     # logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
                     fh.close()
+
+    def set_rmse_attrib(self):
+        values = []
+        for scene_name, align_stats in self.alignment_dct.items():
+            scene_rmse = align_stats[0]
+            if scene_rmse != 'nan':
+                scene_rmse = float(scene_rmse)
+                if scene_rmse != 0:
+                    values.append(scene_rmse)
+        if len(values) > 0:
+            self.rmse = numpy.mean(numpy.array(values))
+        else:
+            self.rmse = -1
+
+    def set_acqtime_attribs(self):
+        values = []
+        for x in range(len(self.scenes)):
+            acqtime_str = None
+            for acqtime_key in ('Image_1_Acquisition_time', 'Image 1 Acquisition time'):
+                if acqtime_key in self.scenes[x]:
+                    acqtime_str = self.scenes[x][acqtime_key]
+                    acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    values.append(acqtime_dt)
+                    break
+            if acqtime_str is None:
+                for img_key in ('Image 1', 'Image_1'):
+                    if img_key in self.scenes[x]:
+                        img_path = self.scenes[x][img_key]
+                        acqtime_str = os.path.basename(img_path).split('_')[1]
+                        acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
+                        values.append(acqtime_dt)
+                        break
+        if len(values) > 0:
+            self.acqdate1 = values[0]
+            self.avg_acqtime1 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
+
+        values = []
+        for x in range(len(self.scenes)):
+            acqtime_str = None
+            for acqtime_key in ('Image_2_Acquisition_time', 'Image 2 Acquisition time'):
+                if acqtime_key in self.scenes[x]:
+                    acqtime_str = self.scenes[x][acqtime_key]
+                    acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    values.append(acqtime_dt)
+                    break
+            if acqtime_str is None:
+                for img_key in ('Image 2', 'Image_2'):
+                    if img_key in self.scenes[x]:
+                        img_path = self.scenes[x][img_key]
+                        acqtime_str = os.path.basename(img_path).split('_')[1]
+                        acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
+                        values.append(acqtime_dt)
+                        break
+        if len(values) > 0:
+            self.acqdate2 = values[0]
+            self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
     def write_mdf_file(self):
 
@@ -1279,8 +1293,8 @@ class SetsmDem(object):
     key_attribs = (
         'acqdate1',
         'acqdate2',
-        'avg_acqtime1',
-        'avg_acqtime2',
+        # 'avg_acqtime1',  # recalculated from 'scenes' attribute if not present
+        # 'avg_acqtime2',  # recalculated from 'scenes' attribute if not present
         'algm_version',
         'alignment_dct',
         'archive',
@@ -1291,6 +1305,7 @@ class SetsmDem(object):
         'creation_date',
         'datatype',
         'datatype_readable',
+        # 'density',  # external density/stats calculation necessary if not present
         'epsg',
         'filesz_dem',
         'filesz_mt',
@@ -1302,11 +1317,12 @@ class SetsmDem(object):
         'id',
         'is_lsf',
         'is_xtrack',
+        # 'masked_density',  # external density/stats calculation necessary if not present
         'matchtag',
         'mdf',
         'metapath',
-        # 'min_elev_value',
-        # 'max_elev_value',
+        # 'min_elev_value',  # external density/stats calculation necessary if not present
+        # 'max_elev_value',  # external density/stats calculation necessary if not present
         'ndv',
         'ortho',
         'pairname',
@@ -1318,7 +1334,7 @@ class SetsmDem(object):
         'reginfo_list',
         'res',
         'res_str',
-        'rmse',
+        # 'rmse',  # recalculated from 'alignment_dct' attribute if not present
         'scenes',
         'sensor1',
         'sensor2',
