@@ -37,6 +37,7 @@ class TestIndexerIO(unittest.TestCase):
         self.scene50cm_dir = os.path.join(testdata_dir, 'setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
         self.strip_dir = os.path.join(testdata_dir, 'setsm_strip')
+        self.strip_json_dir = os.path.join(testdata_dir, 'setsm_strip_json')
         self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
         self.strip_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_mdf')
         self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
@@ -51,6 +52,7 @@ class TestIndexerIO(unittest.TestCase):
         self.strip_count = 5
         self.stripmasked_count = 3
         self.strip_mixedver_count = 4
+        self.strip_json_count = 6
 
     def tearDown(self):
         ## Clean up output
@@ -553,6 +555,8 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
+            (self.strip_json_dir, self.test_str, '--overwrite --read-json', self.strip_json_count, 'Done'),
+            # test old json rebuild
             (self.strip_mixedver_dir, self.test_str, '--overwrite', self.strip_mixedver_count, 'Done'),  # test mixed version
             (self.strip_mdf_dir, self.test_str, '--overwrite', self.strip_count,
              'WARNING- Strip DEM avg acquisition times not found'), # test rebuild from mdf
