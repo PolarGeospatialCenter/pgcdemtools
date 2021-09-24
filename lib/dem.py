@@ -467,11 +467,16 @@ class SetsmDem(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
+
             ## Check if epsg is valid and recalculate if not - catch effects of a jsons build with a bug
             if not self.epsg:
                 self.epsg = get_epsg(self.proj4)
+
+            ## Check and repair missing attributes using jsons built before code updates
             if 's2s_version' not in md:
                 self.s2s_version = '4'
+            if 'release_version' not in md:
+                self.release_version = md['version']
 
         else:
             self.srcfp = filepath
@@ -904,11 +909,7 @@ class SetsmDem(object):
                 self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime1'], "%Y-%m-%d %H:%M:%S")
                 self.avg_acqtime2 = datetime.strptime(metad['STRIP_DEM_avgAcqTime2'], "%Y-%m-%d %H:%M:%S")
             except KeyError:
-                try:
-                    self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime'], "%Y-%m-%d %H:%M:%S")
-                    self.avg_acqtime2 = self.avg_acqtime1
-                except KeyError:
-                    logger.warning('Strip DEM avg acquisition times not found in MDF file: {}'.format(self.mdf))
+                logger.warning('Strip DEM avg acquisition times not found in MDF file: {}'.format(self.mdf))
 
             ## registration info (code assumes only one registration source in mdf)
             try:
