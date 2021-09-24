@@ -107,6 +107,7 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    dem.tif\Z""", re.I| re.X)
 
 xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
+s2s_version_pattern = re.compile("Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
 
 strip_masks = {
     ## name: (edgemask, watermask, cloudmask)
@@ -466,9 +467,24 @@ class SetsmDem(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
+
             ## Check if epsg is valid and recalculate if not - catch effects of a jsons build with a bug
             if not self.epsg:
                 self.epsg = get_epsg(self.proj4)
+
+            ## Check and repair missing attributes using jsons built before code updates
+            if 's2s_version' not in md:
+                self.s2s_version = '4'
+            if 'release_version' not in md:
+                self.release_version = md['version']
+            if 'masked_density' not in md:
+                self.masked_density = -9999
+            if 'avg_acqtime1' not in md:
+                self.set_acqtime_attribs()
+            if 'rmse' not in md:
+                self.set_rmse_attrib()
+            elif self.rmse == -2:
+                self.rmse = -9999
 
         else:
             self.srcfp = filepath
@@ -541,13 +557,14 @@ class SetsmDem(object):
                         self.release_version = None
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
-                    self.rmse = -2 # if present, the metadata file value will overwrite this
+                    self.rmse = -9999 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
                     self.max_elev_value = None
                     self.density = None
                     self.masked_density = None
                     self.reginfo_list = []
                     self.geocell = None
+                    self.s2s_version = None
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -720,6 +737,7 @@ class SetsmDem(object):
                     self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
 
             self.proj4_meta = metad['Strip projection (proj4)'].replace("'","")
+            self.s2s_version = metad['s2s_version']
 
             if 'Strip creation date' in metad:
                 self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
@@ -743,60 +761,10 @@ class SetsmDem(object):
                     self.algm_version_key = semver2verkey(values[0])
 
             ## get scene coregistration rmse
-            values = []
-            for scene_name, align_stats in self.alignment_dct.items():
-                scene_rmse = align_stats[0]
-                if scene_rmse != 'nan':
-                    scene_rmse = float(scene_rmse)
-                    if scene_rmse != 0:
-                        values.append(scene_rmse)
-            if len(values) > 0:
-                self.rmse = numpy.mean(numpy.array(values))
-            else:
-                self.rmse = -1
+            self.set_rmse_attrib()
 
             ## get acqdates and acqtimes
-            values = []
-            for x in range(len(self.scenes)):
-                acqtime_str = None
-                for acqtime_key in ('Image_1_Acquisition_time', 'Image 1 Acquisition time'):
-                    if acqtime_key in self.scenes[x]:
-                        acqtime_str = self.scenes[x][acqtime_key]
-                        acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-                        values.append(acqtime_dt)
-                        break
-                if acqtime_str is None:
-                    for img_key in ('Image 1', 'Image_1'):
-                        if img_key in self.scenes[x]:
-                            img_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img_path).split('_')[1]
-                            acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
-                            values.append(acqtime_dt)
-                            break
-            if len(values) > 0:
-                self.acqdate1 = values[0]
-                self.avg_acqtime1 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
-
-            values = []
-            for x in range(len(self.scenes)):
-                acqtime_str = None
-                for acqtime_key in ('Image_2_Acquisition_time', 'Image 2 Acquisition time'):
-                    if acqtime_key in self.scenes[x]:
-                        acqtime_str = self.scenes[x][acqtime_key]
-                        acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-                        values.append(acqtime_dt)
-                        break
-                if acqtime_str is None:
-                    for img_key in ('Image 2', 'Image_2'):
-                        if img_key in self.scenes[x]:
-                            img_path = self.scenes[x][img_key]
-                            acqtime_str = os.path.basename(img_path).split('_')[1]
-                            acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
-                            values.append(acqtime_dt)
-                            break
-            if len(values) > 0:
-                self.acqdate2 = values[0]
-                self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
+            self.set_acqtime_attribs()
 
             ## get sensors
             values = []
@@ -856,6 +824,8 @@ class SetsmDem(object):
             except ValueError as e:
                 logger.info("Cannot convert bitmask density value ({}) to float for {}".format(
                     metad['STRIP_DEM_maskedMatchtagDensity'], self.srcfp))
+            except KeyError:
+                pass
 
             try:
                 self.min_elev_value = float(metad['STRIP_DEM_minElevValue'])
@@ -866,6 +836,12 @@ class SetsmDem(object):
 
             self.proj4_meta = metad['STRIP_DEM_horizontalCoordSysProj4'].replace("'","")
             self.creation_date = datetime.strptime(metad['STRIP_DEM_stripCreationTime'], "%Y-%m-%dT%H:%M:%S.%fZ")
+
+            try:
+                s2s_version = metad['STRIP_DEM_scenes2stripsVersion']
+                self.s2s_version = None if s2s_version == 'None' else s2s_version
+            except KeyError:
+                pass
 
             try:
                 stripdemid_meta = metad['StripDemGroupId']
@@ -890,9 +866,8 @@ class SetsmDem(object):
             try:
                 self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime1'], "%Y-%m-%d %H:%M:%S")
                 self.avg_acqtime2 = datetime.strptime(metad['STRIP_DEM_avgAcqTime2'], "%Y-%m-%d %H:%M:%S")
-            except KeyError as e:
-                self.avg_acqtime1 = datetime.strptime(metad['STRIP_DEM_avgAcqTime'], "%Y-%m-%d %H:%M:%S")
-                self.avg_acqtime2 = self.avg_acqtime1
+            except KeyError:
+                logger.warning('Strip DEM avg acquisition times not found in MDF file: {}'.format(self.mdf))
 
             ## registration info (code assumes only one registration source in mdf)
             try:
@@ -902,8 +877,8 @@ class SetsmDem(object):
                 mean_resid_z = float(metad['STRIP_DEM_REGISTRATION_registrationMeanVerticalResidual'])
                 num_gcps = int(metad['STRIP_DEM_REGISTRATION_registrationNumGCPs'])
                 name = metad['STRIP_DEM_REGISTRATION_registrationSource']
-            except KeyError as e:
-                logger.warning("Registration info not found in {}".format(self.srcfp))
+            except KeyError:
+                pass
             else:
                 self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
 
@@ -952,6 +927,62 @@ class SetsmDem(object):
                     # logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
                     fh.close()
 
+    def set_rmse_attrib(self):
+        values = []
+        for scene_name, align_stats in self.alignment_dct.items():
+            scene_rmse = align_stats[0]
+            if scene_rmse != 'nan':
+                scene_rmse = float(scene_rmse)
+                if scene_rmse != 0:
+                    values.append(scene_rmse)
+        if len(values) > 0:
+            self.rmse = numpy.mean(numpy.array(values))
+        else:
+            self.rmse = -1
+
+    def set_acqtime_attribs(self):
+        values = []
+        for x in range(len(self.scenes)):
+            acqtime_str = None
+            for acqtime_key in ('Image_1_Acquisition_time', 'Image 1 Acquisition time'):
+                if acqtime_key in self.scenes[x]:
+                    acqtime_str = self.scenes[x][acqtime_key]
+                    acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    values.append(acqtime_dt)
+                    break
+            if acqtime_str is None:
+                for img_key in ('Image 1', 'Image_1'):
+                    if img_key in self.scenes[x]:
+                        img_path = self.scenes[x][img_key]
+                        acqtime_str = os.path.basename(img_path).split('_')[1]
+                        acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
+                        values.append(acqtime_dt)
+                        break
+        if len(values) > 0:
+            self.acqdate1 = values[0]
+            self.avg_acqtime1 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
+
+        values = []
+        for x in range(len(self.scenes)):
+            acqtime_str = None
+            for acqtime_key in ('Image_2_Acquisition_time', 'Image 2 Acquisition time'):
+                if acqtime_key in self.scenes[x]:
+                    acqtime_str = self.scenes[x][acqtime_key]
+                    acqtime_dt = datetime.strptime(acqtime_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+                    values.append(acqtime_dt)
+                    break
+            if acqtime_str is None:
+                for img_key in ('Image 2', 'Image_2'):
+                    if img_key in self.scenes[x]:
+                        img_path = self.scenes[x][img_key]
+                        acqtime_str = os.path.basename(img_path).split('_')[1]
+                        acqtime_dt = datetime.strptime(acqtime_str, "%Y%m%d%H%M%S")
+                        values.append(acqtime_dt)
+                        break
+        if len(values) > 0:
+            self.acqdate2 = values[0]
+            self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
+
     def write_mdf_file(self):
 
         if self.geom:
@@ -973,6 +1004,7 @@ class SetsmDem(object):
                 ('DemId','"{}"'.format(self.stripid)),
                 ('StripDemGroupId','"{}"'.format(self.stripdemid)),
                 ('stripCreationTime',(self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
+                ('scenes2stripsVersion', self.s2s_version if self.s2s_version else 'None'),
                 ('releaseVersion','"{}"'.format(self.release_version if self.release_version else 'NA')),
                 ('noDataValue',self.ndv),
                 ('platform1','"{}"'.format(self.sensor1)),
@@ -1200,6 +1232,11 @@ class SetsmDem(object):
                         scene_id = os.path.splitext(alignment_stats[0])[0]
                         alignment_dct[scene_id] = alignment_stats[1:]
 
+                    elif 'Strip Metadata' in l:
+                        m = s2s_version_pattern.match(l)
+                        if m:
+                            metad['s2s_version'] = m.group('s2sversion')
+
                 #### scene metadata info
                 if not in_header:
                     if '=' in l:
@@ -1256,8 +1293,8 @@ class SetsmDem(object):
     key_attribs = (
         'acqdate1',
         'acqdate2',
-        'avg_acqtime1',
-        'avg_acqtime2',
+        # 'avg_acqtime1',  # recalculated from 'scenes' attribute if not present
+        # 'avg_acqtime2',  # recalculated from 'scenes' attribute if not present
         'algm_version',
         'alignment_dct',
         'archive',
@@ -1268,6 +1305,7 @@ class SetsmDem(object):
         'creation_date',
         'datatype',
         'datatype_readable',
+        # 'density',  # external density/stats calculation necessary if not present
         'epsg',
         'filesz_dem',
         'filesz_mt',
@@ -1279,11 +1317,12 @@ class SetsmDem(object):
         'id',
         'is_lsf',
         'is_xtrack',
+        # 'masked_density',  # external density/stats calculation necessary if not present
         'matchtag',
         'mdf',
         'metapath',
-        # 'min_elev_value',
-        # 'max_elev_value',
+        # 'min_elev_value',  # external density/stats calculation necessary if not present
+        # 'max_elev_value',  # external density/stats calculation necessary if not present
         'ndv',
         'ortho',
         'pairname',
@@ -1295,7 +1334,7 @@ class SetsmDem(object):
         'reginfo_list',
         'res',
         'res_str',
-        'rmse',
+        # 'rmse',  # recalculated from 'alignment_dct' attribute if not present
         'scenes',
         'sensor1',
         'sensor2',

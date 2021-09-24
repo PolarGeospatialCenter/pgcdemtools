@@ -37,7 +37,9 @@ class TestIndexerIO(unittest.TestCase):
         self.scene50cm_dir = os.path.join(testdata_dir, 'setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
         self.strip_dir = os.path.join(testdata_dir, 'setsm_strip')
+        self.strip_json_dir = os.path.join(testdata_dir, 'setsm_strip_json')
         self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
+        self.strip_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_mdf')
         self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
         self.tile_dir = os.path.join(testdata_dir, 'setsm_tile')
         self.output_dir = os.path.join(testdata_dir, 'output')
@@ -47,9 +49,10 @@ class TestIndexerIO(unittest.TestCase):
         self.scene_count = 51
         self.scene50cm_count = 14
         self.scenedsp_count = 102
-        self.strip_count = 4
+        self.strip_count = 5
         self.stripmasked_count = 3
         self.strip_mixedver_count = 4
+        self.strip_json_count = 6
 
     def tearDown(self):
         ## Clean up output
@@ -546,13 +549,17 @@ class TestIndexerIO(unittest.TestCase):
 
             ds, layer = None, None
 
-    # @unittest.skip("test")
+    # # @unittest.skip("test")
     def testStrip(self):
 
         test_param_list = (
             # input, output, args, result feature count, message
             (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
+            (self.strip_json_dir, self.test_str, '--overwrite --read-json', self.strip_json_count, 'Done'),
+            # test old json rebuild
             (self.strip_mixedver_dir, self.test_str, '--overwrite', self.strip_mixedver_count, 'Done'),  # test mixed version
+            (self.strip_mdf_dir, self.test_str, '--overwrite', self.strip_count,
+             'WARNING- Strip DEM avg acquisition times not found'), # test rebuild from mdf
             (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'), # test index of masked strips
             (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
         )
@@ -590,7 +597,9 @@ class TestIndexerIO(unittest.TestCase):
                 srcfp = feat.GetField('LOCATION')
                 srcdir, srcfn = os.path.split(srcfp)
                 stripdemid = feat.GetField('STRIPDEMID')
-                self.assertEqual(os.path.basename(srcdir).replace('_lsf',''),stripdemid)
+                folder_stripdemid = os.path.basename(srcdir).replace('_lsf','')
+                if len(folder_stripdemid.split('_')) > 5:
+                    self.assertEqual(folder_stripdemid,stripdemid)
                 dem_suffix = srcfn[srcfn.find('_dem'):]
                 masks = strip_masks[dem_suffix]
                 self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
@@ -601,7 +610,10 @@ class TestIndexerIO(unittest.TestCase):
             ds, layer = None, None
 
             ## Test if stdout has proper error
-            self.assertIn(msg, so.decode())
+            try:
+                self.assertIn(msg, so.decode())
+            except AssertionError as e:
+                self.assertIn(msg, se.decode())
 
     # @unittest.skip("test")
     def testStripJson(self):
@@ -650,6 +662,7 @@ class TestIndexerIO(unittest.TestCase):
         pairname_region_lookup = {
             'W1W1_20190426_102001008466F300_1020010089C2DB00': ('arcticdem_02_greenland_southeast', 'arcgeu'),
             'WV01_20140402_102001002C6AFA00_102001002D8B3100': ('arcticdem_01_iceland', 'arcgeu'),
+            'WV01_20150425_102001003F9C6100_102001003D411100': ('arcticdem_01_iceland', 'arcgeu'),
         }
 
         PROJECTS = {
