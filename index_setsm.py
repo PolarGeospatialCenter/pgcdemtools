@@ -648,8 +648,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'SENSOR2': record.sensor2,
                                 'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
                                 'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
-                                'AVGACQTM1': record.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S") if record.avg_acqtime1 else None,
-                                'AVGACQTM2': record.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S") if record.avg_acqtime2 else None,
+                                'AVGACQTM1': record.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S") if record.avg_acqtime1 is not None else None,
+                                'AVGACQTM2': record.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S") if record.avg_acqtime2 is not None else None,
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
                                 'IS_LSF': int(record.is_lsf),
@@ -680,8 +680,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             if record.release_version and 'REL_VER' in fld_list:
                                 attrib_map['REL_VER'] = record.release_version
 
-                            attrib_map['DENSITY'] = record.density if record.density else -9999
-                            attrib_map['MASK_DENS'] = record.masked_density if record.masked_density else -9999
+                            attrib_map['DENSITY'] = record.density if record.density is not None else -9999
+                            attrib_map['MASK_DENS'] = record.masked_density if record.masked_density is not None else -9999
 
                             ## If registration info exists
                             if args.include_registration:
@@ -779,7 +779,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             else:
                                 version = 'novers'
 
-                            attrib_map['DENSITY'] = record.density if record.density else -9999
+                            attrib_map['DENSITY'] = record.density if record.density is not None else -9999
 
                             if args.include_registration:
                                 if record.reg_src:
