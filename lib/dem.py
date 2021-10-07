@@ -487,6 +487,8 @@ class SetsmDem(object):
                 self.set_acqtime_attribs()
             if 'rmse' not in md:
                 self.set_rmse_attrib()
+            if self.rmse == -2:
+                self.rmse = -9999
             if type(self.density) is str:
                 self.density = float(self.density)
             if type(self.masked_density) is str:
