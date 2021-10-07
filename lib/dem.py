@@ -487,6 +487,14 @@ class SetsmDem(object):
                 self.set_acqtime_attribs()
             if 'rmse' not in md:
                 self.set_rmse_attrib()
+            if type(self.density) is str:
+                self.density = float(self.density)
+            if type(self.masked_density) is str:
+                self.masked_density = float(self.masked_density)
+            if type(self.min_elev_value) is str:
+                self.min_elev_value = float(self.min_elev_value)
+            if type(self.max_elev_value) is str:
+                self.max_elev_value = float(self.max_elev_value)
             self.set_density_and_stats_attribs()
 
         else:
@@ -787,12 +795,26 @@ class SetsmDem(object):
             ## density and stats
             if 'Output Data Density' in metad:
                 self.density = metad['Output Data Density']
-            if 'Fully Masked Data Density' in metad:
                 self.masked_density = metad['Fully Masked Data Density']
+                try:
+                    self.density = float(self.density)
+                    self.masked_density = float(self.masked_density)
+                except ValueError as e:
+                    logger.info(
+                        "Cannot convert density or masked_density values (density={}, masked_density={})"
+                        " to float for {}".format(self.density, self.masked_density, self.srcfp)
+                    )
             if 'Minimum elevation value' in metad:
                 self.min_elev_value = metad['Minimum elevation value']
-            if 'Maximum elevation value' in metad:
                 self.max_elev_value = metad['Maximum elevation value']
+                try:
+                    self.min_elev_value = float(self.min_elev_value)
+                    self.max_elev_value = float(self.max_elev_value)
+                except ValueError as e:
+                    logger.info(
+                        "Cannot convert min or max elev values (min={}, max={}) to float for {}".format(
+                            self.min_elev_value, self.max_elev_value, self.srcfp)
+                    )
 
         ## If mdf exists without metafile
         elif os.path.isfile(self.mdf):
