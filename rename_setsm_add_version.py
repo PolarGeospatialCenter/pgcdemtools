@@ -73,7 +73,9 @@ def rename(raster, args):
 
     # glob and rename files
     glob1 = glob.glob(os.path.join(raster.srcdir, raster.stripid) + "_*")
-    glob1.append(os.path.join(raster.srcdir, raster.stripid) + ".tar.gz")
+    tar_path = os.path.join(raster.srcdir, raster.stripid) + ".tar.gz"
+    if os.path.isfile(tar_path):
+        glob1.append(tar_path)
 
     for ifp in glob1:
         dirp, fn = os.path.split(ifp)

@@ -1703,7 +1703,11 @@ class SetsmTile(object):
                     stats = ds.GetRasterBand(1).GetStatistics(True, True)
                     self.min_elev_value, self.max_elev_value, _, _ = stats
                 except RuntimeError as e:
-                    logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
+                    try:
+                        stats = ds.GetRasterBand(1).GetStatistics(True, False)  # Attempt again with approx=False
+                        self.min_elev_value, self.max_elev_value, _, _ = stats
+                    except RuntimeError as e:
+                        logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
 
         else:
             raise RuntimeError("Cannot open image: %s" %self.srcfp)
