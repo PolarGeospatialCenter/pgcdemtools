@@ -179,7 +179,7 @@ def build_archive(raster,scratch,args):
         raster.get_dem_info()
     except RuntimeError as e:
         logger.error(e)
-        print(raster.ndv)
+        # print(raster.ndv)
     else:
 
         ## get raster density if not precomputed
@@ -262,7 +262,6 @@ def build_archive(raster,scratch,args):
                             feat.SetField("DEM_ID",raster.tileid)
                             feat.SetField("TILE",raster.supertile_id)
                             feat.SetField("ND_VALUE",raster.ndv)
-                            feat.SetField("DEM_NAME",raster.srcfn)
                             res = (raster.xres + raster.yres) / 2.0
                             feat.SetField("DEM_RES",res)
                             feat.SetField("DENSITY",raster.density)

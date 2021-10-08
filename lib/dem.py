@@ -783,13 +783,13 @@ class SetsmDem(object):
 
             ## density and stats
             if 'Output Data Density' in metad:
-                self.density = metad['Output Data Density']
+                self.density = float(metad['Output Data Density'])
             if 'Fully Masked Data Density' in metad:
-                self.masked_density = metad['Fully Masked Data Density']
+                self.masked_density = float(metad['Fully Masked Data Density'])
             if 'Minimum elevation value' in metad:
-                self.min_elev_value = metad['Minimum elevation value']
+                self.min_elev_value = float(metad['Minimum elevation value'])
             if 'Maximum elevation value' in metad:
-                self.max_elev_value = metad['Maximum elevation value']
+                self.max_elev_value = float(metad['Maximum elevation value'])
 
         ## If mdf exists without metafile
         elif os.path.isfile(self.mdf):
@@ -1673,7 +1673,11 @@ class SetsmTile(object):
                     stats = ds.GetRasterBand(1).GetStatistics(True, True)
                     self.min_elev_value, self.max_elev_value, _, _ = stats
                 except RuntimeError as e:
-                    logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
+                    try:
+                        stats = ds.GetRasterBand(1).GetStatistics(True, False)  # Attempt again with approx=False
+                        self.min_elev_value, self.max_elev_value, _, _ = stats
+                    except RuntimeError as e:
+                        logger.warning("Cannot get stats for image: {}, {}".format(self.srcfp, e))
 
         else:
             raise RuntimeError("Cannot open image: %s" %self.srcfp)
