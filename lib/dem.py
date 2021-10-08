@@ -479,12 +479,25 @@ class SetsmDem(object):
                 self.release_version = md['version']
             if 'masked_density' not in md:
                 self.masked_density = -9999
+            if 'min_elev_value' not in md:
+                self.min_elev_value = None
+            if 'max_elev_value' not in md:
+                self.max_elev_value = None
             if 'avg_acqtime1' not in md:
                 self.set_acqtime_attribs()
             if 'rmse' not in md:
                 self.set_rmse_attrib()
-            elif self.rmse == -2:
+            if self.rmse == -2:
                 self.rmse = -9999
+            if type(self.density) is str:
+                self.density = float(self.density)
+            if type(self.masked_density) is str:
+                self.masked_density = float(self.masked_density)
+            if type(self.min_elev_value) is str:
+                self.min_elev_value = float(self.min_elev_value)
+            if type(self.max_elev_value) is str:
+                self.max_elev_value = float(self.max_elev_value)
+            self.set_density_and_stats_attribs()
 
         else:
             self.srcfp = filepath
@@ -784,12 +797,26 @@ class SetsmDem(object):
             ## density and stats
             if 'Output Data Density' in metad:
                 self.density = metad['Output Data Density']
-            if 'Fully Masked Data Density' in metad:
                 self.masked_density = metad['Fully Masked Data Density']
+                try:
+                    self.density = float(self.density)
+                    self.masked_density = float(self.masked_density)
+                except ValueError as e:
+                    logger.info(
+                        "Cannot convert density or masked_density values (density={}, masked_density={})"
+                        " to float for {}".format(self.density, self.masked_density, self.srcfp)
+                    )
             if 'Minimum elevation value' in metad:
                 self.min_elev_value = metad['Minimum elevation value']
-            if 'Maximum elevation value' in metad:
                 self.max_elev_value = metad['Maximum elevation value']
+                try:
+                    self.min_elev_value = float(self.min_elev_value)
+                    self.max_elev_value = float(self.max_elev_value)
+                except ValueError as e:
+                    logger.info(
+                        "Cannot convert min or max elev values (min={}, max={}) to float for {}".format(
+                            self.min_elev_value, self.max_elev_value, self.srcfp)
+                    )
 
         ## If mdf exists without metafile
         elif os.path.isfile(self.mdf):
@@ -886,25 +913,7 @@ class SetsmDem(object):
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
 
         #### If density file exists, get density and stats from there
-        needed_attribs = (self.density, self.masked_density, self.max_elev_value, self.min_elev_value)
-        if any([a is None for a in needed_attribs]):
-            if os.path.isfile(self.density_file):
-                fh = open(self.density_file, 'r')
-                lines = fh.readlines()
-                stats_line = 1
-                try:
-                    self.density = float(lines[0].strip())
-                    if ',' not in lines[1]:
-                        stats_line = 2
-                        self.masked_density = float(lines[1].strip())
-                    stats = lines[stats_line].strip().split(',')
-                    self.min_elev_value = float(stats[0])
-                    self.max_elev_value = float(stats[1])
-                except IndexError:
-                    pass
-                except ValueError:
-                    pass
-                fh.close()
+        self.set_density_and_stats_attribs()
 
         #### If reg.txt file exists, parse it for registration info
         if len(self.reginfo_list) == 0:
@@ -982,6 +991,27 @@ class SetsmDem(object):
         if len(values) > 0:
             self.acqdate2 = values[0]
             self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
+
+    def set_density_and_stats_attribs(self):
+        needed_attribs = (self.density, self.masked_density, self.max_elev_value, self.min_elev_value)
+        if any([a is None for a in needed_attribs]):
+            if os.path.isfile(self.density_file):
+                fh = open(self.density_file, 'r')
+                lines = fh.readlines()
+                stats_line = 1
+                try:
+                    self.density = float(lines[0].strip())
+                    if ',' not in lines[1]:
+                        stats_line = 2
+                        self.masked_density = float(lines[1].strip())
+                    stats = lines[stats_line].strip().split(',')
+                    self.min_elev_value = float(stats[0])
+                    self.max_elev_value = float(stats[1])
+                except IndexError:
+                    pass
+                except ValueError:
+                    pass
+                fh.close()
 
     def write_mdf_file(self):
 
