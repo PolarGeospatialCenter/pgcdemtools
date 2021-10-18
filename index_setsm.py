@@ -708,6 +708,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         valid_record = False
 
                                     else:
+                                        # FIXME: Will we need separate buckets for different s2s version strips (i.e. v4 vs. v4.1)?
                                         bucket = 'dem-{}s-{}'.format(
                                             args.mode, bp_region.split('-')[0])
                                         custom_path = '/'.join([
@@ -738,15 +739,16 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             pretty_project,         # project (e.g. ArcticDEM)
                                             'region',
                                             region,                 # region
-                                            'strips_v4',
+                                            'strips_v{}'.format(record.s2s_version),
                                             res_dir,                # e.g. 2m, 50cm, 2m_dsp
                                             groupid,                # strip ID
                                             record.srcfn            # file name (meta.txt)
                                         ])
 
                                 elif args.custom_paths == 'CSS':
-                                    # /css/nga-dems/setsm/scene/2m/2021/04/21/
+                                    # /css/nga-dems/setsm/strip/2m/2021/04/21/
                                     # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
+                                    # FIXME: Will NASA need separate dirs for different s2s version strips?
                                     custom_path = '/'.join([
                                         path_prefix,
                                         args.mode,  # mode (scene, strip, tile)
