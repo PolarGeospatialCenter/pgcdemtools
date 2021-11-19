@@ -746,12 +746,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         ])
 
                                 elif args.custom_paths == 'CSS':
-                                    # /css/nga-dems/setsm/strip/2m/2021/04/21/
+                                    # /css/nga-dems/setsm/strip/strips_v3/2m/2021/04/21/
                                     # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
-                                    # FIXME: Will NASA need separate dirs for different s2s version strips?
                                     custom_path = '/'.join([
                                         path_prefix,
                                         args.mode,  # mode (scene, strip, tile)
+                                        'strips_v{}'.format(record.s2s_version),
                                         res_dir,  # e.g. 2m, 50cm, 2m_dsp
                                         record.pairname[:4],  # sensor
                                         record.pairname[5:9],  # year

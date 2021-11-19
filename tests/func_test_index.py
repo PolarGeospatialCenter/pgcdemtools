@@ -724,8 +724,7 @@ class TestIndexerIO(unittest.TestCase):
                         PROJECTS[r.split('_')[0]], r, s2s_version, res_dir)
                     self.assertTrue(location.startswith(p))
                 elif '--custom-paths CSS' in options:
-                    # FIXME: Will NASA need separate dirs for different s2s version strips?
-                    p = '/css/nga-dems/setsm/strip/{}/W'.format(res_dir)
+                    p = '/css/nga-dems/setsm/strip/strips_v{}/{}/W'.format(s2s_version, res_dir)
                     self.assertTrue(location.startswith(p))
 
             ds, layer = None, None
