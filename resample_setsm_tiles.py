@@ -1,14 +1,22 @@
-import os, string, sys, re, glob, argparse, subprocess, logging
-from osgeo import gdal, gdalconst
-from lib import dem, utils, taskhandler
+import argparse
+import logging
+import math
+import os
+import sys
+
+from osgeo import gdal
+
+from lib import taskhandler, walk as wk
 
 #### Create Logger
 logger = logging.getLogger("logger")
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 #setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>2m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
-default_res = 16
-suffixes = ('matchtag', 'dem')
+default_res = 32
+default_src_res = 2
+suffixes = ('matchtag', 'dem', 'count', 'countmt')
+default_depth = float('inf')
 
 def main():
     parser = argparse.ArgumentParser()
@@ -16,11 +24,15 @@ def main():
     #### Set Up Options
     parser.add_argument("srcdir", help="source directory or image")
     parser.add_argument("-c", "--component",  choices=suffixes, default='dem',
-                      help="SETSM DEM component to resample")
-    parser.add_argument("-r", "--resolution",  default=default_res, type=int,
-                      help="output resolution (default={})".format(default_res))
+                help="SETSM DEM component to resample")
+    parser.add_argument("-tr", "--tgt-resolution",  default=default_res, type=int,
+                help="output resolution (default={})".format(default_res))
+    parser.add_argument("-sr", "--src-resolution", default=default_src_res, type=int,
+                help="source resolution (default={})".format(default_src_res))
+    parser.add_argument("--depth", type=int,
+                help="search depth (default={})".format(default_depth))
     parser.add_argument("-o", "--overwrite", action="store_true", default=False,
-                      help="overwrite existing files if present")
+                help="overwrite existing files if present")
     parser.add_argument("--pbs", action='store_true', default=False,
                 help="submit tasks to PBS")
     parser.add_argument("--parallel-processes", type=int, default=1,
@@ -28,7 +40,7 @@ def main():
     parser.add_argument("--qsubscript",
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
     parser.add_argument("--dryrun", action="store_true", default=False,
-                      help="print actions without executing")
+                help="print actions without executing")
     pos_arg_keys = ['srcdir']
     
     
@@ -56,6 +68,7 @@ def main():
     #### Set up console logging handler
     lso = logging.StreamHandler()
     lso.setLevel(logging.INFO)
+    lso.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
@@ -63,45 +76,39 @@ def main():
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
-    
+
+    rasters = []
     task_queue = []
     i=0
     logger.info("Searching for SETSM rasters")
     if os.path.isfile(path):
-        if path.endswith('{}.tif'.format(args.component)):
-            dem = path
-            low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
-            low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
-            if dem != low_res_dem and not os.path.isfile(low_res_dem):
-                i+=1
-                task = taskhandler.Task(
-                    os.path.basename(dem),
-                    'Resample{:04g}'.format(i),
-                    'python',
-                    '{} {} {}'.format(scriptpath, arg_str_base, dem),
-                    resample_setsm,
-                    [dem, args]
-                )
-                task_queue.append(task)
-    
-    else:                
-        for root,dirs,files in os.walk(path):
+        if path.endswith('{}m_{}.tif'.format(args.src_resolution, args.component)):
+            rasters.append(path)
+    else:
+        for root, dirs, files in wk.walk(path, maxdepth=args.depth):
             for f in files:
-                if f.endswith('{}.tif'.format(args.component)):
-                    dem = os.path.join(root,f)
-                    low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
-                    low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
-                    if dem != low_res_dem and not os.path.isfile(low_res_dem):
-                        i+=1
-                        task = taskhandler.Task(
-                            f,
-                            'Resample{:04g}'.format(i),
-                            'python',
-                            '{} {} {}'.format(scriptpath, arg_str_base, dem),
-                            resample_setsm,
-                            [dem, args]
-                        )
-                        task_queue.append(task)
+                if f.endswith('{}m_{}.tif'.format(args.src_resolution, args.component)):
+                    rasters.append(os.path.join(root, f))
+
+    for dem in rasters:
+        low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
+        low_res_dem = os.path.join(
+            os.path.dirname(low_res_dem),
+            os.path.basename(low_res_dem.replace("_{}m".format(args.src_resolution), "_{}m".format(args.tgt_resolution)))
+        )
+
+        if dem != low_res_dem and not os.path.isfile(low_res_dem):
+            i+=1
+            logger.debug("Adding task: {}".format(dem))
+            task = taskhandler.Task(
+                os.path.basename(dem),
+                'Resample{:04g}'.format(i),
+                'python',
+                '{} {} {}'.format(scriptpath, arg_str_base, dem),
+                resample_setsm,
+                [dem, args]
+            )
+            task_queue.append(task)
     
     logger.info('Number of incomplete tasks: {}'.format(i))
     if len(task_queue) > 0:
@@ -141,16 +148,38 @@ def main():
     
 def resample_setsm(dem, args):
     low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
-    low_res_dem = os.path.join(os.path.dirname(low_res_dem),os.path.basename(low_res_dem.replace("_2m","_{}m".format(args.resolution))))
+    low_res_dem = os.path.join(
+        os.path.dirname(low_res_dem),
+        os.path.basename(low_res_dem.replace("_{}m".format(args.src_resolution), "_{}m".format(args.tgt_resolution)))
+    )
                     
     if not os.path.isfile(low_res_dem) or args.overwrite is True:
-        logger.info("Resampling {}".format(dem))
-        #print low_res_dem
-        resampling_method = 'bilinear' if args.component == 'dem' else 'near'
-        cmd = 'gdalwarp -q -co tiled=yes -co compress=lzw -r {3} -tr {0} {0} "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, resampling_method)
-        #print cmd
-        if not args.dryrun:
-            taskhandler.exec_cmd(cmd)
+        # Open src raster to determine extent.  Set -te so that -tap extent does not extend beyond the original
+        ds = gdal.Open(dem)
+        if ds:
+            ulx, xres, xskew, uly, yskew, yres = ds.GetGeoTransform()
+            lrx = ulx + (ds.RasterXSize * xres)
+            lry = uly + (ds.RasterYSize * yres)
+            new_xmax = args.tgt_resolution * math.floor(lrx / args.tgt_resolution)
+            new_xmin = args.tgt_resolution * math.ceil(ulx / args.tgt_resolution)
+            new_ymax = args.tgt_resolution * math.floor(uly / args.tgt_resolution)
+            new_ymin = args.tgt_resolution * math.ceil(lry / args.tgt_resolution)
+            co_extent = '{} {} {} {}'.format(
+                new_xmin, new_ymin, new_xmax, new_ymax
+            )
+
+            logger.info("Resampling {}".format(dem))
+            #print low_res_dem
+            resampling_method = 'bilinear' if args.component == 'dem' else 'near'
+            cmd = 'gdalwarp -q -co tiled=yes -co compress=lzw -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
+                args.tgt_resolution, dem, low_res_dem, resampling_method, co_extent
+            )
+            #print cmd
+            if not args.dryrun:
+                taskhandler.exec_cmd(cmd)
+        else:
+            logger.error("Cannot open {}".format(dem))
+    logger.info("Done")
             
         
 if __name__ == '__main__':
