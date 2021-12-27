@@ -577,7 +577,7 @@ class SetsmDem(object):
                     self.masked_density = None
                     self.reginfo_list = []
                     self.geocell = None
-                    self.s2s_version = None
+                    self.s2s_version = '3' # if present, the metadata file value will overwrite this
                     break
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
@@ -750,7 +750,12 @@ class SetsmDem(object):
                     self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
 
             self.proj4_meta = metad['Strip projection (proj4)'].replace("'","")
-            self.s2s_version = metad['s2s_version']
+            s2s_version = metad['s2s_version']
+            if s2s_version is None:
+                # Use default s2s version '3'
+                pass
+            else:
+                self.s2s_version = s2s_version
 
             if 'Strip creation date' in metad:
                 self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
@@ -866,7 +871,11 @@ class SetsmDem(object):
 
             try:
                 s2s_version = metad['STRIP_DEM_scenes2stripsVersion']
-                self.s2s_version = None if s2s_version == 'None' else s2s_version
+                if s2s_version == 'None':
+                    # Use default s2s version '3'
+                    pass
+                else:
+                    self.s2s_version = s2s_version
             except KeyError:
                 pass
 
@@ -1266,6 +1275,8 @@ class SetsmDem(object):
                         m = s2s_version_pattern.match(l)
                         if m:
                             metad['s2s_version'] = m.group('s2sversion')
+                        else:
+                            raise RuntimeError("Cannot parse s2s version from strip metadata line '{}' with regex '{}', {}".format(l, s2s_version_pattern.pattern, self.metapath))
 
                 #### scene metadata info
                 if not in_header:
