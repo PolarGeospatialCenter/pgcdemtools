@@ -15,7 +15,7 @@ def main():
         )
     
     parser.add_argument("srcdir", help="source directory")
-    parser.add_argument("version", help="version string (ex: v1.2)")
+    parser.add_argument("version", help="version string (ex: s2s041)")
     parser.add_argument("--dryrun", action='store_true', default=False,
                         help="print actions without executing")
     
@@ -81,7 +81,7 @@ def rename(raster, args):
         dirp, fn = os.path.split(ifp)
         #print(ifp)
 
-        ofn = "SETSM_{}_{}{}".format(fn[:len(raster.stripid)], args.version, fn[len(raster.stripid):])
+        ofn = "SETSM_{}_{}".format(args.version, fn)
         ofp = os.path.join(dirp, ofn)
         if os.path.isfile(ofp):
             print("Output file already exists: {}".format(ofp))
