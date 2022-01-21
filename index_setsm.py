@@ -501,6 +501,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                 for record in groups[groupid]:
                     for dsp_mode in dsp_modes:
 
+                        region = None
+                        bp_region = None
+
                         # skip writing a second "orig" record if the DEM is not a DSP DEM sene
                         if args.mode == 'scene':
                             if not record.is_dsp and dsp_mode == 'orig':
@@ -563,10 +566,18 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             # Set region
                             try:
-                                region, bp_region = pairs[record.pairname]
+                                pair_items = pairs[record.pairname]
                             except KeyError as e:
                                 region = None
+                                bp_region = None
                             else:
+                                if isinstance(pair_items, str):
+                                    region = pair_items
+                                elif isinstance(pair_items, tuple):
+                                    region, bp_region = pair_items
+                                else:
+                                    logger.error("Pairname-region lookup value cannot be parsed for pairname {}: {}".format(
+                                        record.pairname, pair_items))
                                 attrib_map['REGION'] = region
 
                             if path_prefix:
@@ -577,7 +588,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
 
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                        logger.error("Pairname not found in region lookup {}, cannot build custom path".format(
                                             record.pairname))
                                         valid_record = False
 
@@ -601,7 +612,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # 504471479080_01_P001_504471481090_01_P001_2_meta.txt
 
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                        logger.error("Pairname not found in region lookup {}, cannot build custom path".format(
                                             record.pairname))
                                         valid_record = False
 
@@ -671,10 +682,18 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             ## Set region
                             try:
-                                region, bp_region = pairs[record.pairname]
+                                pair_items = pairs[record.pairname]
                             except KeyError as e:
-                                pass
+                                region = None
+                                bp_region = None
                             else:
+                                if isinstance(pair_items, str):
+                                    region = pair_items
+                                elif isinstance(pair_items, tuple):
+                                    region, bp_region = pair_items
+                                else:
+                                    logger.error("Pairname-region lookup value cannot be parsed for pairname {}: {}".format(
+                                        record.pairname, pair_items))
                                 attrib_map['REGION'] = region
 
                             if record.release_version and 'REL_VER' in fld_list:
@@ -703,11 +722,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # https://blackpearl-data2.pgc.umn.edu/dem-strips-arceua/2m/WV02/2015/05/
                                     # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                        logger.error("Pairname not found in region lookup {}, cannot build custom path".format(
                                                 record.pairname))
                                         valid_record = False
 
                                     else:
+                                        # FIXME: Will we need separate buckets for different s2s version strips (i.e. v4 vs. v4.1)?
                                         bucket = 'dem-{}s-{}'.format(
                                             args.mode, bp_region.split('-')[0])
                                         custom_path = '/'.join([
@@ -726,7 +746,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
 
                                     if not region:
-                                        logger.error("Pairname not found in region lookup {}, cannot built custom path".format(
+                                        logger.error("Pairname not found in region lookup {}, cannot build custom path".format(
                                             record.pairname))
                                         valid_record = False
 
@@ -738,18 +758,19 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             pretty_project,         # project (e.g. ArcticDEM)
                                             'region',
                                             region,                 # region
-                                            'strips_v4',
+                                            'strips_v{}'.format(record.s2s_version),
                                             res_dir,                # e.g. 2m, 50cm, 2m_dsp
                                             groupid,                # strip ID
                                             record.srcfn            # file name (meta.txt)
                                         ])
 
                                 elif args.custom_paths == 'CSS':
-                                    # /css/nga-dems/setsm/scene/2m/2021/04/21/
+                                    # /css/nga-dems/setsm/strip/strips_v3/2m/2021/04/21/
                                     # W2W2_20161025_103001005E00BD00_103001005E89F900_2m_v040306
                                     custom_path = '/'.join([
                                         path_prefix,
                                         args.mode,  # mode (scene, strip, tile)
+                                        'strips_v{}'.format(record.s2s_version),
                                         res_dir,  # e.g. 2m, 50cm, 2m_dsp
                                         record.pairname[:4],  # sensor
                                         record.pairname[5:9],  # year
