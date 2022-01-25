@@ -762,8 +762,11 @@ class SetsmDem(object):
             else:
                 raise RuntimeError('Key "Strip creation date" not found in meta dict from {}'.format(self.metapath))
 
-            # Get version from metafile if available.  Otherwise default to first scene version
-            #  Also calculate other algorithm version formats
+            # Get version from best available source in strip metafile:
+            # 1. 'Strip DEM ID'
+            # 2. 'Group_version'
+            # 3. 'SETSM Version' of first scene
+            # Also calculate other algorithm version formats
             if 'Strip DEM ID' in metad:
                 stripdemid_meta = metad['Strip DEM ID']
                 self.algm_version_key = stripdemid_meta.split('_')[5]
@@ -771,12 +774,17 @@ class SetsmDem(object):
 
             else:
                 values = []
+                group_version = None
                 for x in range(len(self.scenes)):
-                    if 'SETSM Version' in self.scenes[x]:
+                    if 'Group_version' in self.scenes[x]:
+                        group_version = self.scenes[x]['Group_version']
+                        break
+                    elif 'SETSM Version' in self.scenes[x]:
                         values.append(self.scenes[x]['SETSM Version'])
-                if len(values) > 0:
-                    self.algm_version = 'SETSM {}'.format(values[0])
-                    self.algm_version_key = semver2verkey(values[0])
+                if group_version is None and len(values) > 0:
+                    group_version = values[0]
+                self.algm_version = 'SETSM {}'.format(group_version)
+                self.algm_version_key = semver2verkey(group_version)
 
             ## get scene coregistration rmse
             self.set_rmse_attrib()
