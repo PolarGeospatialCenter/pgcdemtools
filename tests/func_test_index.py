@@ -41,6 +41,7 @@ class TestIndexerIO(unittest.TestCase):
         self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
         self.strip_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_mdf')
         self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
+        self.striprenamed_dir = os.path.join(testdata_dir, 'setsm_strip_renamed')
         self.tile_dir = os.path.join(testdata_dir, 'setsm_tile')
         self.output_dir = os.path.join(testdata_dir, 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
@@ -53,6 +54,7 @@ class TestIndexerIO(unittest.TestCase):
         self.stripmasked_count = 3
         self.strip_mixedver_count = 4
         self.strip_json_count = 6
+        self.strip_renamed_count = 1
 
     def tearDown(self):
         ## Clean up output
@@ -562,6 +564,7 @@ class TestIndexerIO(unittest.TestCase):
              'WARNING- Strip DEM avg acquisition times not found'), # test rebuild from mdf
             (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'), # test index of masked strips
             (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
+            (self.striprenamed_dir, self.test_str, '--overwrite --include-relver', self.strip_renamed_count, 'Done')
         )
 
         strip_masks = {
@@ -596,6 +599,7 @@ class TestIndexerIO(unittest.TestCase):
             for feat in layer:
                 srcfp = feat.GetField('LOCATION')
                 srcdir, srcfn = os.path.split(srcfp)
+                srcfn_minus_prefix = '_'.join(srcfn.split('_')[2:]) if srcfn.startswith('SETSM_s2s') else srcfn
                 stripdemid = feat.GetField('STRIPDEMID')
                 folder_stripdemid = os.path.basename(srcdir).replace('_lsf','')
                 if len(folder_stripdemid.split('_')) > 5:
@@ -605,8 +609,11 @@ class TestIndexerIO(unittest.TestCase):
                 self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
                 self.assertEqual(feat.GetField('WATERMASK'), masks[1])
                 self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
-                is_xtrack = 0 if srcfn.startswith(('WV', 'GE', 'QB')) else 1
+                is_xtrack = 0 if srcfn_minus_prefix.startswith(('WV', 'GE', 'QB')) else 1
                 self.assertEqual(feat.GetField('IS_XTRACK'), is_xtrack)
+                if 'include-relver' in options:
+                    s2sver = feat.GetField('REL_VER')
+                    self.assertEqual(s2sver, 's2s041')
             ds, layer = None, None
 
             ## Test if stdout has proper error

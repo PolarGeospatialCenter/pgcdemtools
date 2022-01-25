@@ -66,7 +66,9 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (-(?P<subtile>\d{2}))?
                                     _meta.txt\Z""", re.I | re.X)
 
-setsm_strip_pattern = re.compile("""(?P<pairname>
+setsm_strip_pattern = re.compile("""((?P<algorithm>SETSM)_)?
+                                    ((?P<relversion>s2s[\d/]+)_)?
+                                    (?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
                                     (?P<timestamp>\d{8})_
                                     (?P<catid1>[A-Z0-9]{16})_
@@ -75,7 +77,7 @@ setsm_strip_pattern = re.compile("""(?P<pairname>
                                     (?P<res>(\d+|0\.\d+)c?m)_
                                     (lsf_)?
                                     (?P<partnum>SEG\d+)_
-                                    ((?P<relversion>v[\d/.]+)_)?
+                                    ((?P<relversion2>v[\d/.]+)_)?
                                     (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
                                     .(tif|jpg))\Z""", re.I | re.X)
 
@@ -564,10 +566,12 @@ class SetsmDem(object):
                     self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
                     self.algm_version_key = None
                     self.geom = None
-                    if 'relversion' in groups:
-                        self.release_version = groups['relversion']
-                    else:
-                        self.release_version = None
+                    self.release_version = None
+                    for k in ('relversion', 'relversion2'):
+                        if k in groups:
+                            self.release_version = groups[k]
+                            break
+
                     self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                     self.is_dsp = False # Todo modify when dsp strips are a thing
                     self.rmse = -9999 # if present, the metadata file value will overwrite this
