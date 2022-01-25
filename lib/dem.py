@@ -1124,8 +1124,8 @@ class SetsmDem(object):
                 else:
                     logger.warning('Scene metadata missing from {}: {}, key: {}'.format(self.metapath,scene['scene_name'],'SETSM Version'))
 
-                if 'Group Version' in scene:
-                    cont.append(('setsmGroupVersion',scene['Group Version']))
+                if 'Group_version' in scene:
+                    cont.append(('setsmGroupVersion',scene['Group_version']))
 
                 if 'Creation Date' in scene:
                     cont.append(('sceneCreationDate',self._parse_creation_date(scene['Creation Date'])))
