@@ -1,4 +1,5 @@
 import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
+import subprocess
 from datetime import *
 from osgeo import gdal, osr, ogr, gdalconst
 import argparse
@@ -20,18 +21,18 @@ def main():
     
     #### Set Up Arguments 
     parser = argparse.ArgumentParser(
-        description="package setsm dems (build mdf and readme files and create archive) in place in the filesystem"
+        description="package setsm dems (build mdf and readme files, convert rasters to COG, and create archive)"
         )
     
     #### Positional Arguments
     parser.add_argument('src', help="source directory or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
     
-    #### Optionsl Arguments
-    parser.add_argument('--mdf-only', action='store_true', default=False,
-                        help="build mdf and readme files only, do not archive")
-    # parser.add_argument('--lsf', action='store_true', default=False,
-    #                     help="package LSF DEM instead of original DEM. Includes metadata flag.")
+    #### Optional Arguments
+    parser.add_argument('--skip-cog', action='store_true', default=False,
+                        help="skip COG conversion and build archive with existing tiffs")
+    parser.add_argument('--skip-archive', action='store_true', default=False,
+                        help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="filter dems with area < {} sqkm or density < {}".format(
                             AREA_THRESHOLD, DENSITY_THRESHOLD))
@@ -94,11 +95,6 @@ def main():
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
-    
-    # if args.lsf:
-    #     logger.info('Packaging LSF DEMs')
-    # else:
-    #     logger.info('Packaging non-LSF DEMs')
 
     #### ID rasters
     logger.info('Identifying DEMs')
@@ -137,12 +133,20 @@ def main():
             j+=1
             utils.progress(j, total, "DEMs identified")
 
+            cog_sem = os.path.join(raster.srcdir, raster.stripid + '.cogfin')
             if args.overwrite or args.force_filter_dems:
                 scenes.append(sp)
-            elif args.mdf_only:
-                if (not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme)):
-                    scenes.append(sp)
-            elif not os.path.isfile(raster.archive) or not os.path.isfile(raster.mdf) or not os.path.isfile(raster.readme):
+
+            expected_outputs = [
+                raster.mdf,
+                raster.readme
+            ]
+            if not args.skip_cog:
+                expected_outputs.append(cog_sem)
+            if not args.skip_archive:
+                expected_outputs.append(raster.archive)
+
+            if not all([os.path.isfile(f) for f in expected_outputs]):
                 scenes.append(sp)
 
     scenes = list(set(scenes))
@@ -231,9 +235,7 @@ def build_archive(src,scratch,args):
     raster = dem.SetsmDem(src)
     dstfp = raster.archive
     dstdir, dstfn = os.path.split(raster.archive)
-    #print dstfn
-    #print dstfp
-    
+
     try:
         raster.get_dem_info()
     except RuntimeError as e:
@@ -262,12 +264,25 @@ def build_archive(src,scratch,args):
                 
             if not process:
                 logger.info('Removing {}'.format(raster.srcfp))
-                to_remove = glob.glob(raster.srcfp[:-8]+'*')
+                to_remove = glob.glob(raster.stripid + '*')
                 for f in to_remove:
-                    #logger.info('Removing {}'.format(f))
                     os.remove(f)
                 
         if process:
+            os.chdir(dstdir)
+
+            components = (
+                os.path.basename(raster.srcfp),  # dem
+                os.path.basename(raster.matchtag),  # matchtag
+                os.path.basename(raster.mdf),  # mdf
+                os.path.basename(raster.readme),  # readme
+                os.path.basename(raster.browse),  # browse
+                os.path.basename(raster.bitmask),  # bitmask
+                # index shp files
+            )
+
+            optional_components = [os.path.basename(r) for r in raster.reg_files]  # reg
+
             #### Build mdf
             if not os.path.isfile(raster.mdf) or args.overwrite:
                 if os.path.isfile(raster.mdf):
@@ -286,9 +301,50 @@ def build_archive(src,scratch,args):
                         os.remove(raster.readme)
                 if not args.dryrun:
                     raster.write_readme_file()
-            
-            #### Build Archive
-            if not args.mdf_only:
+
+            ## Convert all rasters to COG in place
+            if not args.skip_cog:
+                cog_sem = raster.stripid + '.cogfin'
+                if os.path.isfile(cog_sem):
+                    logger.info('COG conversion already complete')
+
+                else:
+                    logger.info("Converting Rasters to COG")
+
+                    tifs = [c for c in components if c.endswith('.tif')]
+                    cog_cnt = 0
+                    for tif in tifs:
+                        logger.info('\tConverting {}'.format(tif))
+                        # if tif is already COG, increment cnt and move on
+                        ds = gdal.Open(tif, gdalconst.GA_ReadOnly)
+                        if 'LAYOUT=COG' in ds.GetMetadata_List('IMAGE_STRUCTURE'):
+                            cog_cnt+=1
+                            continue
+
+                        tifbn = os.path.splitext(tif)[0]
+                        cog = tifbn + '_cog.tif'
+
+                        # Remove temp COG file if it exists, it must be a partial file
+                        if os.path.isfile(cog):
+                            os.remove(cog)
+
+                        cmd = 'gdal_translate -q -of COG -co compress=lzw -co predictor=yes -co bigtiff=yes {} {}'.format(
+                            tif, cog)
+                        subprocess.call(cmd, shell=True)
+
+                        # delete original tif and increment cog count if successful
+                        if os.path.isfile(cog):
+                            os.remove(tif)
+                            os.rename(cog, tif)
+                        if os.path.isfile(tif):
+                            cog_cnt+=1
+
+                    # if all tifs are now cog, add semophore file
+                    if cog_cnt == len(tifs):
+                        open(cog_sem, 'w').close()
+
+            ## Build Archive
+            if not args.skip_archive:
                 
                 if os.path.isfile(dstfp) and args.overwrite is True:
                     if not args.dryrun:
@@ -299,35 +355,9 @@ def build_archive(src,scratch,args):
             
                 if not os.path.isfile(dstfp):    
 
-                    # if args.lsf:
-                    #     components = (
-                    #         os.path.basename(raster.srcfp).replace("dem.tif","dem_smooth.tif"), # dem
-                    #         os.path.basename(raster.matchtag), # matchtag
-                    #         os.path.basename(raster.mdf), # mdf
-                    #         os.path.basename(raster.readme), # readme
-                    #         os.path.basename(raster.browse), # browse
-                    #         # index shp files
-                    #     )
-                    # else:
-                    components = (
-                        os.path.basename(raster.srcfp), # dem
-                        os.path.basename(raster.matchtag), # matchtag
-                        os.path.basename(raster.mdf), # mdf
-                        os.path.basename(raster.readme), # readme
-                        os.path.basename(raster.browse), # browse
-                        os.path.basename(raster.bitmask), # bitmask
-                        # index shp files
-                    )
-    
-                    optional_components = [os.path.basename(r) for r in raster.reg_files] #reg
-                    
-                    os.chdir(dstdir)
-                    #logger.info(os.getcwd())
-                    
                     k = 0
                     existing_components = sum([int(os.path.isfile(component)) for component in components])
                     ### check if exists, print
-                    #logger.info(existing_components)
                     if existing_components == len(components):
                         
                         ## Build index
