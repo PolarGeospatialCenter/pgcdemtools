@@ -276,7 +276,7 @@ def divide_tile(src, args):
                 dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, version_str, reg_str, component)
                 logger.info("Building {}".format(dstfp))
                 if not os.path.isfile(dstfp):
-                    cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=if_safer -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, minx, maxy, maxx, miny, resample)
+                    cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, minx, maxy, maxx, miny, resample)
                     logger.info(cmd)
                     subprocess.call(cmd, shell=True)
 
@@ -312,7 +312,7 @@ def divide_tile(src, args):
                         dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, version_str, reg_str, component)
                         logger.info("Building {}".format(dstfp))
                         if not os.path.isfile(dstfp):
-                            cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=if_safer -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, xorigin, yorigin+tilesizey, xorigin+tilesizex, yorigin, resample)
+                            cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, xorigin, yorigin+tilesizey, xorigin+tilesizex, yorigin, resample)
                             logger.info(cmd)
                             subprocess.call(cmd, shell=True)
 

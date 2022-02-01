@@ -157,14 +157,14 @@ def resample_setsm(raster, dstdir, args):
             #print new_raster
             if suffix == 'dem.tif':
                 cmd = ('gdalwarp -q -tap -t_srs EPSG:{0} -tr {3} {3} -r bilinear -co tiled=yes -co compress=lzw '
-                      '-co bigtiff=if_safer "{1}" "{2}"'.format(args.epsg, component, new_raster, args.resolution))
+                      '-co bigtiff=yes "{1}" "{2}"'.format(args.epsg, component, new_raster, args.resolution))
                 if not args.dryrun:
                     taskhandler.exec_cmd(cmd)
             elif suffix == 'meta.txt':
                 resample_stripmeta(component, new_raster, args.epsg)
             else:
                 cmd = ('gdalwarp -q -tap -t_srs EPSG:{0} -tr {3} {3} -r near -co tiled=yes -co compress=lzw '
-                      '-co bigtiff=if_safer "{1}" "{2}"'.format(args.epsg, component, new_raster, args.resolution))
+                      '-co bigtiff=yes "{1}" "{2}"'.format(args.epsg, component, new_raster, args.resolution))
                 if not args.dryrun:
                     taskhandler.exec_cmd(cmd)
     logger.info('Done')
