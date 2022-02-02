@@ -277,6 +277,7 @@ def build_archive(src,scratch,args):
                 os.path.basename(raster.mdf),  # mdf
                 os.path.basename(raster.readme),  # readme
                 os.path.basename(raster.browse),  # browse
+                os.path.basename(raster.browse_masked),  # browse with mask
                 os.path.basename(raster.bitmask),  # bitmask
                 # index shp files
             )
