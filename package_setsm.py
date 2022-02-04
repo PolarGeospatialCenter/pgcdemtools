@@ -25,7 +25,7 @@ def main():
         )
     
     #### Positional Arguments
-    parser.add_argument('src', help="source directory or dem")
+    parser.add_argument('src', help="source directory, text file of file paths, or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
     
     #### Optional Arguments
@@ -562,7 +562,7 @@ def wrap_180(src_geom):
         if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
 
             ## if segment crosses,calculate interesection point y value
-            pt3_y = calc_y_intersection_180(pt1, pt2)
+            pt3_y = utils.calc_y_intersection_180(pt1, pt2)
 
             ## add intersection point to both bins (make sureot change 180 to -180 for western list)
             pt3_west = ( -180, pt3_y )

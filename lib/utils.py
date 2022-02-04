@@ -3,10 +3,11 @@
 """
 demtools utilties and constants
 """
-
+import glob
 import logging
 import os
 import re
+import shutil
 import sys
 
 import numpy as np
@@ -601,3 +602,131 @@ def progress(count, total, suffix=''):
 
     sys.stdout.write('[%s] %s%s ...%s\r' % (bar, percents, '%', suffix))
     sys.stdout.flush()  # As suggested by Rom Ruben
+
+
+def get_tiles_from_shp(shp, field):
+    tiles = {}
+    shp_srs = None
+
+    ds = ogr.Open(shp)
+    if ds is not None:
+
+        lyr = ds.GetLayerByName(os.path.splitext(os.path.basename(shp))[0])
+        lyr.ResetReading()
+
+        i = lyr.FindFieldIndex(field, 1)
+        if i == -1:
+            logger.error("Cannot locate field {} in {}".format(field, shp))
+            sys.exit(-1)
+
+        shp_srs = lyr.GetSpatialRef()
+        if shp_srs is None:
+            logger.error("Shp must have a defined spatial reference")
+            sys.exit(-1)
+
+        for feat in lyr:
+            tile_name = feat.GetFieldAsString(i)
+            tile_geom = feat.GetGeometryRef().Clone()
+            if not tile_name in tiles:
+                tiles[tile_name] = tile_geom
+            else:
+                logger.error("Found features with duplicate name: {} - Ignoring 2nd feature".format(tile_name))
+
+    else:
+        logger.error("Cannot open {}".format(shp))
+
+    return tiles, shp_srs
+
+
+def shelve_item(raster, dst, args, tiles=None, shp_srs=None):
+    dst_dir = None
+    if args.mode == 'geocell':
+        ## get centroid and round down to floor to make geocell folder
+        raster.get_metafile_info()
+        geocell = raster.get_geocell()
+        dst_dir = os.path.join(dst, geocell)
+
+    elif args.mode == 'date':
+        platform = raster.sensor1
+        year = raster.acqdate1.strftime("%Y")
+        month = raster.acqdate1.strftime("%m")
+        day = raster.acqdate1.strftime("%d")
+        dst_dir = os.path.join(dst, platform, year, month, day)
+
+    elif args.mode == 'shp':
+        ## Convert geom to match shp srs and get centroid
+        raster.get_metafile_info()
+        geom_copy = raster.geom.Clone()
+        srs = osr_srs_preserve_axis_order(osr.SpatialReference())
+        srs.ImportFromProj4(raster.proj4_meta)
+        if not shp_srs.IsSame(srs):
+            ctf = osr.CoordinateTransformation(srs, shp_srs)
+            geom_copy.Transform(ctf)
+        centroid = geom_copy.Centroid()
+
+        ## Run intersection with each tile
+        tile_overlaps = []
+        for tile_name, tile_geom in tiles.items():
+            if centroid.Intersects(tile_geom):
+                tile_overlaps.append(tile_name)
+
+        ## Raise an error on multiple intersections or zero intersections
+        if len(tile_overlaps) == 0:
+            logger.warning("raster {} does not intersect the index shp, skipping".format(raster.srcfn))
+
+        elif len(tile_overlaps) > 1:
+            logger.warning("raster {} intersects more than one tile ({}), skipping".format(raster.srcfn,
+                                                                                           ','.join(tile_overlaps)))
+        else:
+            # logger.info("{} shelved to tile {}".format(raster.stripid, tile_overlaps[0]))
+            dst_dir = os.path.join(dst, tile_overlaps[0])
+
+    if dst_dir:
+        if not os.path.isdir(dst_dir):
+            if not args.dryrun:
+                os.makedirs(dst_dir)
+
+        glob1 = glob.glob(os.path.join(raster.srcdir, raster.stripid) + "_*")
+        tar_path = os.path.join(raster.srcdir, raster.stripid) + ".tar.gz"
+        if os.path.isfile(tar_path):
+            glob1.append(tar_path)
+
+        if args.skip_ortho:
+            glob2 = [f for f in glob1 if 'ortho' not in f]
+            glob1 = glob2
+
+        ## Check if existing and remove all matching files if overwrite
+        glob3 = glob.glob(os.path.join(dst_dir, raster.stripid) + "_*")
+        tar_path = os.path.join(dst_dir, raster.stripid) + ".tar.gz"
+        if os.path.isfile(tar_path):
+            glob3.append(tar_path)
+
+        proceed = True
+        if len(glob3) > 0:
+            if args.overwrite:
+                logger.info("Destination files already exist for {} - overwriting all dest files".format(
+                    raster.stripid))
+                for ofp in glob3:
+                    logger.debug("Removing {} due to --overwrite flag".format(ofp))
+                    if not args.dryrun:
+                        os.remove(ofp)
+            else:
+                logger.info(
+                    "Destination files already exist for {} - skipping DEM. Use --overwrite to overwrite".format(
+                        raster.stripid))
+                proceed = False
+
+        ## Link or copy files
+        if proceed:
+            for ifp in glob1:
+                ofp = os.path.join(dst_dir, os.path.basename(ifp))
+                logger.debug("Linking {} to {}".format(ifp, ofp))
+                if not args.dryrun:
+                    if args.try_link:
+                        try:
+                            os.link(ifp, ofp)
+                        except OSError:
+                            logger.error("os.link failed on {}".format(ifp))
+                    else:
+                        logger.debug("Copying {} to {}".format(ifp, ofp))
+                        shutil.copy2(ifp, ofp)
