@@ -271,7 +271,7 @@ def build_archive(src,scratch,args):
         if process:
             os.chdir(dstdir)
 
-            components = (
+            components = (  # plus index shp files
                 os.path.basename(raster.srcfp),  # dem
                 os.path.basename(raster.matchtag),  # matchtag
                 os.path.basename(raster.mdf),  # mdf
@@ -279,7 +279,10 @@ def build_archive(src,scratch,args):
                 os.path.basename(raster.browse),  # browse
                 os.path.basename(raster.browse_masked),  # browse with mask
                 os.path.basename(raster.bitmask),  # bitmask
-                # index shp files
+                # For testing only
+                # os.path.basename(raster.srcfp)[:-8] + '_ortho.tif',  # ortho1
+                # os.path.basename(raster.srcfp)[:-8] + '_ortho2.tif',  # ortho2
+                # os.path.basename(raster.srcfp)[:-8] + '_dem_10m.tif',  # 10m dem
             )
 
             optional_components = [os.path.basename(r) for r in raster.reg_files]  # reg
@@ -315,30 +318,34 @@ def build_archive(src,scratch,args):
                     tifs = [c for c in components if c.endswith('.tif')]
                     cog_cnt = 0
                     for tif in tifs:
-                        logger.info('\tConverting {}'.format(tif))
-                        # if tif is already COG, increment cnt and move on
-                        ds = gdal.Open(tif, gdalconst.GA_ReadOnly)
-                        if 'LAYOUT=COG' in ds.GetMetadata_List('IMAGE_STRUCTURE'):
-                            cog_cnt+=1
-                            continue
-
-                        tifbn = os.path.splitext(tif)[0]
-                        cog = tifbn + '_cog.tif'
-
-                        # Remove temp COG file if it exists, it must be a partial file
-                        if os.path.isfile(cog):
-                            os.remove(cog)
-
-                        cmd = 'gdal_translate -q -of COG -co compress=lzw -co predictor=yes -co bigtiff=yes {} {}'.format(
-                            tif, cog)
-                        subprocess.call(cmd, shell=True)
-
-                        # delete original tif and increment cog count if successful
-                        if os.path.isfile(cog):
-                            os.remove(tif)
-                            os.rename(cog, tif)
                         if os.path.isfile(tif):
-                            cog_cnt+=1
+
+                            # if tif is already COG, increment cnt and move on
+                            ds = gdal.Open(tif, gdalconst.GA_ReadOnly)
+                            if 'LAYOUT=COG' in ds.GetMetadata_List('IMAGE_STRUCTURE'):
+                                cog_cnt+=1
+                                logger.info('\tAlready converted: {}'.format(tif))
+                                continue
+
+                            tifbn = os.path.splitext(tif)[0]
+                            cog = tifbn + '_cog.tif'
+                            predictor = 'NO' if tif.endswith(('bitmask.tif', 'matchtag.tif')) else 'YES'
+                            logger.info('\tConverting {} with PREDICTOR={}'.format(tif, predictor))
+
+                            # Remove temp COG file if it exists, it must be a partial file
+                            if os.path.isfile(cog):
+                                os.remove(cog)
+
+                            cmd = 'gdal_translate -q -of COG -co compress=lzw -co predictor={} -co bigtiff=yes {} {}'.format(
+                                predictor, tif, cog)
+                            subprocess.call(cmd, shell=True)
+
+                            # delete original tif and increment cog count if successful
+                            if os.path.isfile(cog):
+                                os.remove(tif)
+                                os.rename(cog, tif)
+                            if os.path.isfile(tif):
+                                cog_cnt+=1
 
                     # if all tifs are now cog, add semophore file
                     if cog_cnt == len(tifs):
