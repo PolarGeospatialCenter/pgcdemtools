@@ -527,9 +527,10 @@ class SetsmDem(object):
             self.ortho2 = os.path.join(self.srcdir, self.stripid + "_ortho2.tif")
             self.mdf = os.path.join(self.srcdir,self.stripid+"_mdf.txt")
             self.readme = os.path.join(self.srcdir,self.stripid+"_readme.txt")
-            self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
+            self.browse = os.path.join(self.srcdir, self.stripid + "_dem_10m_shade.tif")
+            self.browse_masked = os.path.join(self.srcdir, self.stripid + "_dem_10m_shade_masked.tif")
             if not os.path.isfile(self.browse):
-                self.browse = os.path.join(self.srcdir, self.stripid + "_dem_10m_shade.tif")
+                self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
             self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
             self.bitmask = os.path.join(self.srcdir, self.stripid + "_bitmask.tif")
             self.reg_files = [
