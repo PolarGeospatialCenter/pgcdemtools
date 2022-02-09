@@ -407,6 +407,12 @@ class TestIndexerIO(unittest.TestCase):
                     else:
                         self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'online')
 
+                # TODO revert to all records using assertIsNotNone after all incorrect 50cminfo.txt files are ingested
+                if res == 0.5:
+                    self.assertIsNone(feat.GetField('FILESZ_DEM'))
+                else:
+                    self.assertIsNotNone(feat.GetField('FILESZ_DEM'))
+
             ds, layer = None, None
 
             # Test if stdout has proper error
@@ -549,9 +555,15 @@ class TestIndexerIO(unittest.TestCase):
             self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
             self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
 
+            # TODO revert to all records using assertIsNotNone after all incorrect 50cminfo.txt files are ingested
+            if res == 0.5:
+                self.assertIsNone(feat.GetField('FILESZ_DEM'))
+            else:
+                self.assertIsNotNone(feat.GetField('FILESZ_DEM'))
+
             ds, layer = None, None
 
-    # # @unittest.skip("test")
+    # @unittest.skip("test")
     def testStrip(self):
 
         test_param_list = (
