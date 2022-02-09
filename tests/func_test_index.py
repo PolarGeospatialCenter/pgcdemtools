@@ -390,17 +390,18 @@ class TestIndexerIO(unittest.TestCase):
                 scenedemid = feat.GetField('SCENEDEMID')
                 stripdemid = feat.GetField('STRIPDEMID')
                 location = feat.GetField('LOCATION')
+                record_res = feat.GetField('DEM_RES')
                 scenedemid_lastpart = scenedemid.split('_')[-1]
                 location_lastpart = location.split('_')[-2]
                 if '-' in location_lastpart:
                     self.assertEqual(scenedemid_lastpart.split('-')[1], location_lastpart.split('-')[1])
                 if res:
-                    self.assertEqual(feat.GetField('DEM_RES'), res)
+                    self.assertEqual(record_res, res)
                     self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
                     self.assertTrue(res_str[res] in stripdemid)
                     self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
-                self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
-                self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
+                self.assertTrue(scenedemid_lastpart.startswith('2' if record_res == 2.0 else '0'))
+                self.assertEqual(feat.GetField('IS_DSP'), 1 if record_res == 2.0 else 0)
                 if '--status-dsp-record-mode-orig aws' in options:
                     if '--custom-paths BP' in options:
                         self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'tape')
@@ -408,7 +409,7 @@ class TestIndexerIO(unittest.TestCase):
                         self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'online')
 
                 # TODO revert to all records using assertIsNotNone after all incorrect 50cminfo.txt files are ingested
-                if res == 0.5:
+                if record_res == 0.5:
                     self.assertIsNone(feat.GetField('FILESZ_DEM'))
                 else:
                     self.assertIsNotNone(feat.GetField('FILESZ_DEM'))
