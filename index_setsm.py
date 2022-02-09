@@ -543,6 +543,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             for k in record.filesz_attrib_map:
                                 attrib_map[k.upper()] = getattr(record,'{}{}'.format(attr_pfx,k))
 
+                            # TODO revisit after  all incorrect 50cminfo.txt files are ingested
+                            # Overwrite original res dsp filesz values will Null
+                            if dsp_mode == 'orig':
+                                for k in record.filesz_attrib_map:
+                                    attrib_map[k.upper()] = None
+
                             # Test if filesz attr is valid for dsp original res records
                             if dsp_mode == 'orig':
                                 if attrib_map['FILESZ_DEM'] is None:
