@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import re
+import statistics
 import time
 from datetime import datetime
 
@@ -494,28 +495,22 @@ class SetsmDem(object):
                 self.release_version = md['version']
             for f in (
                 'masked_density', 'valid_density', 'valid_area', 'valid_perc',
-                    'water_area', 'water_perc', 'cloud_area', 'cloud_perc'):
+                    'water_area', 'water_perc', 'cloud_area', 'cloud_perc',
+                    'min_elev_value', 'max_elev_value', 'avg_conv_angle',
+                    'avg_exp_height_acc', 'avg_sun_el1', 'avg_sun_el2'
+            ):
                 if f not in md:
-                    setattr(self, f, -9999)
-            if 'min_elev_value' not in md:
-                self.min_elev_value = None
-            if 'max_elev_value' not in md:
-                self.max_elev_value = None
+                    setattr(self, f, None)
+                elif type(getattr(self, f)) is str:
+                    setattr(self, f, float(getattr(self, f)))
             if 'avg_acqtime1' not in md:
                 self.set_acqtime_attribs()
             if 'rmse' not in md:
                 self.set_rmse_attrib()
             if self.rmse == -2:
                 self.rmse = -9999
-            if type(self.density) is str:
-                self.density = float(self.density)
-            if type(self.masked_density) is str:
-                self.masked_density = float(self.masked_density)
-            if type(self.min_elev_value) is str:
-                self.min_elev_value = float(self.min_elev_value)
-            if type(self.max_elev_value) is str:
-                self.max_elev_value = float(self.max_elev_value)
             self.set_density_and_stats_attribs()
+            self.set_group_attribs_from_scenes()
 
         else:
             self.srcfp = filepath
@@ -604,6 +599,10 @@ class SetsmDem(object):
                     self.cloud_perc = None  # cloudmask pixel percent
                     self.valid_perc = None  # valid pixel percent (non-water,non-cloud,non-edge)
                     self.combined_mask_perc = None # water and cloud percent
+                    self.avg_conv_angle = None
+                    self.avg_exp_height_acc = None
+                    self.avg_sun_el1 = None
+                    self.avg_sun_el2 = None
                     self.reginfo_list = []
                     self.geocell = None
                     self.s2s_version = '3' # if present, the metadata file value will overwrite this
@@ -821,6 +820,9 @@ class SetsmDem(object):
             ## get acqdates and acqtimes
             self.set_acqtime_attribs()
 
+            ## get averages from scene attribs
+            self.set_group_attribs_from_scenes()
+
             ## get sensors
             values = []
             for x in range(len(self.scenes)):
@@ -984,6 +986,35 @@ class SetsmDem(object):
                         logger.error("Registration file cannot be parsed: {}".format(reg_file))
                     # logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
                     fh.close()
+
+    def set_group_attribs_from_scenes(self):
+        needed_attribs = (
+            self.avg_conv_angle, self.avg_exp_height_acc,
+            self.avg_sun_el1, self.avg_sun_el2
+        )
+        if any([a is None for a in needed_attribs]):
+            conv_angles = []
+            exp_height_accs = []
+            sun_els1 = []
+            sun_els2 = []
+            for x in range(len(self.scenes)):
+                if 'Stereo_pair_convergence_angle' in self.scenes[x]:
+                    conv_angles.append(float(self.scenes[x]['Stereo_pair_convergence_angle']))
+                if 'Stereo_pair_expected_height_accuracy' in self.scenes[x]:
+                    exp_height_accs.append(float(self.scenes[x]['Stereo_pair_expected_height_accuracy']))
+                if 'Image_1_Mean_sun_elevation' in self.scenes[x]:
+                    sun_els1.append(float(self.scenes[x]['Image_1_Mean_sun_elevation']))
+                if 'Image_2_Mean_sun_elevation' in self.scenes[x]:
+                    sun_els2.append(float(self.scenes[x]['Image_2_Mean_sun_elevation']))
+
+            if len(conv_angles) > 0:
+                self.avg_conv_angle = numpy.mean(numpy.array(conv_angles))
+            if len(exp_height_accs) > 0:
+                self.avg_exp_height_acc = numpy.mean(numpy.array(exp_height_accs))
+            if len(sun_els1) > 0:
+                self.avg_sun_el1 = numpy.mean(numpy.array(sun_els1))
+            if len(sun_els2) > 0:
+                self.avg_sun_el2 = numpy.mean(numpy.array(sun_els2))
 
     def set_rmse_attrib(self):
         values = []
