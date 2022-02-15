@@ -120,6 +120,19 @@ strip_masks = {
     '_dem_masked.tif': (1, 1, 1),
 }
 
+strip_coverage_stats = [
+                # field, attrib, description
+                ('STRIP_DEM_matchtagDensity', 'density', 'matchtag density value'),
+                ('STRIP_DEM_maskedMatchtagDensity', 'masked_density', 'masked matchtag density value'),
+                ('STRIP_DEM_validAreaMatchtagDensity', 'valid_density', 'masked matchtag density value'),
+                ('STRIP_DEM_validAreaSqkm', 'valid_area', 'valid area in meters'),
+                ('STRIP_DEM_validAreaPercent', 'valid_perc', 'valid area percent coverage value'),
+                ('STRIP_DEM_waterAreaSqkm', 'water_area', 'water area in meters'),
+                ('STRIP_DEM_waterAreaPercent', 'water_perc', 'water area percent coverage value'),
+                ('STRIP_DEM_cloudAreaSqkm', 'cloud_area', 'cloud area in meters'),
+                ('STRIP_DEM_cloudAreaPercent', 'cloud_perc', 'cloud area percent coverage value'),
+            ]
+
 
 class SetsmScene(object):
     def __init__(self,metapath,md=None):
@@ -479,8 +492,11 @@ class SetsmDem(object):
                 self.s2s_version = '4'
             if 'release_version' not in md:
                 self.release_version = md['version']
-            if 'masked_density' not in md:
-                self.masked_density = -9999
+            for f in (
+                'masked_density', 'valid_density', 'valid_area', 'valid_perc',
+                    'water_area', 'water_perc', 'cloud_area', 'cloud_perc'):
+                if f not in md:
+                    setattr(self, f, -9999)
             if 'min_elev_value' not in md:
                 self.min_elev_value = None
             if 'max_elev_value' not in md:
@@ -515,7 +531,7 @@ class SetsmDem(object):
             dem_suffix = self.srcfn[self.srcfn.find('_dem'):]
             self.mask_tuple = strip_masks[dem_suffix]
 
-            metapath = os.path.join(self.srcdir,self.stripid+"_meta.txt")
+            metapath = os.path.join(self.srcdir, self.stripid+"_meta.txt")
             if os.path.isfile(metapath):
                 self.metapath = metapath
             else:
@@ -578,8 +594,16 @@ class SetsmDem(object):
                     self.rmse = -9999 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
                     self.max_elev_value = None
-                    self.density = None
-                    self.masked_density = None
+                    self.density = None  # whole raster matchtag=1 percent
+                    self.masked_density = None  # valid pixels matchtag=1 percent of total dem extent
+                    self.valid_density = None  # valid pixels matchtag=1 percent of valid area
+                    self.water_area = None  # watermask pixel area
+                    self.cloud_area = None  # cloudmask pixel area
+                    self.valid_area = None  # valid pixel area (non-water,non-cloud,non-edge)
+                    self.water_perc = None  # watermask pixel percent
+                    self.cloud_perc = None  # cloudmask pixel percent
+                    self.valid_perc = None  # valid pixel percent (non-water,non-cloud,non-edge)
+                    self.combined_mask_perc = None # water and cloud percent
                     self.reginfo_list = []
                     self.geocell = None
                     self.s2s_version = '3' # if present, the metadata file value will overwrite this
@@ -813,24 +837,32 @@ class SetsmDem(object):
                 self.sensor2 = values[0]
 
             ## density and stats
+            meta_coverage_map = {
+                'density': 'Output Data Density',
+                'masked_density': 'Fully Masked Data Density',
+                'water_perc': 'Water Mask Coverage',
+                'cloud_perc': 'Cloud Mask Coverage',
+                'combined_mask_perc': 'Combined Mask Coverage'
+            }
             if 'Output Data Density' in metad:
-                self.density = metad['Output Data Density']
-                self.masked_density = metad['Fully Masked Data Density']
-                try:
-                    self.density = float(self.density)
-                    self.masked_density = float(self.masked_density)
-                except ValueError as e:
-                    logger.info(
-                        "Cannot convert density or masked_density values (density={}, masked_density={})"
-                        " to float for {}".format(self.density, self.masked_density, self.srcfp)
-                    )
+                for a in meta_coverage_map:
+                    try:
+                        setattr(self, a, float(metad[meta_coverage_map[a]]))
+                    except ValueError:
+                        logger.warning("Cannot convert {} value ({}) to float for {}".format(
+                                a, meta_coverage_map[a], self.srcfp))
+                if self.combined_mask_perc:
+                    self.valid_perc = 1.0 - self.combined_mask_perc
+                    self.water_area = self.water_perc * self.geom.Area() / 1000.0 / 1000.0
+                    self.cloud_area = self.cloud_perc * self.geom.Area() / 1000.0 / 1000.0
+                    self.valid_area = self.valid_perc * self.geom.Area() / 1000.0 / 1000.0
+                    self.valid_density = self.masked_density / self.valid_perc
+
             if 'Minimum elevation value' in metad:
-                self.min_elev_value = metad['Minimum elevation value']
-                self.max_elev_value = metad['Maximum elevation value']
                 try:
-                    self.min_elev_value = float(self.min_elev_value)
-                    self.max_elev_value = float(self.max_elev_value)
-                except ValueError as e:
+                    self.min_elev_value = float(metad['Minimum elevation value'])
+                    self.max_elev_value = float(metad['Maximum elevation value'])
+                except ValueError:
                     logger.info(
                         "Cannot convert min or max elev values (min={}, max={}) to float for {}".format(
                             self.min_elev_value, self.max_elev_value, self.srcfp)
@@ -859,18 +891,13 @@ class SetsmDem(object):
                 self.geom = ogr.CreateGeometryFromWkt(poly_wkt)
 
             ## density, stats, proj4, creation date, version
-            try:
-                self.density = float(metad['STRIP_DEM_matchtagDensity'])
-            except ValueError as e:
-                logger.info("Cannot convert density value ({}) to float for {}".format(metad['STRIP_DEM_matchtagDensity'], self.srcfp))
-
-            try:
-                self.masked_density = float(metad['STRIP_DEM_maskedMatchtagDensity'])
-            except ValueError as e:
-                logger.info("Cannot convert bitmask density value ({}) to float for {}".format(
-                    metad['STRIP_DEM_maskedMatchtagDensity'], self.srcfp))
-            except KeyError:
-                pass
+            for field, attrib, desc in strip_coverage_stats:
+                try:
+                    setattr(self, attrib, float(metad[field]))
+                except ValueError as e:
+                    logger.info("Cannot convert {} ({}) to float for {}".format(desc, metad[field], self.srcfp))
+                except KeyError:
+                    pass
 
             try:
                 self.min_elev_value = float(metad['STRIP_DEM_minElevValue'])
@@ -932,7 +959,7 @@ class SetsmDem(object):
                 self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
 
         else:
-            raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM")
+            raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM: {}".format(self.srcfp))
 
         #### If density file exists, get density and stats from there
         self.set_density_and_stats_attribs()
@@ -1044,29 +1071,30 @@ class SetsmDem(object):
             mdf_contents1 = [
                 #### product specific info
                 ('generationTime',tm.strftime("%Y-%m-%dT%H:%M:%S.%fZ")),
-                ('numRows',self.ysize),
-                ('numColumns',self.xsize),
-                ('productType','"BasicStrip"'),
-                ('bitsPerPixel',32),
-                ('compressionType','"LZW"'),
-                ('outputFormat','"GeoTiff"'),
+                ('numRows', self.ysize),
+                ('numColumns', self.xsize),
+                ('productType', '"BasicStrip"'),
+                ('bitsPerPixel', 32),
+                ('compressionType', '"LZW"'),
+                ('outputFormat', '"Cloud-Optimized GeoTiff"'),
 
                 #### Strip DEM info
-                ('BEGIN_GROUP','STRIP_DEM'),
-                ('DemId','"{}"'.format(self.stripid)),
-                ('StripDemGroupId','"{}"'.format(self.stripdemid)),
-                ('stripCreationTime',(self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
+                ('BEGIN_GROUP', 'STRIP_DEM'),
+                ('DemId', '"{}"'.format(self.stripid)),
+                ('StripDemGroupId', '"{}"'.format(self.stripdemid)),
+                ('setsmGroupVersion', '"{}"'.format(self.algm_version)),
+                ('stripCreationTime', (self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
                 ('scenes2stripsVersion', self.s2s_version if self.s2s_version else 'None'),
-                ('releaseVersion','"{}"'.format(self.release_version if self.release_version else 'NA')),
-                ('noDataValue',self.ndv),
-                ('platform1','"{}"'.format(self.sensor1)),
-                ('platform2','"{}"'.format(self.sensor2)),
-                ('catId1','"{}"'.format(self.catid1)),
-                ('catId2','"{}"'.format(self.catid2)),
-                ('acqDate1',self.acqdate1.strftime("%Y-%m-%d")),
-                ('acqDate2',self.acqdate2.strftime("%Y-%m-%d")),
-                ('avgAcqTime1',self.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S")),
-                ('avgAcqTime2',self.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S")),
+                ('releaseVersion', '"{}"'.format(self.release_version if self.release_version else 'NA')),
+                ('noDataValue', self.ndv),
+                ('platform1', '"{}"'.format(self.sensor1)),
+                ('platform2', '"{}"'.format(self.sensor2)),
+                ('catId1', '"{}"'.format(self.catid1)),
+                ('catId2', '"{}"'.format(self.catid2)),
+                ('acqDate1', self.acqdate1.strftime("%Y-%m-%d")),
+                ('acqDate2', self.acqdate2.strftime("%Y-%m-%d")),
+                ('avgAcqTime1', self.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S")),
+                ('avgAcqTime2', self.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S")),
             ]
 
             #### make list of points
@@ -1083,6 +1111,9 @@ class SetsmDem(object):
                 pnt_list.append(x_tuple)
                 pnt_list.append(y_tuple)
 
+            coverage_stats_map = [(f.replace('STRIP_DEM_', ''), round(getattr(self, a), 6))
+                                  for f, a, _ in strip_coverage_stats if a != 'density']
+
             mdf_contents2 = [
                 ('horizontalCoordSysOGCWKT',self.proj),
                 ('horizontalCoordSysESRIWKT',self.wkt_esri),
@@ -1094,10 +1125,8 @@ class SetsmDem(object):
                 ('verticalCoordSysUnits','"meters"'),
                 ('minElevValue', self.min_elev_value),
                 ('maxElevValue', self.max_elev_value),
-                ('matchtagDensity',self.density),
-                ('maskedMatchtagDensity', self.masked_density),
-                ('lsfApplied',str(self.is_lsf))
-            ]
+                ('lsfApplied', str(self.is_lsf)),
+            ] + coverage_stats_map
 
             mdf_contents3 = []
             if len(self.reginfo_list) > 0:
@@ -1128,9 +1157,6 @@ class SetsmDem(object):
                     cont.append(('setsmVersion',scene['SETSM Version']))
                 else:
                     logger.warning('Scene metadata missing from {}: {}, key: {}'.format(self.metapath,scene['scene_name'],'SETSM Version'))
-
-                if 'Group_version' in scene:
-                    cont.append(('setsmGroupVersion',scene['Group_version']))
 
                 if 'Creation Date' in scene:
                     cont.append(('sceneCreationDate',self._parse_creation_date(scene['Creation Date'])))
