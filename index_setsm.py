@@ -715,6 +715,10 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'WATER_PERC': 'water_perc',
                                 'CLOUD_AREA': 'cloud_area',
                                 'CLOUD_PERC': 'cloud_perc',
+                                'AVGCONVANG': 'avg_conv_angle',
+                                'AVG_HT_ACC': 'avg_exp_height_acc',
+                                'AVG_SUNEL1': 'avg_sun_el1',
+                                'AVG_SUNEL2': 'avg_sun_el2',
                             }
                             for f, a in field_attrib_map.items():
                                 val = getattr(record, a)

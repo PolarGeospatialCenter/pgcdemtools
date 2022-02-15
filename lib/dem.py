@@ -132,6 +132,10 @@ strip_coverage_stats = [
                 ('STRIP_DEM_waterAreaPercent', 'water_perc', 'water area percent coverage value'),
                 ('STRIP_DEM_cloudAreaSqkm', 'cloud_area', 'cloud area in meters'),
                 ('STRIP_DEM_cloudAreaPercent', 'cloud_perc', 'cloud area percent coverage value'),
+                ('STRIP_DEM_avgConvergenceAngle', 'avg_conv_angle', 'average convergence angle'),
+                ('STRIP_DEM_avgExpectedHeightAccuracy', 'avg_exp_height_acc', 'average expected height accuracy value'),
+                ('STRIP_DEM_avgSunElev1', 'avg_sun_el1', 'average sun elev 1 value'),
+                ('STRIP_DEM_avgSunElev2', 'avg_sun_el2', 'average sun elev 2 value'),
             ]
 
 
@@ -493,16 +497,12 @@ class SetsmDem(object):
                 self.s2s_version = '4'
             if 'release_version' not in md:
                 self.release_version = md['version']
-            for f in (
-                'masked_density', 'valid_density', 'valid_area', 'valid_perc',
-                    'water_area', 'water_perc', 'cloud_area', 'cloud_perc',
-                    'min_elev_value', 'max_elev_value', 'avg_conv_angle',
-                    'avg_exp_height_acc', 'avg_sun_el1', 'avg_sun_el2'
-            ):
-                if f not in md:
-                    setattr(self, f, None)
-                elif type(getattr(self, f)) is str:
-                    setattr(self, f, float(getattr(self, f)))
+            attribs = [a for _, a, _, in strip_coverage_stats] + ['max_elev_value', 'min_elev_value']
+            for a in attribs:
+                if a not in md:
+                    setattr(self, a, None)
+                elif type(getattr(self, a)) is str:
+                    setattr(self, a, float(getattr(self, a)))
             if 'avg_acqtime1' not in md:
                 self.set_acqtime_attribs()
             if 'rmse' not in md:
@@ -922,7 +922,7 @@ class SetsmDem(object):
                 pass
 
             try:
-                stripdemid_meta = metad['StripDemGroupId']
+                stripdemid_meta = metad['stripDemGroupId']
                 self.algm_version_key = stripdemid_meta.split('_')[5]
                 self.algm_version = 'SETSM {}'.format(verstr2semver(self.algm_version_key))
             except KeyError as e:
@@ -1073,7 +1073,7 @@ class SetsmDem(object):
             self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
     def set_density_and_stats_attribs(self):
-        needed_attribs = (self.density, self.masked_density, self.max_elev_value, self.min_elev_value)
+        needed_attribs = (self.masked_density, self.max_elev_value, self.min_elev_value)
         if any([a is None for a in needed_attribs]):
             if os.path.isfile(self.density_file):
                 fh = open(self.density_file, 'r')
@@ -1111,8 +1111,8 @@ class SetsmDem(object):
 
                 #### Strip DEM info
                 ('BEGIN_GROUP', 'STRIP_DEM'),
-                ('DemId', '"{}"'.format(self.stripid)),
-                ('StripDemGroupId', '"{}"'.format(self.stripdemid)),
+                ('demID', '"{}"'.format(self.stripid)),
+                ('stripDemGroupId', '"{}"'.format(self.stripdemid)),
                 ('setsmGroupVersion', '"{}"'.format(self.algm_version)),
                 ('stripCreationTime', (self.creation_date.strftime("%Y-%m-%dT%H:%M:%S.%fZ") if self.creation_date else '')),
                 ('scenes2stripsVersion', self.s2s_version if self.s2s_version else 'None'),
@@ -2024,6 +2024,7 @@ def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
 
         return density
 
+
 def get_epsg(src_srs):
     '''
     Returns epsg code
@@ -2065,6 +2066,7 @@ def semver2verkey(semver):
         vl[i] = int(vp[i])
     version_str = 'v{:02}{:02}{:02}'.format(vl[0], vl[1], vl[2])
     return version_str
+
 
 def verstr2semver(verstr):
     semver = '{}.{}.{}'.format(int(verstr[1:3]), int(verstr[3:5]), int(verstr[5:7]))

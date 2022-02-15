@@ -233,6 +233,10 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("WATER_PERC", ogr.OFTReal, 0, 0),
     StandardAttribute("CLOUD_AREA", ogr.OFTReal, 0, 0),
     StandardAttribute("CLOUD_PERC", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVGCONVANG", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_HT_ACC", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL1", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL2", ogr.OFTReal, 0, 0),
     StandardAttribute("RMSE", ogr.OFTReal, 0, 0),
 ]
 
