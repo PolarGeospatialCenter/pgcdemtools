@@ -50,7 +50,7 @@ class TestIndexerIO(unittest.TestCase):
         self.scene_count = 51
         self.scene50cm_count = 14
         self.scenedsp_count = 102
-        self.strip_count = 5
+        self.strip_count = 6
         self.stripmasked_count = 3
         self.strip_mixedver_count = 4
         self.strip_json_count = 6
@@ -683,6 +683,7 @@ class TestIndexerIO(unittest.TestCase):
             'W1W1_20190426_102001008466F300_1020010089C2DB00': ('arcticdem_02_greenland_southeast', 'arcgeu'),
             'WV01_20140402_102001002C6AFA00_102001002D8B3100': ('arcticdem_01_iceland', 'arcgeu'),
             'WV01_20150425_102001003F9C6100_102001003D411100': ('arcticdem_01_iceland', 'arcgeu'),
+            'WV01_20201202_102001009E86AB00_10200100A0B14900': ('earthdem_03_conus', 'nplnam'),
         }
 
         PROJECTS = {

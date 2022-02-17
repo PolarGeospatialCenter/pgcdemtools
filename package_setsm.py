@@ -272,13 +272,14 @@ def build_archive(src,scratch,args):
             os.chdir(dstdir)
 
             components = (  # plus index shp files
-                os.path.basename(raster.srcfp),  # dem
-                os.path.basename(raster.matchtag),  # matchtag
-                os.path.basename(raster.mdf),  # mdf
-                os.path.basename(raster.readme),  # readme
-                os.path.basename(raster.browse),  # browse
-                os.path.basename(raster.browse_masked),  # browse with mask
-                os.path.basename(raster.bitmask),  # bitmask
+                #( path, lzw predictor, resample strategy)
+                (os.path.basename(raster.srcfp), 'YES', 'BILINEAR'),  # dem
+                (os.path.basename(raster.matchtag), 'NO', 'NEAREST'),  # matchtag
+                (os.path.basename(raster.mdf), None, None),  # mdf
+                (os.path.basename(raster.readme), None, None),  # readme
+                (os.path.basename(raster.browse), 'YES', 'CUBIC'),  # browse
+                (os.path.basename(raster.browse_masked), 'YES', 'CUBIC'),  # browse with mask
+                (os.path.basename(raster.bitmask), 'NO', 'NEAREST'), # bitmask
                 # For testing only
                 # os.path.basename(raster.srcfp)[:-8] + '_ortho.tif',  # ortho1
                 # os.path.basename(raster.srcfp)[:-8] + '_ortho2.tif',  # ortho2
@@ -315,9 +316,9 @@ def build_archive(src,scratch,args):
                 else:
                     logger.info("Converting Rasters to COG")
 
-                    tifs = [c for c in components if c.endswith('.tif')]
+                    tifs = [c for c in components if c[0].endswith('.tif')]
                     cog_cnt = 0
-                    for tif in tifs:
+                    for tif, predictor, resample in tifs:
                         if os.path.isfile(tif):
 
                             # if tif is already COG, increment cnt and move on
@@ -329,8 +330,7 @@ def build_archive(src,scratch,args):
 
                             tifbn = os.path.splitext(tif)[0]
                             cog = tifbn + '_cog.tif'
-                            predictor = 'NO' if tif.endswith(('bitmask.tif', 'matchtag.tif')) else 'YES'
-                            logger.info('\tConverting {} with PREDICTOR={}'.format(tif, predictor))
+                            logger.info('\tConverting {} with PREDICTOR={}, RESAMPLING={}'.format(tif, predictor, resample))
 
                             # Remove temp COG file if it exists, it must be a partial file
                             if os.path.isfile(cog):
@@ -364,7 +364,7 @@ def build_archive(src,scratch,args):
                 if not os.path.isfile(dstfp):    
 
                     k = 0
-                    existing_components = sum([int(os.path.isfile(component)) for component in components])
+                    existing_components = sum([int(os.path.isfile(component)) for component, _, _ in components])
                     ### check if exists, print
                     if existing_components == len(components):
                         
@@ -499,7 +499,7 @@ def build_archive(src,scratch,args):
                                                 logger.error("Cannot create archive: {}".format(dstfn))
                                     
                                         ## Add components
-                                        for component in components:
+                                        for component, _, _ in components:
                                             logger.debug("Adding {} to {}".format(component,dstfn))
                                             k+=1
                                             if "dem_smooth.tif" in component:

@@ -225,22 +225,22 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("EDGEMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("WATERMASK", ogr.OFTInteger, 8, 8),
     StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
     StandardAttribute("MASK_DENS", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_DENS", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_AREA", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_PERC", ogr.OFTReal, 0, 0),
+    StandardAttribute("WATER_AREA", ogr.OFTReal, 0, 0),
+    StandardAttribute("WATER_PERC", ogr.OFTReal, 0, 0),
+    StandardAttribute("CLOUD_AREA", ogr.OFTReal, 0, 0),
+    StandardAttribute("CLOUD_PERC", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVGCONVANG", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_HT_ACC", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL1", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL2", ogr.OFTReal, 0, 0),
     StandardAttribute("RMSE", ogr.OFTReal, 0, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
-    StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
-    StandardAttribute("DX", ogr.OFTReal, 0, 0),
-    StandardAttribute("DY", ogr.OFTReal, 0, 0),
-    StandardAttribute("DZ", ogr.OFTReal, 0, 0),
-    StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
-    StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
-]
-
-# FIXME: This collection of attributes seems to be misplaced/miscopied?
-DEM_ATTRIBUTE_DEFINITIONS_MASKING = [
     StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
     StandardAttribute("DX", ogr.OFTReal, 0, 0),
     StandardAttribute("DY", ogr.OFTReal, 0, 0),

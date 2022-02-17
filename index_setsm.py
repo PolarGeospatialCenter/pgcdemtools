@@ -705,8 +705,24 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             if record.release_version and 'REL_VER' in fld_list:
                                 attrib_map['REL_VER'] = record.release_version
 
-                            attrib_map['DENSITY'] = record.density if record.density is not None else -9999
-                            attrib_map['MASK_DENS'] = record.masked_density if record.masked_density is not None else -9999
+                            field_attrib_map = {
+                                # 'DENSITY': 'density',
+                                'MASK_DENS': 'masked_density',
+                                'VALID_DENS': 'valid_density',
+                                'VALID_AREA': 'valid_area',
+                                'VALID_PERC': 'valid_perc',
+                                'WATER_AREA': 'water_area',
+                                'WATER_PERC': 'water_perc',
+                                'CLOUD_AREA': 'cloud_area',
+                                'CLOUD_PERC': 'cloud_perc',
+                                'AVGCONVANG': 'avg_conv_angle',
+                                'AVG_HT_ACC': 'avg_exp_height_acc',
+                                'AVG_SUNEL1': 'avg_sun_el1',
+                                'AVG_SUNEL2': 'avg_sun_el2',
+                            }
+                            for f, a in field_attrib_map.items():
+                                val = getattr(record, a)
+                                attrib_map[f] = round(val, 6) if val is not None else -9999
 
                             ## If registration info exists
                             if args.include_registration:
