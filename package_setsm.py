@@ -1,8 +1,14 @@
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
-import subprocess
-from datetime import *
-from osgeo import gdal, osr, ogr, gdalconst
 import argparse
+import glob
+import logging
+import os
+import subprocess
+import sys
+import tarfile
+from datetime import *
+
+from osgeo import gdal, osr, ogr, gdalconst
+
 from lib import utils, dem, taskhandler
 
 #### Create Logger
