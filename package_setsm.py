@@ -41,10 +41,10 @@ def main():
     parser.add_argument('--skip-archive', action='store_true', default=False,
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--filter-dems', action='store_true', default=False,
-                        help="filter dems with area < {} sqkm or density < {}".format(
+                        help="remove dems with valid (masked) area < {} sqkm or density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
-                        help="filter dems where tar has already been built with area < {} sqkm or density < {}".format(
+                        help="remove already-packaged DEMs with valid (masked) area < {} sqkm or density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
