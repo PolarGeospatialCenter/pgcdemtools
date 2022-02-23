@@ -755,6 +755,7 @@ class SetsmDem(object):
 
         ## If metafile exists
         if self.metapath:
+            ## TODO make an attribute of the metad dict without the scenes
             metad = self._parse_metadata_file()
 
             self.scenes = metad['scene_list']
@@ -853,7 +854,7 @@ class SetsmDem(object):
                     except ValueError:
                         logger.warning("Cannot convert {} value ({}) to float for {}".format(
                                 a, meta_coverage_map[a], self.srcfp))
-                if self.combined_mask_perc:
+                if self.combined_mask_perc is not None:
                     self.valid_perc = 1.0 - self.combined_mask_perc
                     self.water_area = self.water_perc * self.geom.Area() / 1000.0 / 1000.0
                     self.cloud_area = self.cloud_perc * self.geom.Area() / 1000.0 / 1000.0
@@ -872,6 +873,7 @@ class SetsmDem(object):
 
         ## If mdf exists without metafile
         elif os.path.isfile(self.mdf):
+            ## TODO make an attribute of the metad dict without the scenes
             metad = self._read_mdf_file()
 
             ## populate attribs

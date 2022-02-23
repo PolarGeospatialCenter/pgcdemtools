@@ -15,6 +15,7 @@ tgt_srs.ImportFromEPSG(4326)
 
 AREA_THRESHOLD = 5500000  # Filter threshold in sq meters
 DENSITY_THRESHOLD = 0.2   # Masked matchtag density threshold
+VALID_AREA_THRESHOLD = 16  # Valid area threshold in sqkm
 
 
 def main():
@@ -35,10 +36,10 @@ def main():
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="filter dems with area < {} sqkm or density < {}".format(
-                            AREA_THRESHOLD, DENSITY_THRESHOLD))
+                            VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
                         help="filter dems where tar has already been built with area < {} sqkm or density < {}".format(
-                            AREA_THRESHOLD, DENSITY_THRESHOLD))
+                            VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -254,9 +255,8 @@ def build_archive(src,scratch,args):
         if args.filter_dems or args.force_filter_dems:
             # filter dems with small area or low density
             
-            area = raster.geom.Area()
-            if area < AREA_THRESHOLD:
-                logger.info("Raster area {} falls below threshold: {}".format(area, raster.srcfp))
+            if raster.valid_area < VALID_AREA_THRESHOLD:
+                logger.info("Raster area {} falls below threshold: {}".format(raster.valid_area, raster.srcfp))
                 process = False
             elif raster.masked_density < DENSITY_THRESHOLD:
                 logger.info("Raster density {} falls below threshold: {}".format(raster.density, raster.srcfp))
