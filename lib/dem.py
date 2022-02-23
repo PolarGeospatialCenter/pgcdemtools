@@ -1145,7 +1145,7 @@ class SetsmDem(object):
                 pnt_list.append(y_tuple)
 
             coverage_stats_map = [(f.replace('STRIP_DEM_', ''), round(getattr(self, a), 6))
-                                  for f, a, _ in strip_coverage_stats if a != 'density']
+                                  for f, a, _ in strip_coverage_stats if a != 'density' and getattr(self, a) is not None]
 
             mdf_contents2 = [
                 ('horizontalCoordSysOGCWKT',self.proj),

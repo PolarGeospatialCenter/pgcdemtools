@@ -41,10 +41,10 @@ def main():
     parser.add_argument('--skip-archive', action='store_true', default=False,
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--filter-dems', action='store_true', default=False,
-                        help="remove dems with valid (masked) area < {} sqkm or density < {}".format(
+                        help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
-                        help="remove already-packaged DEMs with valid (masked) area < {} sqkm or density < {}".format(
+                        help="remove already-packaged DEMs with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
@@ -260,12 +260,13 @@ def build_archive(src,scratch,args):
         
         if args.filter_dems or args.force_filter_dems:
             # filter dems with small area or low density
-            
-            if raster.valid_area < VALID_AREA_THRESHOLD:
-                logger.info("Raster area {} falls below threshold: {}".format(raster.valid_area, raster.srcfp))
-                process = False
-            elif raster.masked_density < DENSITY_THRESHOLD:
-                logger.info("Raster density {} falls below threshold: {}".format(raster.density, raster.srcfp))
+            if raster.valid_area is not None:  # use valid area if that metadata exists, else skip this check
+                if raster.valid_area < VALID_AREA_THRESHOLD:
+                    logger.info("Raster valid area {} falls below threshold: {}".format(raster.valid_area, raster.srcfp))
+                    process = False
+
+            if raster.masked_density < DENSITY_THRESHOLD:
+                logger.info("Raster masked density {} falls below threshold: {}".format(raster.masked_density, raster.srcfp))
                 process = False
                 
             if not process:
