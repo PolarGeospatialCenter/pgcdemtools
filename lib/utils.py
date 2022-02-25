@@ -189,6 +189,22 @@ log_suffixes = (
     '-log-stereo_tri',
 )
 
+field_attrib_map = {
+    # 'DENSITY': 'density',
+    'MASK_DENS': 'masked_density',
+    'VALID_DENS': 'valid_density',
+    'VALID_AREA': 'valid_area',
+    'VALID_PERC': 'valid_perc',
+    'WATER_AREA': 'water_area',
+    'WATER_PERC': 'water_perc',
+    'CLOUD_AREA': 'cloud_area',
+    'CLOUD_PERC': 'cloud_perc',
+    'AVGCONVANG': 'avg_conv_angle',
+    'AVG_HT_ACC': 'avg_exp_height_acc',
+    'AVG_SUNEL1': 'avg_sun_el1',
+    'AVG_SUNEL2': 'avg_sun_el2',
+}
+
 # common name id, attribute field name, storage type, field width, field precision
 StandardAttribute = namedtuple("StandardAttribute", ("fname", "ftype", "fwidth", "fprecision"))
 

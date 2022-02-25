@@ -1,8 +1,14 @@
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
-import subprocess
-from datetime import *
-from osgeo import gdal, osr, ogr, gdalconst
 import argparse
+import glob
+import logging
+import os
+import subprocess
+import sys
+import tarfile
+from datetime import *
+
+from osgeo import gdal, osr, ogr, gdalconst
+
 from lib import utils, dem, taskhandler
 
 #### Create Logger
@@ -15,6 +21,7 @@ tgt_srs.ImportFromEPSG(4326)
 
 AREA_THRESHOLD = 5500000  # Filter threshold in sq meters
 DENSITY_THRESHOLD = 0.2   # Masked matchtag density threshold
+VALID_AREA_THRESHOLD = 16  # Valid area threshold in sqkm
 
 
 def main():
@@ -34,11 +41,11 @@ def main():
     parser.add_argument('--skip-archive', action='store_true', default=False,
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--filter-dems', action='store_true', default=False,
-                        help="filter dems with area < {} sqkm or density < {}".format(
-                            AREA_THRESHOLD, DENSITY_THRESHOLD))
+                        help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
+                            VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
-                        help="filter dems where tar has already been built with area < {} sqkm or density < {}".format(
-                            AREA_THRESHOLD, DENSITY_THRESHOLD))
+                        help="remove already-packaged DEMs with valid (masked) area < {} sqkm or masked density < {}".format(
+                            VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -253,14 +260,15 @@ def build_archive(src,scratch,args):
         
         if args.filter_dems or args.force_filter_dems:
             # filter dems with small area or low density
-            
-            area = raster.geom.Area()
-            if area < AREA_THRESHOLD:
-                logger.info("Raster area {} falls below threshold: {}".format(area, raster.srcfp))
-                process = False
-            elif raster.masked_density < DENSITY_THRESHOLD:
-                logger.info("Raster density {} falls below threshold: {}".format(raster.density, raster.srcfp))
-                process = False
+            if raster.valid_area is not None:  # use valid area if that metadata exists, else skip this check
+                if raster.valid_area < VALID_AREA_THRESHOLD:
+                    logger.info("Raster valid area {} falls below threshold: {}".format(raster.valid_area, raster.srcfp))
+                    process = False
+
+            if process:
+                if raster.masked_density < DENSITY_THRESHOLD:
+                    logger.info("Raster masked density {} falls below threshold: {}".format(raster.masked_density, raster.srcfp))
+                    process = False
                 
             if not process:
                 logger.info('Removing {}'.format(raster.srcfp))
@@ -330,14 +338,16 @@ def build_archive(src,scratch,args):
 
                             tifbn = os.path.splitext(tif)[0]
                             cog = tifbn + '_cog.tif'
-                            logger.info('\tConverting {} with PREDICTOR={}, RESAMPLING={}'.format(tif, predictor, resample))
+                            logger.info('\tConverting {} with PREDICTOR={}, RESAMPLING={}'.format(
+                                tif, predictor, resample))
 
                             # Remove temp COG file if it exists, it must be a partial file
                             if os.path.isfile(cog):
                                 os.remove(cog)
 
-                            cmd = 'gdal_translate -q -of COG -co compress=lzw -co predictor={} -co bigtiff=yes {} {}'.format(
-                                predictor, tif, cog)
+                            cos = '-co overviews=IGNORE_EXISTING -co compress=lzw -co predictor={} -co bigtiff=yes'.format(predictor)
+                            cmd = 'gdal_translate -q -a_srs EPSG:{} -of COG {} {} {}'.format(
+                                raster.epsg, cos, tif, cog)
                             subprocess.call(cmd, shell=True)
 
                             # delete original tif and increment cog count if successful
@@ -425,14 +435,16 @@ def build_archive(src,scratch,args):
                                         'EDGEMASK': int(raster.mask_tuple[0]),
                                         'WATERMASK': int(raster.mask_tuple[1]),
                                         'CLOUDMASK': int(raster.mask_tuple[2]),
-                                        'DENSITY': raster.density if raster.density is not None else -9999,
-                                        'MASK_DENS': raster.masked_density if raster.masked_density is not None else -9999,
                                         'RMSE': raster.rmse
                                     }
                                     
                                     #### Set fields if populated (will not be populated if metadata file is not found)
                                     if raster.creation_date:
                                         attrib_map["CR_DATE"] = raster.creation_date.strftime("%Y-%m-%d")
+
+                                    for f, a in utils.field_attrib_map.items():
+                                        val = getattr(raster, a)
+                                        attrib_map[f] = round(val, 6) if val is not None else -9999
                             
                                     ## transform and write geom
                                     src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
