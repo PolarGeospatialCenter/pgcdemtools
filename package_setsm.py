@@ -272,8 +272,9 @@ def build_archive(src,scratch,args):
                 
             if not process:
                 logger.info('Removing {}'.format(raster.srcfp))
-                to_remove = glob.glob(raster.stripid + '*')
-                for f in to_remove:
+                to_remove = glob.glob(os.path.join(raster.srcdir, raster.stripid + '_*'))
+                to_remove2 = glob.glob(os.path.join(raster.srcdir, raster.stripid + '.*'))
+                for f in to_remove + to_remove2:
                     os.remove(f)
                 
         if process:
