@@ -40,6 +40,9 @@ def main():
                         help="skip COG conversion and build archive with existing tiffs")
     parser.add_argument('--skip-archive', action='store_true', default=False,
                         help="build mdf and readme files and convert rasters to COG, do not archive")
+    parser.add_argument('--rasterproxy-prefix',
+                        help="build rasterProxy .mrf files using this s3 bucket and path prefix\
+                         for the source data path with geocell folder and dem tif appended")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
@@ -141,6 +144,7 @@ def main():
             utils.progress(j, total, "DEMs identified")
 
             cog_sem = os.path.join(raster.srcdir, raster.stripid + '.cogfin')
+            rp = os.path.join(raster.srcdir, raster.stripid + '_dem.mrf')
             if args.overwrite or args.force_filter_dems:
                 scenes.append(sp)
 
@@ -152,6 +156,8 @@ def main():
                 expected_outputs.append(cog_sem)
             if not args.skip_archive:
                 expected_outputs.append(raster.archive)
+            if args.rasterproxy_prefix:
+                expected_outputs.append(rp)
 
             if not all([os.path.isfile(f) for f in expected_outputs]):
                 scenes.append(sp)
@@ -235,7 +241,8 @@ def main():
     
     else:
         logger.info("No tasks found to process")
-        
+
+
 def build_archive(src,scratch,args):
 
     logger.info("Packaging Raster: {}".format(src))
@@ -315,6 +322,37 @@ def build_archive(src,scratch,args):
                         os.remove(raster.readme)
                 if not args.dryrun:
                     raster.write_readme_file()
+
+            ## create rasterproxy MRF file
+            if args.rasterproxy_prefix:
+                logger.info("Creating RasterProxy files")
+                sourceprefix = 'vsis3' + args.rasterproxy_prefix[4:]
+                dataprefix = 'z:/mrfcache' + args.rasterproxy_prefix[4:]
+                for suffix in ['_dem']:
+                    tif = '{}{}.tif'.format(raster.stripid, suffix)
+                    mrf = '{}{}.mrf'.format(raster.stripid, suffix)
+                    if not os.path.isfile(mrf):
+                        sourcepath = '{}/{}/{}{}.tif'.format(
+                            sourceprefix,
+                            raster.geocell,
+                            raster.stripid,
+                            suffix
+                        )
+                        datapath = '{}/{}/{}{}.mrfcache'.format(
+                            dataprefix,
+                            raster.geocell,
+                            raster.stripid,
+                            suffix
+                        )
+                        static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
+                        cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
+                            static_args,
+                            datapath,
+                            sourcepath,
+                            tif,
+                            mrf
+                        )
+                        subprocess.call(cmd, shell=True)
 
             ## Convert all rasters to COG in place
             if not args.skip_cog:
