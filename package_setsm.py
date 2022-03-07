@@ -148,19 +148,20 @@ def main():
             if args.overwrite or args.force_filter_dems:
                 scenes.append(sp)
 
-            expected_outputs = [
-                raster.mdf,
-                raster.readme
-            ]
-            if not args.skip_cog:
-                expected_outputs.append(cog_sem)
-            if not args.skip_archive:
-                expected_outputs.append(raster.archive)
-            if args.rasterproxy_prefix:
-                expected_outputs.append(rp)
+            else:
+                expected_outputs = [
+                    raster.mdf,
+                    raster.readme
+                ]
+                if not args.skip_cog:
+                    expected_outputs.append(cog_sem)
+                if not args.skip_archive:
+                    expected_outputs.append(raster.archive)
+                if args.rasterproxy_prefix:
+                    expected_outputs.append(rp)
 
-            if not all([os.path.isfile(f) for f in expected_outputs]):
-                scenes.append(sp)
+                if not all([os.path.isfile(f) for f in expected_outputs]):
+                    scenes.append(sp)
 
     scenes = list(set(scenes))
     logger.info('Number of src rasters: {}'.format(j))
@@ -357,7 +358,7 @@ def build_archive(src,scratch,args):
             ## Convert all rasters to COG in place
             if not args.skip_cog:
                 cog_sem = raster.stripid + '.cogfin'
-                if os.path.isfile(cog_sem):
+                if os.path.isfile(cog_sem) and not args.overwrite:
                     logger.info('COG conversion already complete')
 
                 else:
@@ -369,11 +370,12 @@ def build_archive(src,scratch,args):
                         if os.path.isfile(tif):
 
                             # if tif is already COG, increment cnt and move on
-                            ds = gdal.Open(tif, gdalconst.GA_ReadOnly)
-                            if 'LAYOUT=COG' in ds.GetMetadata_List('IMAGE_STRUCTURE'):
-                                cog_cnt+=1
-                                logger.info('\tAlready converted: {}'.format(tif))
-                                continue
+                            if not args.overwrite:
+                                ds = gdal.Open(tif, gdalconst.GA_ReadOnly)
+                                if 'LAYOUT=COG' in ds.GetMetadata_List('IMAGE_STRUCTURE'):
+                                    cog_cnt+=1
+                                    logger.info('\tAlready converted: {}'.format(tif))
+                                    continue
 
                             tifbn = os.path.splitext(tif)[0]
                             cog = tifbn + '_cog.tif'
@@ -384,9 +386,11 @@ def build_archive(src,scratch,args):
                             if os.path.isfile(cog):
                                 os.remove(cog)
 
-                            cos = '-co overviews=IGNORE_EXISTING -co compress=lzw -co predictor={} -co bigtiff=yes'.format(predictor)
+                            cos = '-co overviews=IGNORE_EXISTING -co compress=lzw -co predictor={} -co resampling={} -co bigtiff=yes'.format(
+                                predictor, resample)
                             cmd = 'gdal_translate -q -a_srs EPSG:{} -of COG {} {} {}'.format(
                                 raster.epsg, cos, tif, cog)
+                            #logger.info(cmd)
                             subprocess.call(cmd, shell=True)
 
                             # delete original tif and increment cog count if successful
