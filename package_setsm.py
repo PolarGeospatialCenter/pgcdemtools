@@ -305,6 +305,8 @@ def build_archive(src,scratch,args):
 
             optional_components = [os.path.basename(r) for r in raster.reg_files]  # reg
 
+            tifs = [c for c in components if c[0].endswith('.tif')]
+
             #### Build mdf
             if not os.path.isfile(raster.mdf) or args.overwrite:
                 if os.path.isfile(raster.mdf):
@@ -329,8 +331,8 @@ def build_archive(src,scratch,args):
                 logger.info("Creating RasterProxy files")
                 sourceprefix = 'vsis3' + args.rasterproxy_prefix[4:]
                 dataprefix = 'z:/mrfcache' + args.rasterproxy_prefix[4:]
-                for suffix in ['_dem']:
-                    tif = '{}{}.tif'.format(raster.stripid, suffix)
+                for tif, _, _ in tifs:
+                    suffix = tif[len(raster.stripid):-4]  # eg "_dem"
                     mrf = '{}{}.mrf'.format(raster.stripid, suffix)
                     if not os.path.isfile(mrf):
                         sourcepath = '{}/{}/{}{}.tif'.format(
@@ -363,8 +365,6 @@ def build_archive(src,scratch,args):
 
                 else:
                     logger.info("Converting Rasters to COG")
-
-                    tifs = [c for c in components if c[0].endswith('.tif')]
                     cog_cnt = 0
                     for tif, predictor, resample in tifs:
                         if os.path.isfile(tif):
