@@ -620,6 +620,17 @@ class SetsmDem(object):
             if not match:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
+    def get_geom_wgs84(self):
+        srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+        rc = srs.ImportFromProj4(self.proj4_meta)
+        geom = self.geom.Clone()
+
+        if not srs_wgs84.IsSame(srs):
+            ctf = osr.CoordinateTransformation(srs, srs_wgs84)
+            geom.Transform(ctf)
+
+        return geom;
+
     def get_geocell(self):
         if not self.geocell:
 
