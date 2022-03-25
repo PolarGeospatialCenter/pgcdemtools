@@ -42,7 +42,7 @@ def main():
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--rasterproxy-prefix',
                         help="build rasterProxy .mrf files using this s3 bucket and path prefix\
-                         for the source data path with geocell folder and dem tif appended")
+                         for the source data path with geocell folder and dem tif appended (must start with s3://)")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
@@ -158,6 +158,7 @@ def main():
                 if not args.skip_archive:
                     expected_outputs.append(raster.archive)
                 if args.rasterproxy_prefix:
+                    # this checks for only 1 of the several rasterproxies that are expected
                     expected_outputs.append(rp)
 
                 if not all([os.path.isfile(f) for f in expected_outputs]):
