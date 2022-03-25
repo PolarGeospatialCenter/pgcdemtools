@@ -42,7 +42,7 @@ def main():
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--rasterproxy-prefix',
                         help="build rasterProxy .mrf files using this s3 bucket and path prefix\
-                         for the source data path with geocell folder and dem tif appended")
+                         for the source data path with geocell folder and dem tif appended (must start with s3://)")
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
@@ -158,6 +158,7 @@ def main():
                 if not args.skip_archive:
                     expected_outputs.append(raster.archive)
                 if args.rasterproxy_prefix:
+                    # this checks for only 1 of the several rasterproxies that are expected
                     expected_outputs.append(rp)
 
                 if not all([os.path.isfile(f) for f in expected_outputs]):
@@ -305,6 +306,8 @@ def build_archive(src,scratch,args):
 
             optional_components = [os.path.basename(r) for r in raster.reg_files]  # reg
 
+            tifs = [c for c in components if c[0].endswith('.tif')]
+
             #### Build mdf
             if not os.path.isfile(raster.mdf) or args.overwrite:
                 if os.path.isfile(raster.mdf):
@@ -329,8 +332,8 @@ def build_archive(src,scratch,args):
                 logger.info("Creating RasterProxy files")
                 sourceprefix = 'vsis3' + args.rasterproxy_prefix[4:]
                 dataprefix = 'z:/mrfcache' + args.rasterproxy_prefix[4:]
-                for suffix in ['_dem']:
-                    tif = '{}{}.tif'.format(raster.stripid, suffix)
+                for tif, _, _ in tifs:
+                    suffix = tif[len(raster.stripid):-4]  # eg "_dem"
                     mrf = '{}{}.mrf'.format(raster.stripid, suffix)
                     if not os.path.isfile(mrf):
                         sourcepath = '{}/{}/{}{}.tif'.format(
@@ -363,8 +366,6 @@ def build_archive(src,scratch,args):
 
                 else:
                     logger.info("Converting Rasters to COG")
-
-                    tifs = [c for c in components if c[0].endswith('.tif')]
                     cog_cnt = 0
                     for tif, predictor, resample in tifs:
                         if os.path.isfile(tif):
