@@ -95,6 +95,10 @@ def main():
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO
+
+    # Check raster proxy prefix is well-formed
+    if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
+        parser.error('--rasterproxy-prefix must start with s3://')
     
     lsh = logging.StreamHandler()
     lsh.setLevel(log_level)
@@ -330,8 +334,11 @@ def build_archive(src,scratch,args):
             ## create rasterproxy MRF file
             if args.rasterproxy_prefix:
                 logger.info("Creating RasterProxy files")
-                sourceprefix = 'vsis3' + args.rasterproxy_prefix[4:]
-                dataprefix = 'z:/mrfcache' + args.rasterproxy_prefix[4:]
+                rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+                bucket = rasterproxy_prefix_parts[2]
+                bpath = '/'.join(rasterproxy_prefix_parts[3:])
+                sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
+                dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
                 for tif, _, _ in tifs:
                     suffix = tif[len(raster.stripid):-4]  # eg "_dem"
                     mrf = '{}{}.mrf'.format(raster.stripid, suffix)
