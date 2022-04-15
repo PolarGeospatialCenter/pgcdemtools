@@ -463,6 +463,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     dsp_orig_status = args.status_dsp_record_mode_orig if args.status_dsp_record_mode_orig else status
 
+    fld_def_location_fwidth_gdb = None
+    for f in fld_defs:
+        if f.fname.upper() == 'LOCATION':
+            fld_def_location_fwidth_gdb = min(f.fwidth, 1024)
+            break
+
     if ds is not None:
 
         ## Create table if it does not exist
@@ -907,6 +913,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             val, fld, fwidths[fld]
                                         ))
                                         valid_record = False
+                                        if fld.upper() == 'LOCATION' and ogr_driver_str == 'ESRI Shapefile':
+                                            if fld_def_location_fwidth_gdb is not None and fld_def_location_fwidth_gdb > fwidths[fld]:
+                                                logger.warning("Tip: LOCATION field values can be longer (width={}) \
+                                                    if you write to a non-Shapefile index such as FileGDB or PostgreSQL table".format(
+                                                    fld_def_location_fwidth_gdb
+                                                ))
                                 else:
                                     logger.warning("Field {} is not in target table. Feature skipped".format(fld))
                                     valid_record = False
