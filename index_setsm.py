@@ -500,6 +500,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             i=0
             recordids = []
             invalid_record_cnt = 0
+            duplicate_record_cnt = 0
 
             dsp_modes = ['orig','dsp'] if args.dsp_record_mode == 'both' else [args.dsp_record_mode]
 
@@ -943,20 +944,39 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     recordids.append(recordid_map[args.mode].format(**attrib_map))
 
                                     # Append record
-                                    try:
-                                        if ogr_driver_str in ('PostgreSQL'):
-                                            layer.StartTransaction()
+                                    if ogr_driver_str in ('PostgreSQL'):
+                                        layer.StartTransaction()
+                                        utils.GDAL_ERROR_HANDLER.reset_error_state()
+                                        try:
                                             layer.CreateFeature(feat)
-                                            layer.CommitTransaction()
-                                        else:
-                                            layer.CreateFeature(feat)
-                                    except Exception as e:
-                                        raise e
+                                        except Exception as e:
+                                            if utils.GDAL_ERROR_HANDLER.errored:
+                                                gdal_errmsg = utils.GDAL_ERROR_HANDLER.err_msg
+                                                if "duplicate key value violates unique constraint" in gdal_errmsg:
+                                                    duplicate_record_cnt += 1
+                                                    log_errmsg = "Skipping duplciate record error in OGR CreateFeature call:\n{}".format(gdal_errmsg)
+                                                    if duplicate_record_cnt <= 30:
+                                                        logger.error(log_errmsg)
+                                                        if duplicate_record_cnt == 30:
+                                                            logger.warning("Maximum 'duplicate record' error messages printed to terminal,"
+                                                                           " further messages will be printed to debug")
+                                                    else:
+                                                        logger.debug(log_errmsg)
+                                                else:
+                                                    raise
+                                            else:
+                                                raise
+                                        layer.CommitTransaction()
+                                    else:
+                                        layer.CreateFeature(feat)
             if not args.np:
                 print('')
 
             if invalid_record_cnt > 0:
-                logger.info("{} invalid records skipped".format(invalid_record_cnt))
+                logger.error("{} invalid records skipped".format(invalid_record_cnt))
+
+            if duplicate_record_cnt > 0:
+                logger.warning("{} duplicate records skipped".format(duplicate_record_cnt))
 
             if len(recordids) == 0 and not args.dryrun:
                 logger.error("No valid records found")

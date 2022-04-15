@@ -61,13 +61,22 @@ logger = get_logger()
 ## GDAL error handler setup
 class GdalErrorHandler(object):
     def __init__(self, catch_warnings=None, print_uncaught_warnings=None):
+        self.catch_warnings = catch_warnings if catch_warnings is not None else True
+        self.print_warnings = print_uncaught_warnings if print_uncaught_warnings is not None else True
+        self.errored = False
+        self.err_level = None
+        self.err_no = None
+        self.err_msg = None
+        self.reset_error_state()
+
+    def reset_error_state(self):
+        self.errored = False
         self.err_level = gdal.CE_None
         self.err_no = 0
         self.err_msg = ''
-        self.catch_warnings = catch_warnings if catch_warnings is not None else True
-        self.print_warnings = print_uncaught_warnings if print_uncaught_warnings is not None else True
 
     def handler(self, err_level, err_no, err_msg):
+        self.errored = True
         self.err_level = err_level
         self.err_no = err_no
         self.err_msg = err_msg
