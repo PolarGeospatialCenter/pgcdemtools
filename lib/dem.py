@@ -67,8 +67,9 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (-(?P<subtile>\d{2}))?
                                     _meta\.txt\Z""", re.I | re.X)
 
-setsm_strip_pattern = re.compile("""((?P<algorithm>SETSM)_)?
-                                    ((?P<relversion>s2s[\d/]+)_)?
+setsm_strip_pattern = re.compile("""((?P<algorithm>SETSM)_
+                                    (?P<relversion>s2s\d{3})_
+                                    )?
                                     (?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
                                     (?P<timestamp>\d{8})_
@@ -83,16 +84,16 @@ setsm_strip_pattern = re.compile("""((?P<algorithm>SETSM)_)?
                                     \.(tif|jpg))\Z""", re.I | re.X)
 
 setsm_strip_pattern2 = re.compile("""(?P<pairname>
-                                    (?P<sensor>[A-Z][A-Z\d]{2}\d)_
-                                    (?P<timestamp>\d{8})_
-                                    (?P<catid1>[A-Z0-9]{16})_
-                                    (?P<catid2>[A-Z0-9]{16})
-                                    )_
-                                    (?P<partnum>SEG\d+)_
-                                    (?P<res>(\d+|0\.\d+)c?m)_
-                                    ((?P<relversion>v[\d\.]+)_)?
-                                    (lsf_)?
-                                    (?P<suffix>dem\.(tif|jpg))\Z""", re.I | re.X)
+                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
+                                     (?P<timestamp>\d{8})_
+                                     (?P<catid1>[A-Z0-9]{16})_
+                                     (?P<catid2>[A-Z0-9]{16})
+                                     )_
+                                     (?P<partnum>SEG\d+)_
+                                     (?P<res>(\d+|0\.\d+)c?m)_
+                                     ((?P<relversion>v[\d\.]+)_)?
+                                     (lsf_)?
+                                     (?P<suffix>dem\.(tif|jpg))\Z""", re.I | re.X)
 
 asp_strip_pattern = re.compile("""(?P<pairname>
                                   (?P<sensor>[A-Z]{2}\d{2})_
