@@ -909,7 +909,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             for fld,val in attrib_map.items():
                                 if fld in fwidths:
                                     if isinstance(val, str) and len(val) > fwidths[fld]:
-                                        logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
+                                        logger.error("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
                                             val, fld, fwidths[fld]
                                         ))
                                         valid_record = False
@@ -920,7 +920,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                                     fld_def_location_fwidth_gdb
                                                 ))
                                 else:
-                                    logger.warning("Field {} is not in target table. Feature skipped".format(fld))
+                                    logger.error("Field {} is not in target table. Feature skipped".format(fld))
                                     valid_record = False
 
                                 if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
