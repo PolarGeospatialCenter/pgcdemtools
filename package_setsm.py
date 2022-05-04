@@ -135,6 +135,7 @@ def main():
         logger.error("src must be a directory, a strip dem, or a text file")
 
     logger.info('Reading rasters')
+    scene_paths = list(set(scene_paths))
     j = 0
     total = len(scene_paths)
     scenes = []
@@ -150,7 +151,7 @@ def main():
             cog_sem = os.path.join(raster.srcdir, raster.stripid + '.cogfin')
             rp = os.path.join(raster.srcdir, raster.stripid + '_dem.mrf')
             if args.overwrite or args.force_filter_dems:
-                scenes.append(sp)
+                scenes.append(raster)
 
             else:
                 expected_outputs = [
@@ -166,9 +167,8 @@ def main():
                     expected_outputs.append(rp)
 
                 if not all([os.path.isfile(f) for f in expected_outputs]):
-                    scenes.append(sp)
+                    scenes.append(raster)
 
-    scenes = list(set(scenes))
     logger.info('Number of src rasters: {}'.format(j))
     logger.info('Number of incomplete tasks: {}'.format(len(scenes)))
     
@@ -178,9 +178,8 @@ def main():
     scenes_in_job_count=0
     task_queue = []
     
-    for srcfp in scenes:
+    for raster in scenes:
         scene_count+=1
-        srcdir, srcfn = os.path.split(srcfp)            
         if args.tasks_per_job:
             # bundle tasks into text files in the dst dir and pass the text file in as src
             scenes_in_job_count+=1
@@ -209,7 +208,7 @@ def main():
                     'python',
                     '{} {} {} {}'.format(scriptpath, arg_str_base, src_txt, scratch),
                     build_archive,
-                    [srcfp, scratch, args]
+                    [raster, scratch, args]
                 )
                 task_queue.append(task)
             
@@ -221,7 +220,7 @@ def main():
                 'python',
                 '{} {} {} {}'.format(scriptpath, arg_str_base, srcfp, scratch),
                 build_archive,
-                [srcfp, scratch, args]
+                [raster, scratch, args]
             )
             task_queue.append(task)
        
@@ -240,19 +239,18 @@ def main():
     
         else:         
             for task in task_queue:
-                src, scratch, task_arg_obj = task.method_arg_list
+                raster, scratch, task_arg_obj = task.method_arg_list
                 
                 if not args.dryrun:
-                    task.method(src, scratch, task_arg_obj)
+                    task.method(raster, scratch, task_arg_obj)
     
     else:
         logger.info("No tasks found to process")
 
 
-def build_archive(src,scratch,args):
+def build_archive(raster, scratch, args):
 
-    logger.info("Packaging Raster: {}".format(src))
-    raster = dem.SetsmDem(src)
+    logger.info("Packaging Raster: {}".format(raster.srcfp))
     dstfp = raster.archive
     dstdir, dstfn = os.path.split(raster.archive)
 
