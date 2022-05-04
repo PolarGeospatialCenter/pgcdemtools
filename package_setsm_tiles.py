@@ -27,6 +27,9 @@ def main():
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--epsg', type=int, default=default_epsg,
                         help="egsg code for output index projection (default epsg:{})".format(default_epsg))
+    parser.add_argument('--rasterproxy-prefix',
+                        help="build rasterProxy .mrf files using this s3 bucket and path prefix\
+                             for the source data path with geocell folder and dem tif appended (must start with s3://)")
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -65,6 +68,10 @@ def main():
     if args.pbs and args.parallel_processes > 1:
         parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
 
+    # Check raster proxy prefix is well-formed
+    if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
+        parser.error('--rasterproxy-prefix must start with s3://')
+
     if args.v:
         log_level = logging.DEBUG
     else:
@@ -94,36 +101,63 @@ def main():
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
 
-    rasters = []
-    j=0
+
     #### ID rasters
     logger.info('Identifying DEMs')
-    if os.path.isfile(src):
-        j+=1
+    raster_paths = []
+    if os.path.isfile(src) and src.endswith('.tif'):
         logger.debug(src)
-        try:
-            raster = dem.SetsmTile(os.path.join(src))
-        except RuntimeError as e:
-            logger.error( e )
-        else:
-            if not os.path.isfile(raster.archive) or args.overwrite:
-                rasters.append(raster)
+        raster_paths.append(src)
 
-    else:
+    elif os.path.isfile(src) and src.endswith('.txt'):
+        fh = open(src,'r')
+        for line in fh.readlines():
+            sceneid = line.strip()
+            raster_paths.append(sceneid)
+
+    elif os.path.isdir(src):
         for root,dirs,files in os.walk(src):
             for f in files:
-                if f.endswith("_dem.tif"):
-                    j+=1
-                    logger.debug(os.path.join(root,f))
-                    try:
-                        raster = dem.SetsmTile(os.path.join(root,f))
-                    except RuntimeError as e:
-                        logger.error( e )
-                    else:
-                        if not os.path.isfile(raster.archive) or args.overwrite:
-                            rasters.append(raster)
+                if f.endswith("_dem.tif") and "m_" in f:
+                    srcfp = os.path.join(root,f)
+                    logger.debug(srcfp)
+                    raster_paths.append(srcfp)
 
-    rasters = list(set(rasters))
+    else:
+        logger.error("src must be a directory, a dem mosaic tile, or a text file")
+
+    logger.info('Reading rasters')
+    raster_paths = list(set(raster_paths))
+    rasters = []
+    j = 0
+    total = len(raster_paths)
+
+    for rp in raster_paths:
+        try:
+            raster = dem.SetsmTile(rp)
+        except RuntimeError as e:
+            logger.error(e)
+        else:
+            j += 1
+            utils.progress(j, total, "DEMs identified")
+
+            rp = os.path.join(raster.srcdir, raster.stripid + '_dem.mrf')
+            if args.overwrite or args.force_filter_dems:
+                rasters.append(rp)
+
+            else:
+                expected_outputs = [
+                    #raster.readme
+                ]
+                if not args.skip_archive:
+                    expected_outputs.append(raster.archive)
+                if args.rasterproxy_prefix:
+                    # this checks for only 1 of the several rasterproxies that are expected
+                    expected_outputs.append(rp)
+
+                if not all([os.path.isfile(f) for f in expected_outputs]):
+                    rasters.append(rp)
+
     logger.info('Number of src rasters: {}'.format(j))
     logger.info('Number of incomplete tasks: {}'.format(len(rasters)))
 
@@ -140,7 +174,6 @@ def main():
             [raster, scratch, args]
         )
         task_queue.append(task)
-
 
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
@@ -166,7 +199,7 @@ def main():
         logger.info("No tasks found to process")
 
 
-def build_archive(raster,scratch,args):
+def build_archive(raster, scratch, args):
 
     logger.info("Packaging tile {}".format(raster.srcfn))
     #### create archive
@@ -198,6 +231,8 @@ def build_archive(raster,scratch,args):
                     print("Cannot replace archive: %s" %dstfp)
 
         if not os.path.isfile(dstfp):
+            os.chdir(dstdir)
+            #logger.info(os.getcwd())
 
             components = (
                 os.path.basename(raster.srcfp), # dem
@@ -217,14 +252,47 @@ def build_archive(raster,scratch,args):
                 os.path.basename(raster.maxdate),
                 ]
 
-            os.chdir(dstdir)
-            #logger.info(os.getcwd())
+            tifs = [c for c in components if c.endswith('.tif')]
 
             k = 0
             existing_components = sum([int(os.path.isfile(component)) for component in components])
             ### check if exists, print
             #logger.info(existing_components)
             if existing_components == len(components):
+
+                ## create rasterproxy MRF file
+                if args.rasterproxy_prefix:
+                    logger.info("Creating RasterProxy files")
+                    rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+                    bucket = rasterproxy_prefix_parts[2]
+                    bpath = '/'.join(rasterproxy_prefix_parts[3:])
+                    sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
+                    dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
+                    for tif in tifs:
+                        suffix = tif[len(raster.stripid):-4]  # eg "_dem"
+                        mrf = '{}{}.mrf'.format(raster.stripid, suffix)
+                        if not os.path.isfile(mrf):
+                            sourcepath = '{}/{}/{}{}.tif'.format(
+                                sourceprefix,
+                                raster.geocell,
+                                raster.stripid,
+                                suffix
+                            )
+                            datapath = '{}/{}/{}{}.mrfcache'.format(
+                                dataprefix,
+                                raster.geocell,
+                                raster.stripid,
+                                suffix
+                            )
+                            static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
+                            cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
+                                static_args,
+                                datapath,
+                                sourcepath,
+                                tif,
+                                mrf
+                            )
+                            subprocess.call(cmd, shell=True)
 
                 ## Build index
                 index = os.path.join(scratch,raster.tileid+"_index.shp")
