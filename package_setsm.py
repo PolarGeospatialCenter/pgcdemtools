@@ -95,6 +95,10 @@ def main():
         log_level = logging.DEBUG
     else:
         log_level = logging.INFO
+
+    # Check raster proxy prefix is well-formed
+    if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
+        parser.error('--rasterproxy-prefix must start with s3://')
     
     lsh = logging.StreamHandler()
     lsh.setLevel(log_level)
@@ -131,6 +135,7 @@ def main():
         logger.error("src must be a directory, a strip dem, or a text file")
 
     logger.info('Reading rasters')
+    scene_paths = list(set(scene_paths))
     j = 0
     total = len(scene_paths)
     scenes = []
@@ -146,7 +151,7 @@ def main():
             cog_sem = os.path.join(raster.srcdir, raster.stripid + '.cogfin')
             rp = os.path.join(raster.srcdir, raster.stripid + '_dem.mrf')
             if args.overwrite or args.force_filter_dems:
-                scenes.append(sp)
+                scenes.append(raster)
 
             else:
                 expected_outputs = [
@@ -162,9 +167,8 @@ def main():
                     expected_outputs.append(rp)
 
                 if not all([os.path.isfile(f) for f in expected_outputs]):
-                    scenes.append(sp)
+                    scenes.append(raster)
 
-    scenes = list(set(scenes))
     logger.info('Number of src rasters: {}'.format(j))
     logger.info('Number of incomplete tasks: {}'.format(len(scenes)))
     
@@ -174,9 +178,8 @@ def main():
     scenes_in_job_count=0
     task_queue = []
     
-    for srcfp in scenes:
+    for raster in scenes:
         scene_count+=1
-        srcdir, srcfn = os.path.split(srcfp)            
         if args.tasks_per_job:
             # bundle tasks into text files in the dst dir and pass the text file in as src
             scenes_in_job_count+=1
@@ -192,7 +195,7 @@ def main():
             if scenes_in_job_count <= args.tasks_per_job:
                 # add to txt file
                 fh = open(src_txt,'a')
-                fh.write("{}\n".format(srcfp))
+                fh.write("{}\n".format(raster.srcfp))
                 fh.close()
             
             if scenes_in_job_count == args.tasks_per_job or scene_count == len(scenes):
@@ -205,19 +208,19 @@ def main():
                     'python',
                     '{} {} {} {}'.format(scriptpath, arg_str_base, src_txt, scratch),
                     build_archive,
-                    [srcfp, scratch, args]
+                    [raster, scratch, args]
                 )
                 task_queue.append(task)
             
         else:
             job_count += 1
             task = taskhandler.Task(
-                srcfn,
+                raster.srcfn,
                 'Pkg{:04g}'.format(job_count),
                 'python',
-                '{} {} {} {}'.format(scriptpath, arg_str_base, srcfp, scratch),
+                '{} {} {} {}'.format(scriptpath, arg_str_base, raster.srcfp, scratch),
                 build_archive,
-                [srcfp, scratch, args]
+                [raster, scratch, args]
             )
             task_queue.append(task)
        
@@ -236,19 +239,18 @@ def main():
     
         else:         
             for task in task_queue:
-                src, scratch, task_arg_obj = task.method_arg_list
+                raster, scratch, task_arg_obj = task.method_arg_list
                 
                 if not args.dryrun:
-                    task.method(src, scratch, task_arg_obj)
+                    task.method(raster, scratch, task_arg_obj)
     
     else:
         logger.info("No tasks found to process")
 
 
-def build_archive(src,scratch,args):
+def build_archive(raster, scratch, args):
 
-    logger.info("Packaging Raster: {}".format(src))
-    raster = dem.SetsmDem(src)
+    logger.info("Packaging Raster: {}".format(raster.srcfp))
     dstfp = raster.archive
     dstdir, dstfn = os.path.split(raster.archive)
 
@@ -289,7 +291,7 @@ def build_archive(src,scratch,args):
         if process:
             os.chdir(dstdir)
 
-            components = (  # plus index shp files
+            components = [  # plus index shp files
                 #( path, lzw predictor, resample strategy)
                 (os.path.basename(raster.srcfp), 'YES', 'BILINEAR'),  # dem
                 (os.path.basename(raster.matchtag), 'NO', 'NEAREST'),  # matchtag
@@ -302,7 +304,7 @@ def build_archive(src,scratch,args):
                 # os.path.basename(raster.srcfp)[:-8] + '_ortho.tif',  # ortho1
                 # os.path.basename(raster.srcfp)[:-8] + '_ortho2.tif',  # ortho2
                 # os.path.basename(raster.srcfp)[:-8] + '_dem_10m.tif',  # 10m dem
-            )
+            ]
 
             optional_components = [os.path.basename(r) for r in raster.reg_files]  # reg
 
@@ -329,9 +331,12 @@ def build_archive(src,scratch,args):
 
             ## create rasterproxy MRF file
             if args.rasterproxy_prefix:
-                logger.info("Creating RasterProxy files")
-                sourceprefix = 'vsis3' + args.rasterproxy_prefix[4:]
-                dataprefix = 'z:/mrfcache' + args.rasterproxy_prefix[4:]
+                logger.info("Creating raster proxy files")
+                rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+                bucket = rasterproxy_prefix_parts[2]
+                bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
+                sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
+                dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
                 for tif, _, _ in tifs:
                     suffix = tif[len(raster.stripid):-4]  # eg "_dem"
                     mrf = '{}{}.mrf'.format(raster.stripid, suffix)
@@ -413,13 +418,13 @@ def build_archive(src,scratch,args):
                         try:
                             os.remove(dstfp)
                         except:
-                            print("Cannot replace archive: %s" %dstfp)
+                            logger.error("Cannot replace archive: %s" %dstfp)
             
-                if not os.path.isfile(dstfp):    
+                if not os.path.isfile(dstfp):
+                    logger.info("Building archive")
 
                     k = 0
                     existing_components = sum([int(os.path.isfile(component)) for component, _, _ in components])
-                    ### check if exists, print
                     if existing_components == len(components):
                         
                         ## Build index
@@ -429,7 +434,7 @@ def build_archive(src,scratch,args):
                         try:
                             index_dir, index_lyr = utils.get_source_names(index)
                         except RuntimeError as e:
-                            logger.error("{}: {}".format(index,e))            
+                            logger.error("{}: {}".format(index, e))
                         
                         if os.path.isfile(index):
                             ogrDriver.DeleteDataSource(index)
@@ -449,7 +454,6 @@ def build_archive(src,scratch,args):
                                         field.SetPrecision(field_def.fprecision)
                                         lyr.CreateField(field)
                                         
-                                    #print raster.stripid
                                     feat = ogr.Feature(lyr.GetLayerDefn())
                                     valid_record = True
 
@@ -526,7 +530,7 @@ def build_archive(src,scratch,args):
 
                                                 ## Test if image crosses 180
                                                 if max(lons) - min(lons) > 180:
-                                                    split_geom = wrap_180(temp_geom)
+                                                    split_geom = utils.getWrappedGeometry(temp_geom)
                                                     feat_geom = split_geom
                                                 else:
                                                     mp_geom = ogr.ForceToMultiPolygon(temp_geom)
@@ -601,68 +605,6 @@ def build_archive(src,scratch,args):
                             logger.error("Cannot remove existing index: {}".format(index))       
                     else:
                         logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
-
-
-def wrap_180(src_geom):
-
-    ## create 2 point lists for west component and east component
-    west_points = []
-    east_points = []
-
-    ## for each point in geom except final point
-    ring  = src_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
-    for i in range(0, ring.GetPointCount()-1):
-        pt1 = ring.GetPoint(i)
-        pt2 = ring.GetPoint(i+1)
-
-        ## test if point is > or < 0 and add to correct bin
-        if pt1[0] < 0:
-            west_points.append(pt1)
-        else:
-            east_points.append(pt1)
-
-        ## test if segment to next point crosses 180 (x is opposite sign)
-        if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
-
-            ## if segment crosses,calculate interesection point y value
-            pt3_y = utils.calc_y_intersection_180(pt1, pt2)
-
-            ## add intersection point to both bins (make sureot change 180 to -180 for western list)
-            pt3_west = ( -180, pt3_y )
-            pt3_east = ( 180, pt3_y )
-
-            west_points.append(pt3_west)
-            east_points.append(pt3_east)
-
-
-    #print "west", len(west_points)
-    #for pt in west_points:
-    #    print pt[0], pt[1]
-    #
-    #print "east", len(east_points)
-    #for pt in east_points:
-    #    print pt[0], pt[1]
-
-    ## cat point lists to make multipolygon(remember to add 1st point to the end)
-    geom_multipoly = ogr.Geometry(ogr.wkbMultiPolygon)
-
-    for ring_points in west_points, east_points:
-        if len(ring_points) > 0:
-            poly = ogr.Geometry(ogr.wkbPolygon)
-            ring = ogr.Geometry(ogr.wkbLinearRing)
-
-            for pt in ring_points:
-                ring.AddPoint(pt[0],pt[1])
-
-            ring.AddPoint(ring_points[0][0],ring_points[0][1])
-
-            poly.AddGeometry(ring)
-            geom_multipoly.AddGeometry(poly)
-            del poly
-            del ring
-
-    #print geom_multipoly
-    return geom_multipoly
 
 
 if __name__ == '__main__':

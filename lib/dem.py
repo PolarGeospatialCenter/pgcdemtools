@@ -1650,6 +1650,7 @@ class SetsmTile(object):
                 groups = match.groupdict()
                 self.tilename = groups['tile']
                 self.res = groups['res']
+                # In case release version is in the file name and not the meta.txt
                 self.release_version = groups['relversion']
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
@@ -1672,8 +1673,10 @@ class SetsmTile(object):
 
                 if self.scheme:
                     self.supertile_id = '_'.join([self.scheme,self.tilename,self.res])
+                    self.supertile_id_no_res = '_'.join([self.scheme,self.tilename])
                 else:
                     self.supertile_id = '_'.join([self.tilename,self.res])
+                    self.supertile_id_no_res = self.tilename
                 self.density = None
                 self.min_elev_value = None
                 self.max_elev_value = None
@@ -1808,6 +1811,9 @@ class SetsmTile(object):
             self.creation_date = datetime.strptime(metad['Creation Date'],"%d-%b-%Y %H:%M:%S")
         else:
             raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
+
+        if 'Version' in metad:
+            self.release_version = metad['Version']
 
         self.num_components = len(self.alignment_dct)
         if self.num_components == 0:
