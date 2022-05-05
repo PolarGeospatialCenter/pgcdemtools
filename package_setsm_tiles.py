@@ -1,7 +1,14 @@
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
-from datetime import *
-from osgeo import gdal, osr, ogr, gdalconst
 import argparse
+import glob
+import logging
+import os
+import subprocess
+import sys
+import tarfile
+from datetime import *
+
+from osgeo import osr, ogr
+
 from lib import utils, dem, taskhandler
 
 #### Create Logger
@@ -24,9 +31,10 @@ def main():
     parser.add_argument('scratch', help="scratch space to build index shps")
 
     #### Optionsl Arguments
-    parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--epsg', type=int, default=default_epsg,
                         help="egsg code for output index projection (default epsg:{})".format(default_epsg))
+    parser.add_argument('--skip-archive', action='store_true', default=False,
+                        help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--rasterproxy-prefix',
                         help="build rasterProxy .mrf files using this s3 bucket and path prefix\
                              for the source data path with geocell folder and dem tif appended (must start with s3://)")
@@ -39,6 +47,7 @@ def main():
                         help="number of parallel processes to spawn (default 1)")
     parser.add_argument("--qsubscript",
                         help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
+    parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
 
@@ -141,9 +150,9 @@ def main():
             j += 1
             utils.progress(j, total, "DEMs identified")
 
-            rp = os.path.join(raster.srcdir, raster.stripid + '_dem.mrf')
-            if args.overwrite or args.force_filter_dems:
-                rasters.append(rp)
+            proxy = os.path.join(raster.srcdir, raster.tileid + '_dem.mrf')
+            if args.overwrite:
+                rasters.append(raster)
 
             else:
                 expected_outputs = [
@@ -153,10 +162,10 @@ def main():
                     expected_outputs.append(raster.archive)
                 if args.rasterproxy_prefix:
                     # this checks for only 1 of the several rasterproxies that are expected
-                    expected_outputs.append(rp)
+                    expected_outputs.append(proxy)
 
                 if not all([os.path.isfile(f) for f in expected_outputs]):
-                    rasters.append(rp)
+                    rasters.append(raster)
 
     logger.info('Number of src rasters: {}'.format(j))
     logger.info('Number of incomplete tasks: {}'.format(len(rasters)))
@@ -202,17 +211,13 @@ def main():
 def build_archive(raster, scratch, args):
 
     logger.info("Packaging tile {}".format(raster.srcfn))
-    #### create archive
     dstfp = raster.archive
     dstdir, dstfn = os.path.split(raster.archive)
-    #print dstfn
-    #print dstfp
 
     try:
         raster.get_dem_info()
     except RuntimeError as e:
         logger.error(e)
-        # print(raster.ndv)
     else:
 
         ## get raster density if not precomputed
@@ -222,205 +227,231 @@ def build_archive(raster, scratch, args):
             except RuntimeError as e:
                 logger.warning(e)
 
-        #### Build Archive
-        if os.path.isfile(dstfp) and args.overwrite is True:
-            if not args.dryrun:
-                try:
-                    os.remove(dstfp)
-                except:
-                    print("Cannot replace archive: %s" %dstfp)
+        os.chdir(dstdir)
 
-        if not os.path.isfile(dstfp):
-            os.chdir(dstdir)
-            #logger.info(os.getcwd())
+        components = [
+            os.path.basename(raster.srcfp), # dem
+            os.path.basename(raster.metapath), # meta
+            # index shp files
+        ]
 
-            components = (
-                os.path.basename(raster.srcfp), # dem
-                os.path.basename(raster.metapath), # meta
-                # index shp files
-            )
+        optional_components = [
+            os.path.basename(raster.regmetapath), #reg
+            os.path.basename(raster.err), # err
+            os.path.basename(raster.day), # day
+            os.path.basename(raster.browse), # browse
+            os.path.basename(raster.count),
+            os.path.basename(raster.countmt),
+            os.path.basename(raster.mad),
+            os.path.basename(raster.mindate),
+            os.path.basename(raster.maxdate),
+            ]
 
-            optional_components = [
-                os.path.basename(raster.regmetapath), #reg
-                os.path.basename(raster.err), # err
-                os.path.basename(raster.day), # day
-                os.path.basename(raster.browse), # browse
-                os.path.basename(raster.count),
-                os.path.basename(raster.countmt),
-                os.path.basename(raster.mad),
-                os.path.basename(raster.mindate),
-                os.path.basename(raster.maxdate),
-                ]
+        tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
 
-            tifs = [c for c in components if c.endswith('.tif')]
+        ## create rasterproxy MRF file
+        if args.rasterproxy_prefix:
+            logger.info("Creating raster proxy files")
+            rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+            bucket = rasterproxy_prefix_parts[2]
+            bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
+            sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
+            dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
+            for tif in tifs:
+                suffix = tif[len(raster.tileid):-4]  # eg "_dem"
+                mrf = '{}{}.mrf'.format(raster.tileid, suffix)
+                if not os.path.isfile(mrf):
+                    sourcepath = '{}/{}/{}{}.tif'.format(
+                        sourceprefix,
+                        raster.supertile_id_no_res,
+                        raster.tileid,
+                        suffix
+                    )
+                    datapath = '{}/{}/{}{}.mrfcache'.format(
+                        dataprefix,
+                        raster.supertile_id_no_res,
+                        raster.tileid,
+                        suffix
+                    )
+                    static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
+                    cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
+                        static_args,
+                        datapath,
+                        sourcepath,
+                        tif,
+                        mrf
+                    )
+                    subprocess.call(cmd, shell=True)
 
-            k = 0
-            existing_components = sum([int(os.path.isfile(component)) for component in components])
-            ### check if exists, print
-            #logger.info(existing_components)
-            if existing_components == len(components):
+        ## Build Archive
+        if not args.skip_archive:
 
-                ## create rasterproxy MRF file
-                if args.rasterproxy_prefix:
-                    logger.info("Creating RasterProxy files")
-                    rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
-                    bucket = rasterproxy_prefix_parts[2]
-                    bpath = '/'.join(rasterproxy_prefix_parts[3:])
-                    sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
-                    dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
-                    for tif in tifs:
-                        suffix = tif[len(raster.stripid):-4]  # eg "_dem"
-                        mrf = '{}{}.mrf'.format(raster.stripid, suffix)
-                        if not os.path.isfile(mrf):
-                            sourcepath = '{}/{}/{}{}.tif'.format(
-                                sourceprefix,
-                                raster.geocell,
-                                raster.stripid,
-                                suffix
-                            )
-                            datapath = '{}/{}/{}{}.mrfcache'.format(
-                                dataprefix,
-                                raster.geocell,
-                                raster.stripid,
-                                suffix
-                            )
-                            static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
-                            cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
-                                static_args,
-                                datapath,
-                                sourcepath,
-                                tif,
-                                mrf
-                            )
-                            subprocess.call(cmd, shell=True)
+            if os.path.isfile(dstfp) and args.overwrite is True:
+                if not args.dryrun:
+                    try:
+                        os.remove(dstfp)
+                    except:
+                        logger.error("Cannot replace archive: %s" % dstfp)
 
-                ## Build index
-                index = os.path.join(scratch,raster.tileid+"_index.shp")
+            if not os.path.isfile(dstfp):
+                logger.info("Building archive")
 
-                ## create dem index shp: <strip_id>_index.shp
-                try:
-                    index_dir, index_lyr = utils.get_source_names(index)
-                except RuntimeError as e:
-                    logger.error("{}: {}".format(index,e))
+                k = 0
+                existing_components = sum([int(os.path.isfile(component)) for component in components])
+                if existing_components == len(components):
 
-                if os.path.isfile(index):
-                    ogrDriver.DeleteDataSource(index)
+                    ## Build index
+                    index = os.path.join(scratch,raster.tileid+"_index.shp")
 
-                if not os.path.isfile(index):
-                    ds = ogrDriver.CreateDataSource(index)
-                    if ds is not None:
-                        tgt_srs = osr.SpatialReference()
-                        tgt_srs.ImportFromEPSG(args.epsg)
+                    ## create dem index shp: <tile_id>_index.shp
+                    try:
+                        index_dir, index_lyr = utils.get_source_names(index)
+                    except RuntimeError as e:
+                        logger.error("{}: {}".format(index, e))
 
-                        lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbPolygon)
+                    if os.path.isfile(index):
+                        ogrDriver.DeleteDataSource(index)
 
-                        if lyr is not None:
+                    if not os.path.isfile(index):
+                        ds = ogrDriver.CreateDataSource(index)
+                        if ds is not None:
+                            tgt_srs = osr.SpatialReference()
+                            tgt_srs.ImportFromEPSG(args.epsg)
 
-                            for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
+                            lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbPolygon)
 
-                                field = ogr.FieldDefn(field_def.fname, field_def.ftype)
-                                field.SetWidth(field_def.fwidth)
-                                field.SetPrecision(field_def.fprecision)
-                                lyr.CreateField(field)
+                            if lyr is not None:
 
-                            #print raster.stripid
-                            feat = ogr.Feature(lyr.GetLayerDefn())
+                                for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
 
-                            ## Set fields
-                            feat.SetField("DEM_ID",raster.tileid)
-                            feat.SetField("TILE",raster.supertile_id)
-                            feat.SetField("ND_VALUE",raster.ndv)
-                            res = (raster.xres + raster.yres) / 2.0
-                            feat.SetField("DEM_RES",res)
-                            feat.SetField("DENSITY",raster.density)
-                            feat.SetField("NUM_COMP",raster.num_components)
+                                    field = ogr.FieldDefn(field_def.fname, field_def.ftype)
+                                    field.SetWidth(field_def.fwidth)
+                                    field.SetPrecision(field_def.fprecision)
+                                    lyr.CreateField(field)
 
-                            if raster.release_version:
-                                feat.SetField("REL_VER",raster.release_version)
+                                feat = ogr.Feature(lyr.GetLayerDefn())
+                                valid_record = True
 
-                            if raster.reg_src:
-                                feat.SetField("REG_SRC",raster.reg_src)
-                                feat.SetField("NUM_GCPS",raster.num_gcps)
-                            if raster.mean_resid_z:
-                                feat.SetField("MEANRESZ",raster.mean_resid_z)
+                                ## Set fields
+                                attrib_map = {
+                                    "DEM_ID": raster.tileid,
+                                    "TILE": raster.supertile_id_no_res,
+                                    "ND_VALUE": raster.ndv,
+                                    "DEM_RES" : (raster.xres + raster.yres) / 2.0,
+                                    "DENSITY": raster.density,
+                                    "NUM_COMP": raster.num_components
+                                }
 
-                            #### Set fields if populated (will not be populated if metadata file is not found)
-                            if raster.creation_date:
-                                feat.SetField("CR_DATE",raster.creation_date.strftime("%Y-%m-%d"))
+                                if raster.release_version:
+                                    attrib_map["REL_VER"] = raster.release_version
 
-                            ## transfrom and write geom
-                            src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
-                            src_srs.ImportFromWkt(raster.proj)
+                                #### Set fields if populated (will not be populated if metadata file is not found)
+                                if raster.creation_date:
+                                    attrib_map["CR_DATE"] = raster.creation_date.strftime("%Y-%m-%d")
 
-                            if raster.geom:
-                                geom = raster.geom.Clone()
-                                if not src_srs.IsSame(tgt_srs):
-                                    transform = osr.CoordinateTransformation(src_srs,tgt_srs)
-                                    geom.Transform(transform) #### Verify this works over 180
+                                ## transform and write geom
+                                src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+                                src_srs.ImportFromWkt(raster.proj)
 
-                                feat.SetGeometry(geom)
+                                if not raster.geom:
+                                    logger.error('No valid geom found, feature skipped: {}'.format(raster.sceneid))
+                                    valid_record = False
 
-                            else:
-                                logger.error('No valid geom found: {}'.format(raster.srcfp))
+                                else:
+                                    temp_geom = raster.geom.Clone()
+                                    transform = osr.CoordinateTransformation(src_srs, tgt_srs)
+                                    try:
+                                        temp_geom.Transform(transform)
+                                    except TypeError as e:
+                                        logger.error('Geom transformation failed, feature skipped: {} {}'.format(e, raster.sceneid))
+                                        valid_record = False
+                                    else:
 
-                            #### add new feature to layer
-                            lyr.CreateFeature(feat)
+                                        ## If srs is geographic and geom crosses 180, split geom into 2 parts
+                                        if tgt_srs.IsGeographic:
 
-                            ## Close layer and dataset
-                            lyr = None
-                            ds = None
+                                            ## Get Lat and Lon coords in arrays
+                                            lons = []
+                                            lats = []
+                                            ring = temp_geom.GetGeometryRef(0)  # assumes a 1 part polygon
+                                            for j in range(0, ring.GetPointCount()):
+                                                pt = ring.GetPoint(j)
+                                                lons.append(pt[0])
+                                                lats.append(pt[1])
 
-                            if os.path.isfile(index):
-                                ## Create archive
-                                if not args.dryrun:
-                                    #archive = tarfile.open(dstfp,"w:")
-                                    archive = tarfile.open(dstfp,"w:gz")
-                                    if not os.path.isfile(dstfp):
-                                        logger.error("Cannot create archive: {}".format(dstfn))
+                                            ## Test if image crosses 180
+                                            if max(lons) - min(lons) > 180:
+                                                split_geom = utils.getWrappedGeometry(temp_geom)
+                                                feat_geom = split_geom
+                                            else:
+                                                mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                                feat_geom = mp_geom
 
-                                ## Add components
-                                for component in components:
-                                    logger.debug("Adding {} to {}".format(component,dstfn))
-                                    k+=1
+                                        else:
+                                            mp_geom = ogr.ForceToMultiPolygon(temp_geom)
+                                            feat_geom = mp_geom
+
+                                ## Add new feature to layer
+                                if valid_record:
+                                    for fld, val in attrib_map.items():
+                                        feat.SetField(fld, val)
+                                    feat.SetGeometry(feat_geom)
+                                    lyr.CreateFeature(feat)
+
+                                ## Close layer and dataset
+                                lyr = None
+                                ds = None
+
+                                if os.path.isfile(index):
+                                    ## Create archive
                                     if not args.dryrun:
-                                        archive.add(component)
-                                        #archive.write(component)
+                                        #archive = tarfile.open(dstfp,"w:")
+                                        archive = tarfile.open(dstfp,"w:gz")
+                                        if not os.path.isfile(dstfp):
+                                            logger.error("Cannot create archive: {}".format(dstfn))
 
-                                ## Add optional components
-                                for component in optional_components:
-                                    if os.path.isfile(component):
+                                    ## Add components
+                                    for component in components:
                                         logger.debug("Adding {} to {}".format(component,dstfn))
                                         k+=1
                                         if not args.dryrun:
                                             archive.add(component)
 
-                                ## Add index in subfolder
-                                os.chdir(scratch)
-                                for f in glob.glob(index_lyr+".*"):
-                                    arcname = os.path.join("index",f)
-                                    logger.debug("Adding {} to {}".format(f,dstfn))
-                                    k+=1
+                                    ## Add optional components
+                                    for component in optional_components:
+                                        if os.path.isfile(component):
+                                            logger.debug("Adding {} to {}".format(component,dstfn))
+                                            k+=1
+                                            if not args.dryrun:
+                                                archive.add(component)
+
+                                    ## Add index in subfolder
+                                    os.chdir(scratch)
+                                    for f in glob.glob(index_lyr+".*"):
+                                        arcname = os.path.join("index",f)
+                                        logger.debug("Adding {} to {}".format(f,dstfn))
+                                        k+=1
+                                        if not args.dryrun:
+                                            archive.add(f,arcname=arcname)
+                                        os.remove(f)
+
+                                    logger.info("Added {} items to archive: {}".format(k,dstfn))
+
+                                    ## Close archive
                                     if not args.dryrun:
-                                        archive.add(f,arcname=arcname)
-                                    os.remove(f)
+                                        try:
+                                            archive.close()
+                                        except Exception as e:
+                                            print(e)
 
-                                logger.info("Added {} items to archive: {}".format(k,dstfn))
-
-                                ## Close archive
-                                if not args.dryrun:
-                                    try:
-                                        archive.close()
-                                    except Exception as e:
-                                        print(e)
-
+                            else:
+                                logger.error('Cannot create layer: {}'.format(index_lyr))
                         else:
-                            logger.error('Cannot create layer: {}'.format(index_lyr))
+                            logger.error("Cannot create index: {}".format(index))
                     else:
-                        logger.error("Cannot create index: {}".format(index))
+                        logger.error("Cannot remove existing index: {}".format(index))
                 else:
-                    logger.error("Cannot remove existing index: {}".format(index))
-            else:
-                logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
+                    logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
 
 
 if __name__ == '__main__':

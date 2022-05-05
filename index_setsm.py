@@ -795,7 +795,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         if args.mode == 'tile':
                             attrib_map = {
                                 'DEM_ID': record.tileid,
-                                'TILE': record.supertile_id,
+                                'TILE': record.supertile_id_no_res,
                                 'NUM_COMP': record.num_components,
                                 'FILESZ_DEM': record.filesz_dem,
                             }
