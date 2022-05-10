@@ -128,7 +128,8 @@ def main():
             if args.overwrite:
                 dirs_to_run.append(ddir)
             if ddir not in dirs_to_run:
-                ## Then check this raster output
+                ## First check this raster output
+                ## TODO take out check for individual rasters if merge-by-tile is true
                 expected_outputs = [os.path.join(ddir, '{}{}_{}{}'.format(dbase, tgt_res, release_version, c))
                                     for c in components]
                 ## Then check the merge raster
@@ -286,6 +287,7 @@ def resample_setsm(task_src, args):
                             build_meta(inputps, output, tgt_res, spt, release_version, args, merge=True)
                     elif not os.path.isfile(output) or args.overwrite:
                         merge_rasters(inputps, output, component, args)
+                    ## TODO delete individual 10m after merge
 
 
     logger.info("Done")
@@ -304,8 +306,10 @@ def build_meta(metas, output_meta, tgt_res, tile_base, release_version, args, me
     for meta in metas:
         with open(meta, 'r') as input_fh:
             lines = input_fh.read().splitlines()
+            lines = [line.strip() for line in lines]
             title = lines[0]
-            i = lines.index('List of DEMs used in mosaic:')
+
+            i = lines.index('Adjacent Tile Blend Status')
             tile_blend_lines = lines[i:i+6]
             i = lines.index('List of DEMs used in mosaic:')
             dems.extend(lines[i+1:])
@@ -313,14 +317,14 @@ def build_meta(metas, output_meta, tgt_res, tile_base, release_version, args, me
     output_lines = [
         title,
         'Tile: {}_{}'.format(tile_base, tgt_res),
-        'Creation Date: {}'.format(tm.strftime('%d-%m-%Y %H:%M:%S')),
+        'Creation Date: {}'.format(tm.strftime('%d-%b-%Y %H:%M:%S')),
         'Version: {}'.format(release_version.strip('v_')),
         ''
     ]
     if not merge:
         output_lines.extend(tile_blend_lines)
 
-    output_lines.append('List of DEMs used in mosaic',)
+    output_lines.append('List of DEMs used in mosaic:',)
     dems = list(set(dems))
     dems.sort()
     output_lines.extend(dems)
