@@ -169,15 +169,15 @@ def exec_cmd(cmd):
     logger.info(cmd)
 
     p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    (so,se) = p.communicate()
+    (so, se) = p.communicate()
     rc = p.wait()
     err = 0
 
     if rc != 0:
         logger.error("Error found - Return Code = %s:  %s" %(rc,cmd))
         err = 1
-        logger.error("STDOUT:  "+so)
-        logger.error("STDERR:  "+se)
+        logger.error("STDOUT:  {}".format(so))
+        logger.error("STDERR:  {}".format(se))
 
     return (err,so,se)
 

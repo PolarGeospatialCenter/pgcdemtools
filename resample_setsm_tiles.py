@@ -1,4 +1,5 @@
 import argparse
+import datetime
 import logging
 import math
 import os
@@ -6,31 +7,47 @@ import sys
 
 from osgeo import gdal
 
-from lib import taskhandler, walk as wk
+from lib import taskhandler, dem, walk as wk
 
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
 
-#setsm_tile_pattern = re.compile("(?P<tile>\d+_\d+)(_(?P<subtile>\d+_\d+))?_(?P<res>2m)(_(?P<version>v[\d/.]+))?(_reg)?_dem.tif\Z", re.I)
 default_res = 32
 default_src_res = 2
-suffixes = ('matchtag', 'dem', 'count', 'countmt')
 default_depth = float('inf')
+res_min = 0.5
+res_max = 5000
+output_settings = {
+    ## component: (resampling strategy, overview resampling, predictor)
+    'dem':      ('bilinear', 'bilinear', 'yes'),
+    'browse':   ('cubic', 'cubic', 'yes'),
+    'count':    ('near', 'nearest', 'no'),
+    'countmt':  ('near', 'nearest', 'no'),
+    'mad':      ('bilinear', 'bilinear', 'yes'),
+    'maxdate':  ('near', 'nearest', 'no'),
+    'mindate':  ('near', 'nearest', 'no')
+}
+suffixes = list(output_settings.keys())
+
 
 def main():
     parser = argparse.ArgumentParser()
     
     #### Set Up Options
-    parser.add_argument("srcdir", help="source directory or image")
-    parser.add_argument("-c", "--component",  choices=suffixes, default='dem',
-                help="SETSM DEM component to resample")
-    parser.add_argument("-tr", "--tgt-resolution",  default=default_res, type=int,
-                help="output resolution (default={})".format(default_res))
-    parser.add_argument("-sr", "--src-resolution", default=default_src_res, type=int,
-                help="source resolution (default={})".format(default_src_res))
+    parser.add_argument("src", help="source directory or image")
+    parser.add_argument("-c", "--component",  choices=suffixes+['all'], default='all',
+                help="SETSM DEM component to resample (default = all")
+    parser.add_argument("-tr", "--tgt-resolution",  default=default_res, type=float,
+                help="output resolution in meters between {} and {} (default={})".format(res_min, res_max, default_res))
+    parser.add_argument("-sr", "--src-resolution", default=default_src_res, type=float,
+                help="source resolution in meters between {} and {} (default={})".format(res_min, res_max, default_src_res))
+    parser.add_argument("--output-cogs", action='store_true', default=False,
+                help="create cloud-optimized geotiff output")
     parser.add_argument("--depth", type=int,
                 help="search depth (default={})".format(default_depth))
+    parser.add_argument("--merge-by-tile", action="store_true", default=False,
+                help="merge resampled rasters by tile directory (assumes one supertile set per directory)")
     parser.add_argument("-o", "--overwrite", action="store_true", default=False,
                 help="overwrite existing files if present")
     parser.add_argument("--pbs", action='store_true', default=False,
@@ -41,17 +58,19 @@ def main():
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
-    pos_arg_keys = ['srcdir']
-    
-    
-    #### Parse Arguments
+    pos_arg_keys = ['src']
+
+    ## Parse Arguments
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
-    path = os.path.abspath(args.srcdir)
+    src = os.path.abspath(args.src)
     
-    #### Validate Required Arguments
-    if not os.path.isdir(path) and not os.path.isfile(path):
+    ## Validate Required Arguments
+    if not os.path.isdir(src) and not os.path.isfile(src):
         parser.error('src must be a valid directory or file')
+
+    if args.src_resolution >= args.tgt_resolution:
+        parser.error("source resolution values must be greater than output resolution")
         
     ## Verify qsubscript
     if args.qsubscript is None:
@@ -68,7 +87,7 @@ def main():
     #### Set up console logging handler
     lso = logging.StreamHandler()
     lso.setLevel(logging.INFO)
-    lso.setLevel(logging.DEBUG)
+    #lso.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
@@ -81,35 +100,65 @@ def main():
     task_queue = []
     i=0
     logger.info("Searching for SETSM rasters")
-    if os.path.isfile(path):
-        if path.endswith('{}m_{}.tif'.format(args.src_resolution, args.component)):
-            rasters.append(path)
+    components = suffixes if args.component == 'all' else [args.component]
+    components = ['{}.tif'.format(c) for c in components] + ['meta.txt']
+
+    if os.path.isfile(src):
+        srcfn = os.path.basename(src)
+        match = dem.setsm_tile_pattern.match(srcfn)
+        if match:
+            groups = match.groupdict()
+            if groups['res'] == res_float_to_str(args.src_resolution):
+                rasters.append((src, match))
     else:
-        for root, dirs, files in wk.walk(path, maxdepth=args.depth):
+        for root, dirs, files in wk.walk(src, maxdepth=args.depth):
             for f in files:
-                if f.endswith('{}m_{}.tif'.format(args.src_resolution, args.component)):
-                    rasters.append(os.path.join(root, f))
+                match = dem.setsm_tile_pattern.match(f)
+                if match:
+                    groups = match.groupdict()
+                    if groups['res'] == res_float_to_str(args.src_resolution):
+                        rasters.append((os.path.join(root, f), match))
 
-    for dem in rasters:
-        low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
-        low_res_dem = os.path.join(
-            os.path.dirname(low_res_dem),
-            os.path.basename(low_res_dem.replace("_{}m".format(args.src_resolution), "_{}m".format(args.tgt_resolution)))
-        )
+    rasters.sort()
+    if len(rasters) > 0:
+        dirs_to_run = []
+        for r, m in rasters:
+            ddir, dbase, release_version, sptbase = get_dem_path_parts(r, args, match=m)
+            tgt_res = res_float_to_str(args.tgt_resolution)
+            if args.overwrite:
+                dirs_to_run.append(ddir)
+            if ddir not in dirs_to_run:
+                ## Check the merge raster
+                if args.merge_by_tile:
+                    expected_outputs = [os.path.join(ddir, '{}{}_{}{}'.format(sptbase, tgt_res, release_version, c))
+                                        for c in components]
+                ## Check the individual raster output
+                else:
+                    expected_outputs = [os.path.join(ddir, '{}{}_{}{}'.format(dbase, tgt_res, release_version, c))
+                                        for c in components]
 
-        if dem != low_res_dem and not os.path.isfile(low_res_dem):
+                # for f in expected_outputs:
+                #     if not os.path.isfile(f):
+                #         print(f)
+
+                if not all([os.path.isfile(f) for f in expected_outputs]):
+                    dirs_to_run.append(ddir)
+
+        # submit tasks by directory
+        for ddir in dirs_to_run:
+            task_src = ddir
             i+=1
-            logger.debug("Adding task: {}".format(dem))
+            logger.debug("Adding task: {}".format(task_src))
             task = taskhandler.Task(
-                os.path.basename(dem),
+                os.path.basename(task_src),
                 'Resample{:04g}'.format(i),
                 'python',
-                '{} {} {}'.format(scriptpath, arg_str_base, dem),
+                '{} {} {}'.format(scriptpath, arg_str_base, task_src),
                 resample_setsm,
-                [dem, args]
+                [task_src, args]
             )
             task_queue.append(task)
-    
+
     logger.info('Number of incomplete tasks: {}'.format(i))
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
@@ -144,18 +193,194 @@ def main():
     
     else:
         logger.info("No tasks found to process")
-    
-    
-def resample_setsm(dem, args):
-    low_res_dem = "{}.tif".format(os.path.splitext(dem)[0])
-    low_res_dem = os.path.join(
-        os.path.dirname(low_res_dem),
-        os.path.basename(low_res_dem.replace("_{}m".format(args.src_resolution), "_{}m".format(args.tgt_resolution)))
+
+
+def get_dem_path_parts(raster, args, match=None):
+    ddir, dbaset = os.path.split(raster)
+    if not match:
+        match = dem.setsm_tile_pattern.match(dbaset)
+    if match:
+        groups = match.groupdict()
+        src_res = res_float_to_str(args.src_resolution)
+        release_version = '{}_'.format(groups['relversion']) if groups['relversion'] else ''
+        search_suffix = '{}_{}dem.tif'.format(src_res, release_version)
+        dbase = dbaset[:-1*len(search_suffix)]
+        len_subtile = len(groups['subtile'])+1 if groups['subtile'] else 0
+        sptbase = dbase[:-1*len_subtile]
+        return ddir, dbase, release_version, sptbase
+    else:
+        raise RuntimeError('Raster name does not match expected pattern: {}'.format(raster))
+
+
+def res_float_to_str(res):
+
+    if 0.5 < res < 1:
+        scale_factor = 100
+        units = 'cm'
+    elif 1 <= res < 1000:
+        scale_factor = 1
+        units = 'm'
+    elif 1000 <= res < 5000:
+        scale_factor = 1000
+        units = 'km'
+    else:
+        raise RuntimeError('Resolution falls outside allowed values: {}'.format(res))
+
+    return '{}{}'.format(int(res * scale_factor), units)
+
+
+def resample_setsm(task_src, args):
+
+    rasters = []
+    supertiles = {}
+    components = suffixes if args.component == 'all' else [args.component]
+    components = ['{}.tif'.format(c) for c in components] + ['meta.txt']
+    src_res = res_float_to_str(args.src_resolution)
+    tgt_res = res_float_to_str(args.tgt_resolution)
+    for root, dirs, files in wk.walk(task_src, maxdepth=args.depth):
+        for f in files:
+            match = dem.setsm_tile_pattern.match(f)
+            if match:
+                groups = match.groupdict()
+                if groups['res'] == res_float_to_str(args.src_resolution):
+                    rasters.append((os.path.join(root, f), match))
+
+    if len(rasters) > 0:
+        for raster, m in rasters:
+            ddir, dbase, release_version, sptbase = get_dem_path_parts(raster, args, match=m)
+
+            # Add raster to supertile list
+            sptpath = os.path.join(ddir, sptbase)
+            dpath = os.path.join(ddir, dbase)
+            if sptpath not in supertiles:
+                supertiles[sptpath] = []
+            ## Check if source and dst are the same
+            if sptpath != dpath:
+                supertiles[sptpath].append((dpath, release_version))
+            else:
+                logger.error("Cannot merge by tile: No subtiles found")
+
+            for component in components:
+                inputp = os.path.join(ddir, '{}{}_{}{}'.format(dbase, src_res, release_version, component))
+                output = os.path.join(ddir, '{}{}_{}{}'.format(dbase, tgt_res, release_version, component))
+                if not os.path.isfile(output) or args.overwrite:
+                    if component == 'meta.txt':
+                        build_meta([inputp], output, tgt_res, dbase.rstrip('_'), release_version, args)
+                    else:
+                        process_raster(inputp, output, component, args)
+
+        if args.merge_by_tile:
+            for sptpath in supertiles:
+                spt = os.path.basename(sptpath).rstrip('_')
+                for component in components:
+                    inputps = []
+                    for dpath, release_version in supertiles[sptpath]:
+                        inputp = '{}{}_{}{}'.format(dpath, tgt_res, release_version, component)
+                        output = '{}{}_{}{}'.format(sptpath, tgt_res, release_version, component)
+                        if os.path.isfile(inputp):
+                            inputps.append(inputp)
+                        else:
+                            raise RuntimeError('expected source file not found: {}'.format(inputp))
+                    if component == 'meta.txt':
+                        output = '{}{}_{}meta.txt'.format(sptpath, tgt_res, release_version)
+                        if not os.path.isfile(output) or args.overwrite:
+                            build_meta(inputps, output, tgt_res, spt, release_version, args, merge=True)
+                    elif not os.path.isfile(output) or args.overwrite:
+                        merge_rasters(inputps, output, component, args)
+
+                    ## Clean up
+                    if not args.dryrun:
+                        if os.path.isfile(output):
+                            for inputp in inputps:
+                                os.remove(inputp)
+                        else:
+                            logger.error("Output file not found, leaving temp file in place: {}".format(output))
+
+    logger.info("Done")
+
+
+def build_meta(metas, output_meta, tgt_res, tile_base, release_version, args, merge=False):
+
+    if len(metas) > 1 and not merge:
+        raise RuntimeError("Metadata builder was handed more than one source file without merge=True")
+
+    logger.info("Building metadata file: {}".format(tile_base))
+    tm = datetime.datetime.today()
+    dems = []
+    title = None
+    tile_blend_lines = []
+    for meta in metas:
+        with open(meta, 'r') as input_fh:
+            lines = input_fh.read().splitlines()
+            lines = [line.strip() for line in lines]
+            title = lines[0]
+
+            try:
+                i = lines.index('Adjacent Tile Blend Status')
+            except ValueError:
+                pass
+            else:
+                tile_blend_lines = lines[i:i+6]
+            i = lines.index('List of DEMs used in mosaic:')
+            dems.extend(lines[i+1:])
+
+    output_lines = [
+        title,
+        'Tile: {}_{}'.format(tile_base, tgt_res),
+        'Creation Date: {}'.format(tm.strftime('%d-%b-%Y %H:%M:%S')),
+        'Version: {}'.format(release_version.strip('v_')),
+        ''
+    ]
+    if not merge:
+        output_lines.extend(tile_blend_lines)
+
+    output_lines.append('List of DEMs used in mosaic:',)
+    dems = list(set(dems))
+    dems.sort()
+    output_lines.extend(dems)
+
+    if not args.dryrun:
+        with open(output_meta, 'w') as output_fh:
+            output_fh.write('\n'.join(output_lines))
+
+
+def merge_rasters(inputps, output, component, args):
+    if os.path.isfile(output) and args.overwrite:
+        os.remove(output)
+    if os.path.isfile(output):
+        logger.info("Merging files into {}".format(output))
+
+    resampling_method, ovr_resample, predictor = output_settings[component[:-4]] # remove .tif from component
+
+    vrt = output[:-4] + 'temp.vrt'
+    cmd = 'gdalbuildvrt {} {}'.format(vrt, ' '.join([i for i in inputps]))
+    if not args.dryrun:
+        taskhandler.exec_cmd(cmd)
+
+    if args.output_cogs:
+        cos = '-of COG -co compress=lzw -co bigtiff=yes -co overviews=IGNORE_EXISTING ' \
+              '-co compress=lzw -co predictor={} -co resampling={}'.format(predictor, ovr_resample)
+    else:
+        cos = '-of GTiff -co tiled=yes -co compress=lzw -co bigtiff=yes'
+
+    cmd = 'gdal_translate -q {} "{}" "{}"'.format(
+        cos, vrt, output
     )
-                    
-    if not os.path.isfile(low_res_dem) or args.overwrite is True:
+
+    if not args.dryrun:
+        taskhandler.exec_cmd(cmd)
+        os.remove(vrt)
+
+
+def process_raster(inputp, output, component, args):
+
+    if os.path.isfile(output) and args.overwrite:
+        os.remove(output)
+    if not os.path.isfile(output):
+        logger.info("Resampling {}".format(inputp))
+
         # Open src raster to determine extent.  Set -te so that -tap extent does not extend beyond the original
-        ds = gdal.Open(dem)
+        ds = gdal.Open(inputp)
         if ds:
             ulx, xres, xskew, uly, yskew, yres = ds.GetGeoTransform()
             lrx = ulx + (ds.RasterXSize * xres)
@@ -168,20 +393,23 @@ def resample_setsm(dem, args):
                 new_xmin, new_ymin, new_xmax, new_ymax
             )
 
-            logger.info("Resampling {}".format(dem))
-            #print low_res_dem
-            resampling_method = 'bilinear' if args.component == 'dem' else 'near'
-            cmd = 'gdalwarp -q -co tiled=yes -co compress=lzw -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
-                args.tgt_resolution, dem, low_res_dem, resampling_method, co_extent
+            resampling_method, ovr_resample, predictor = output_settings[component[:-4]]
+            if args.output_cogs:
+                cos = '-of COG -co tiled=yes -co compress=lzw -co bigtiff=yes -co overviews=IGNORE_EXISTING' \
+                      ' -co compress=lzw -co predictor={} -co resampling={}'.format(predictor, ovr_resample)
+            else:
+                cos = '-of GTiff -co tiled=yes -co compress=lzw -co bigtiff=yes'
+
+            cmd = 'gdalwarp -q {5} -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
+                args.tgt_resolution, inputp, output, resampling_method, co_extent, cos
             )
-            #print cmd
+
             if not args.dryrun:
                 taskhandler.exec_cmd(cmd)
         else:
-            logger.error("Cannot open {}".format(dem))
-    logger.info("Done")
-            
-        
+            logger.error("Cannot open {}".format(inputp))
+
+
 if __name__ == '__main__':
     main()
 
