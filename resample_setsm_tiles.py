@@ -128,15 +128,14 @@ def main():
             if args.overwrite:
                 dirs_to_run.append(ddir)
             if ddir not in dirs_to_run:
-                ## First check this raster output
-                ## TODO take out check for individual rasters if merge-by-tile is true
-                expected_outputs = [os.path.join(ddir, '{}{}_{}{}'.format(dbase, tgt_res, release_version, c))
-                                    for c in components]
-                ## Then check the merge raster
+                ## Check the merge raster
                 if args.merge_by_tile:
-                    expected_outputs.extend([
-                        os.path.join(ddir, '{}{}_{}{}'.format(sptbase, tgt_res, release_version, c))
-                        for c in components])
+                    expected_outputs = [os.path.join(ddir, '{}{}_{}{}'.format(sptbase, tgt_res, release_version, c))
+                                        for c in components]
+                ## Check the individual raster output
+                else:
+                    expected_outputs = [os.path.join(ddir, '{}{}_{}{}'.format(dbase, tgt_res, release_version, c))
+                                        for c in components]
 
                 # for f in expected_outputs:
                 #     if not os.path.isfile(f):
@@ -206,7 +205,8 @@ def get_dem_path_parts(raster, args, match=None):
         release_version = '{}_'.format(groups['relversion']) if groups['relversion'] else ''
         search_suffix = '{}_{}dem.tif'.format(src_res, release_version)
         dbase = dbaset[:-1*len(search_suffix)]
-        sptbase = dbase[:-1*(len(groups['subtile'])+1)]
+        len_subtile = len(groups['subtile'])+1 if groups['subtile'] else 0
+        sptbase = dbase[:-1*len_subtile]
         return ddir, dbase, release_version, sptbase
     else:
         raise RuntimeError('Raster name does not match expected pattern: {}'.format(raster))
@@ -287,8 +287,14 @@ def resample_setsm(task_src, args):
                             build_meta(inputps, output, tgt_res, spt, release_version, args, merge=True)
                     elif not os.path.isfile(output) or args.overwrite:
                         merge_rasters(inputps, output, component, args)
-                    ## TODO delete individual 10m after merge
 
+                    ## Clean up
+                    if not args.dryrun:
+                        if os.path.isfile(output):
+                            for inputp in inputps:
+                                os.remove(inputp)
+                        else:
+                            logger.error("Output file not found, leaving temp file in place: {}".format(output))
 
     logger.info("Done")
 
@@ -309,8 +315,12 @@ def build_meta(metas, output_meta, tgt_res, tile_base, release_version, args, me
             lines = [line.strip() for line in lines]
             title = lines[0]
 
-            i = lines.index('Adjacent Tile Blend Status')
-            tile_blend_lines = lines[i:i+6]
+            try:
+                i = lines.index('Adjacent Tile Blend Status')
+            except ValueError:
+                pass
+            else:
+                tile_blend_lines = lines[i:i+6]
             i = lines.index('List of DEMs used in mosaic:')
             dems.extend(lines[i+1:])
 
@@ -348,7 +358,7 @@ def merge_rasters(inputps, output, component, args):
         taskhandler.exec_cmd(cmd)
 
     if args.output_cogs:
-        cos = '-of COG -co tiled=yes -co compress=lzw -co bigtiff=yes -co overviews=IGNORE_EXISTING ' \
+        cos = '-of COG -co compress=lzw -co bigtiff=yes -co overviews=IGNORE_EXISTING ' \
               '-co compress=lzw -co predictor={} -co resampling={}'.format(predictor, ovr_resample)
     else:
         cos = '-of GTiff -co tiled=yes -co compress=lzw -co bigtiff=yes'
