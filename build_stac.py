@@ -7,6 +7,8 @@ import argparse
 import json
 from lib import utils, dem, taskhandler
 
+import pystac
+
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -95,6 +97,10 @@ def main():
                     logger.info('Writing '+stac_item_geojson_path)
                     f.write(stac_item_json)
             
+            # validate stac item
+            pystac_item = pystac.Item.from_file(stac_item_geojson_path)
+            for i in pystac_item.validate():
+                print(i)
 
 
 def build_stac_item(raster):
@@ -183,43 +189,43 @@ def build_stac_item(raster):
             },
 
             ],
-        "assets": [
-            {
+        "assets": {
+            "hillshade": {
                 "title": "10m hillshade",
                 "href": "./"+raster.stripid+"_dem_10m_shade.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized"
             },
-            {
+            "hillshade_masked": {
                 "title": "Masked 10m hillshade",
                 "href": "./"+raster.stripid+"_dem_10m_shade_masked.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized"
             },
-            {
+            "dem": {
                 "title": "2m DEM",
                 "href": "./"+raster.stripid+"_dem.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized"
             },
-            {
+            "mask": {
                 "title": "Valid data mask",
                 "href": "./"+raster.stripid+"_bitmask.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized"
             },
-            {
+            "matchtag": {
                 "title": "Match point mask",
                 "href": "./"+raster.stripid+"_matchtag.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized"
             },
-            {
+            "metadata": {
                 "title": "Metadata",
                 "href": "./"+raster.stripid+".mdf.txt",
                 "type": "text/plain"
             },
-            {
+            "readme": {
                 "title": "Readme",
                 "href": "./"+raster.stripid+"_readme.txt",
                 "type": "text/plain"
             }
-            ],
+        },
             # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
             # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
