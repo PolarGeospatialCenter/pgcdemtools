@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
-import datetime
-from osgeo import gdal, osr, ogr, gdalconst
 import argparse
+import datetime
 import json
-from lib import utils, dem, taskhandler
+import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
+import pathlib
 
-import pystac
+from osgeo import gdal, osr, ogr, gdalconst
+
+from lib import utils, dem, taskhandler
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -27,7 +28,10 @@ def main():
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing stac item json")
-
+    parser.add_argument('--validate', action='store_true', default=False,
+                        help="validate stac item json")
+    parser.add_argument('--stac-base-dir', help="base directory to write stac JSON files, otherwise write next to images")
+    parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
@@ -37,6 +41,9 @@ def main():
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
 
+    if args.validate:
+        import pystac
+        
     ## Setup Logging options
     if args.v:
         log_level = logging.DEBUG
@@ -87,23 +94,29 @@ def main():
             j+=1
             utils.progress(j, total, "DEMs identified")
 
-            stac_item = build_stac_item(raster)
+            stac_item = build_stac_item(args.stac_base_url, raster)
             stac_item_json = json.dumps(stac_item, indent=2, sort_keys=False)
             #logger.debug(stac_item_json)
 
-            stac_item_geojson_path = raster.srcfp.replace("_dem.tif", ".json")
+            if args.stac_base_dir:
+                stac_item_geojson_path = stac_item["links"][3]["href"].replace(args.stac_base_url, args.stac_base_dir)
+                pathlib.Path(stac_item_geojson_path).parent.mkdir(parents=True, exist_ok=True)
+            else:    
+                stac_item_geojson_path = raster.srcfp.replace("_dem.tif", ".json")
+                
             if not os.path.exists(stac_item_geojson_path) or args.overwrite:
                 with open(stac_item_geojson_path, "w") as f:
                     logger.info('Writing '+stac_item_geojson_path)
                     f.write(stac_item_json)
             
             # validate stac item
-            pystac_item = pystac.Item.from_file(stac_item_geojson_path)
-            for i in pystac_item.validate():
-                print(i)
+            if args.validate:
+                pystac_item = pystac.Item.from_file(stac_item_geojson_path)
+                for i in pystac_item.validate():
+                    print(i)
 
 
-def build_stac_item(raster):
+def build_stac_item(base_url, raster):
     # move to collection
     # "providers": [
     #     {
@@ -119,6 +132,9 @@ def build_stac_item(raster):
     #         "url": "https://pgc.umn.edu"
     #         }
     #     ],
+
+    #base_url = "s3://pgc-opendata-dems"
+    #base_url = "https://pgc-opendata-dems.s3.us-west-2.amazonaws.com"
 
     collection_name = f'rema-strips-{raster.release_version}-{raster.res_str}'
 
@@ -167,13 +183,13 @@ def build_stac_item(raster):
             {
                 "rel": "root",
                 "title": "PGC Data Catalog",
-                "href": "s3://pgc-opendata-dems/pgc-data-stac.json",
+                "href": f"{base_url}/pgc-data-stac.json",
                 "type": "application/json"
             },
             {
                 "rel": "collection",
                 "title": f"REMA 2m DEM Strips, version {raster.release_version}",
-                "href": f"s3://pgc-opendata-dems/rema/strips/{raster.release_version}/{raster.res_str}/{collection_name}.json",
+                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}/{collection_name}.json",
                 "type": "application/json"
             },
             {
@@ -184,7 +200,7 @@ def build_stac_item(raster):
             },
             {
                 "rel": "self",
-                "href": f"s3://pgc-opendata-dems/rema/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
+                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
                 "type": "application/geo+json"
             },
 
