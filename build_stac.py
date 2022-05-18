@@ -194,7 +194,7 @@ def build_stac_item(base_url, raster):
             {
                 "rel": "collection",
                 "title": f"REMA 2m DEM Strips, version {raster.release_version}",
-                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}/{collection_name}.json",
+                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}.json",
                 "type": "application/json"
             },
             {
@@ -208,37 +208,45 @@ def build_stac_item(base_url, raster):
             "hillshade": {
                 "title": "10m hillshade",
                 "href": "./"+raster.stripid+"_dem_10m_shade.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "overview", "visual" ]
+                
             },
             "hillshade_masked": {
                 "title": "Masked 10m hillshade",
                 "href": "./"+raster.stripid+"_dem_10m_shade_masked.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "overview", "visual" ],
             },
             "dem": {
                 "title": "2m DEM",
                 "href": "./"+raster.stripid+"_dem.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "data" ]
             },
             "mask": {
                 "title": "Valid data mask",
                 "href": "./"+raster.stripid+"_bitmask.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "data-mask", "land-water", "water-mask", "cloud" ]
             },
             "matchtag": {
                 "title": "Match point mask",
                 "href": "./"+raster.stripid+"_matchtag.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized"
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "matchtag" ]
             },
             "metadata": {
                 "title": "Metadata",
                 "href": "./"+raster.stripid+".mdf.txt",
-                "type": "text/plain"
+                "type": "text/plain",
+                "roles": [ "metadata" ]
             },
             "readme": {
                 "title": "Readme",
                 "href": "./"+raster.stripid+"_readme.txt",
-                "type": "text/plain"
+                "type": "text/plain",
+                "roles": [ "metadata" ]
             }
         },
             # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)

@@ -10,6 +10,13 @@ from osgeo import gdal, osr, ogr, gdalconst
 
 from lib import utils, dem, taskhandler
 
+DOMAIN_TITLES = {
+    "arcticdem": "ArcticDEM",
+    "earthdem": "EarthDEM",
+    "rema": "REMA"
+}
+
+
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -127,8 +134,6 @@ def main():
 
         pgc_catalog[stac_domain_collection_id][stac_kind_collection_id][stac_version_collection_id][stac_resolution_collection_id][stac_geocell_catalog_id][stac_item_id] = stac_item
         
-        logger.info(stac_domain_collection_dir)
-
     #print(json.dumps(pgc_catalog))
 
     # Collate/roll-up PGC catalog levels and create STAC JSON items
@@ -174,7 +179,6 @@ def main():
                         write_json(geocell_catalog, geocell_catalog_path, args.overwrite)
                         stac_add_child(args.stac_base_url, resolution_collection, geocell_catalog)
                     # end geocell    
-
                     version_bbox = merge_bbox(version_bbox, resolution_bbox)
                     version_mindate = min(version_mindate, resolution_mindate)
 
@@ -216,12 +220,12 @@ def main():
 
 
 def merge_bbox(bbox1, bbox2):
-    # note compare with both min and max values for bbox lon in case spanning 180
+    # note compare with both min and max values for bbox of upstream lon in case spanning 180
     return [
-        min(bbox1[0], bbox1[2], bbox2[0], bbox2[2]),
-        min(bbox1[1], bbox1[3], bbox2[1], bbox2[3]),
-        max(bbox1[0], bbox1[2], bbox2[0], bbox2[2]),
-        max(bbox1[1], bbox1[3], bbox2[1], bbox2[3])
+        min(bbox1[0], bbox2[0], bbox2[2]),
+        min(bbox1[1], bbox2[1]),
+        max(bbox1[2], bbox2[0], bbox2[2]),
+        max(bbox1[3], bbox2[3])
         ]
 
 
@@ -300,7 +304,7 @@ def stac_domain_collection(base_url, domain):
         "type": "Collection",
         "stac_version": "1.0.0",
         "id": id,
-        "title": domain,
+        "title": DOMAIN_TITLES[domain],
         "description": f"{domain} digital elevation models",
         "license": "CC-BY-4.0",
         "providers": [
@@ -328,7 +332,7 @@ def stac_domain_collection(base_url, domain):
         "links": [
             {
                 "rel": "self",
-                "title": domain,
+                "title": DOMAIN_TITLES[domain],
                 "href": f"{base_url}/{id}.json",
                 "type": "application/json"
             },
@@ -351,15 +355,17 @@ def stac_domain_collection(base_url, domain):
 
 # strips, mosaic
 def stac_kind_collection(base_url, domain, kind):
-    id = f"{domain['id']}-{kind}"
+    id = kind.lower()
+    title = f"{domain['title']} {kind.split('-')[-1]}"
     domain_self = stac_get_self_link(domain)
     
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
         "id": id,
-        "title": f"{domain['title']} {kind}",
-        "description": f"{domain['title']} {kind} digital elevation models",
+        "title": title,
+        "description": f"{kind} digital elevation models",
+        "license": "CC-BY-4.0",
         "providers": [
             {
                 "name": "maxar",
@@ -385,8 +391,8 @@ def stac_kind_collection(base_url, domain, kind):
         "links": [
             {
                 "rel": "self",
-                "title": f"{domain['title']} {kind}",
-                "href": f"{domain_self['href']}/{id}.json",
+                "title": title,
+                "href": f"{base_url}/{id.replace('-','/')}.json",
                 "type": "application/json"
             },
             {
@@ -408,15 +414,17 @@ def stac_kind_collection(base_url, domain, kind):
 
 # s2s041
 def stac_version_collection(base_url, kind, version):
-    id = f"{kind['id']}-{version}"
+    id = version.lower()
+    title = f"{kind['title']} {version.split('-')[-1]}"
     kind_self = stac_get_self_link(kind)
     
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
         "id": id,
-        "title": f"{kind['title']} {version}",
-        "description": f"{kind['title']} {version} digital elevation models",
+        "title": title,
+        "description": f"{version} digital elevation models",
+        "license": "CC-BY-4.0",
         "providers": [
             {
                 "name": "maxar",
@@ -442,8 +450,8 @@ def stac_version_collection(base_url, kind, version):
         "links": [
             {
                 "rel": "self",
-                "title": f"{kind['title']} {version}",
-                "href": f"{kind_self['href']}/{id}.json",
+                "title": title,
+                "href": f"{base_url}/{id.replace('-','/')}.json",
                 "type": "application/json"
             },
             {
@@ -465,15 +473,17 @@ def stac_version_collection(base_url, kind, version):
 
 # 2m
 def stac_resolution_collection(base_url, version, resolution):
-    id = f"{version['id']}-{resolution}"
+    id = resolution.lower()
+    title = f"{version['title']} {resolution.split('-')[-1]}"
     version_self = stac_get_self_link(version)
     
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
         "id": id,
-        "title": f"{version['title']} {resolution}",
-        "description": f"{version['title']} {resolution} digital elevation models",
+        "title": title,
+        "description": f"{resolution} digital elevation models",
+        "license": "CC-BY-4.0",
         "providers": [
             {
                 "name": "maxar",
@@ -499,8 +509,8 @@ def stac_resolution_collection(base_url, version, resolution):
         "links": [
             {
                 "rel": "self",
-                "title": f"{version['title']} {resolution}",
-                "href": f"{version_self['href']}/{id}.json",
+                "title": title,
+                "href": f"{base_url}/{id.replace('-','/')}.json",
                 "type": "application/json"
             },
             {
@@ -521,20 +531,22 @@ def stac_resolution_collection(base_url, version, resolution):
 
 # n67w132
 def stac_geocell_catalog(base_url, resolution, geocell):
-    id = f"{resolution['id']}-{geocell}"
+    id = geocell.lower()
+    title = f"{resolution['title']} {geocell.split('-')[-1]}"
     resolution_self = stac_get_self_link(resolution)
     
     collection = {
         "type": "Catalog",
         "stac_version": "1.0.0",
         "id": id,
-        "title": f"{resolution['title']} {geocell}",
-        "description": f"{resolution['title']} {geocell} digital elevation models",
+        "title": title,
+        "description": f"{geocell} digital elevation models",
+        "license": "CC-BY-4.0",
         "links": [
             {
                 "rel": "self",
-                "title": f"{resolution['title']} {geocell}",
-                "href": f"{resolution_self['href']}/{id}.json",
+                "title": title,
+                "href": f"{base_url}/{id.replace('-','/')}.json",
                 "type": "application/json"
             },
             {
