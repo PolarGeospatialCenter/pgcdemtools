@@ -99,7 +99,7 @@ def main():
             #logger.debug(stac_item_json)
 
             if args.stac_base_dir:
-                stac_item_geojson_path = stac_item["links"][3]["href"].replace(args.stac_base_url, args.stac_base_dir)
+                stac_item_geojson_path = stac_item["links"][0]["href"].replace(args.stac_base_url, args.stac_base_dir)
                 pathlib.Path(stac_item_geojson_path).parent.mkdir(parents=True, exist_ok=True)
             else:    
                 stac_item_geojson_path = raster.srcfp.replace("_dem.tif", ".json")
@@ -151,7 +151,7 @@ def build_stac_item(base_url, raster):
             "created": raster.creation_date.strftime("%Y-%m-%dT%H:%M:%SZ"), # are these actually in UTC, does it matter?
             "published": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), # now?
             "datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # this is only needed if start_datetime/end_datetime are not specified
-            "start_datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "start_datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # TODO may need to min/max these to know right order
             "end_datetime": raster.avg_acqtime2.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "instruments": [ raster.sensor1, raster.sensor2 ],
             "constellation": "maxar",
@@ -181,9 +181,14 @@ def build_stac_item(base_url, raster):
             },
         "links": [
             {
-                "rel": "root",
-                "title": "PGC Data Catalog",
-                "href": f"{base_url}/pgc-data-stac.json",
+                "rel": "self",
+                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
+                "type": "application/geo+json"
+            },
+            {
+                "rel": "parent",
+                "title": f"Geocell {raster.geocell}",
+                "href": f"../{raster.geocell}.json",
                 "type": "application/json"
             },
             {
@@ -193,17 +198,11 @@ def build_stac_item(base_url, raster):
                 "type": "application/json"
             },
             {
-                "rel": "parent",
-                "title": f"Geocell {raster.geocell}",
-                "href": f"../{raster.geocell}.json",
+                "rel": "root",
+                "title": "PGC Data Catalog",
+                "href": f"{base_url}/pgc-data-stac.json",
                 "type": "application/json"
-            },
-            {
-                "rel": "self",
-                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
-                "type": "application/geo+json"
-            },
-
+            }
             ],
         "assets": {
             "hillshade": {
