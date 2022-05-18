@@ -110,6 +110,12 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (reg_)?
                                    dem\.tif\Z""", re.I| re.X)
 
+setsm_pairname_pattern = re.compile("""(?P<pairname>
+                                       (?P<sensor>[A-Z]{2}\d{2})_
+                                       (?P<timestamp>\d{8})_
+                                       (?P<catid1>[A-Z0-9]{16})_
+                                       (?P<catid2>[A-Z0-9]{16}))""", re.I | re.X)
+
 xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
 s2s_version_pattern = re.compile("Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
 
@@ -1613,6 +1619,7 @@ class SetsmTile(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
+            self.pairname_ids = self._get_pairname_ids_from_component_list(self.component_list)
 
         else:
             self.srcfp = srcfp
@@ -1625,6 +1632,7 @@ class SetsmTile(object):
                 name_base = self.tileid
 
             self.id = self.tileid
+            self.pairname_ids = None
 
             self.matchtag = os.path.join(self.srcdir,name_base + '_matchtag.tif')
             if not os.path.isfile(self.matchtag):
@@ -1806,6 +1814,7 @@ class SetsmTile(object):
         metad = self._parse_metadata_file()
         self.alignment_dct = metad['alignment_dct']
         self.component_list = metad['component_list']
+        self.pairname_ids = self._get_pairname_ids_from_component_list(self.component_list)
 
         if 'Creation Date' in metad:
             self.creation_date = datetime.strptime(metad['Creation Date'],"%d-%b-%Y %H:%M:%S")
@@ -1911,6 +1920,7 @@ class SetsmTile(object):
 
     key_attribs = (
         'alignment_dct',
+        'component_list',
         'archive',
         'bands',
         'browse',
@@ -1950,6 +1960,16 @@ class SetsmTile(object):
         # 'sum_gcps',
     )
 
+    def _get_pairname_ids_from_component_list(self, component_list):
+        pairname_ids = []
+        for component in component_list:
+            match = setsm_pairname_pattern.match(component)
+            if match:
+                groups = match.groupdict()
+                pairname_ids.append(groups['pairname'])
+            else:
+                raise RuntimeError("Failed to parse pairname from tile meta strip component: {}".format(component))
+        return pairname_ids
 
 class RegInfo(object):
 
