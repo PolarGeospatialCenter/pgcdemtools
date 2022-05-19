@@ -38,7 +38,7 @@ def main():
                         help="validate stac item json")
     parser.add_argument('--stac-base-dir', help="base directory to write stac JSON files, otherwise write next to images")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
-    parser.add_argument('--domain', help="PGC Domain (arcticdem,earthdem,rema)")
+    parser.add_argument('--domain', help="PGC Domain (arcticdem,earthdem,rema)", required=True, choices=DOMAIN_TITLES.keys())
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
