@@ -245,8 +245,7 @@ def build_stac_item(base_url, domain, raster):
             # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
             # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-            # Note: need to import doesCrosses180 from setsm-submit-bw/pgc-standalone-overlaps-selector
-            "geometry": json.loads(wrap_180(raster.get_geom_wgs84()).ExportToJson())
+            "geometry": json.loads(utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson())
         }
 
     return stac_item
@@ -276,88 +275,6 @@ def get_geojson_bbox(src_geom):
 
     return [ minx, miny, maxx, maxy ]
 
-
-def wrap_180(src_geom):
-
-    ## create 2 point lists for west component and east component
-    west_points = []
-    east_points = []
-
-    ## for each point in geom except final point
-    ring  = src_geom.GetGeometryRef(0)  #### assumes a 1 part polygon
-    for i in range(0, ring.GetPointCount()-1):
-        pt1 = ring.GetPoint(i)
-        pt2 = ring.GetPoint(i+1)
-
-        ## test if point is > or < 0 and add to correct bin
-        if pt1[0] < 0:
-            west_points.append(pt1)
-        else:
-            east_points.append(pt1)
-
-        ## test if segment to next point crosses 180 (x is opposite sign)
-        if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
-
-            ## if segment crosses,calculate interesection point y value
-            pt3_y = calc_y_intersection_180(pt1, pt2)
-
-            ## add intersection point to both bins (make sureot change 180 to -180 for western list)
-            pt3_west = ( -180, pt3_y )
-            pt3_east = ( 180, pt3_y )
-
-            west_points.append(pt3_west)
-            east_points.append(pt3_east)
-
-
-    #print "west", len(west_points)
-    #for pt in west_points:
-    #    print pt[0], pt[1]
-    #
-    #print "east", len(east_points)
-    #for pt in east_points:
-    #    print pt[0], pt[1]
-
-    ## cat point lists to make multipolygon(remember to add 1st point to the end)
-    geom_multipoly = ogr.Geometry(ogr.wkbMultiPolygon)
-
-    for ring_points in west_points, east_points:
-        if len(ring_points) > 0:
-            poly = ogr.Geometry(ogr.wkbPolygon)
-            ring = ogr.Geometry(ogr.wkbLinearRing)
-
-            for pt in ring_points:
-                ring.AddPoint(pt[0],pt[1])
-
-            ring.AddPoint(ring_points[0][0],ring_points[0][1])
-
-            poly.AddGeometry(ring)
-            geom_multipoly.AddGeometry(poly)
-            del poly
-            del ring
-
-    #print geom_multipoly
-    return geom_multipoly
-
-
-def calc_y_intersection_180(pt1, pt2):
-
-    # add 360 to all x coords < 0
-    if pt1[0] < 0:
-        pt1_x = pt1[0] + 360
-    else:
-        pt1_x = pt1[0]
-
-    if pt2[0] < 0:
-        pt2_x = pt2[0] + 360
-    else:
-        pt2_x = pt2[0]
-
-    rise = pt2[1] - pt1[1]
-    run = pt2_x - pt1_x
-    run_prime = 180.0 - pt1_x
-    pt3_y = ((run_prime * rise) / run) + pt1[1]
-
-    return pt3_y
 
 
 if __name__ == '__main__':
