@@ -511,13 +511,13 @@ class SetsmDem(object):
                 elif type(getattr(self, a)) is str:
                     setattr(self, a, float(getattr(self, a)))
             if 'avg_acqtime1' not in md:
-                self.set_acqtime_attribs()
+                self._set_acqtime_attribs()
             if 'rmse' not in md:
-                self.set_rmse_attrib()
+                self._set_rmse_attrib()
             if self.rmse == -2:
                 self.rmse = -9999
-            self.set_density_and_stats_attribs()
-            self.set_group_attribs_from_scenes()
+            self._set_density_and_stats_attribs()
+            self._set_group_attribs_from_scenes()
 
         else:
             self.srcfp = filepath
@@ -823,13 +823,13 @@ class SetsmDem(object):
                 self.algm_version_key = semver2verkey(group_version)
 
             ## get scene coregistration rmse
-            self.set_rmse_attrib()
+            self._set_rmse_attrib()
 
             ## get acqdates and acqtimes
-            self.set_acqtime_attribs()
+            self._set_acqtime_attribs()
 
             ## get averages from scene attribs
-            self.set_group_attribs_from_scenes()
+            self._set_group_attribs_from_scenes()
 
             ## get sensors
             values = []
@@ -973,7 +973,7 @@ class SetsmDem(object):
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM: {}".format(self.srcfp))
 
         #### If density file exists, get density and stats from there
-        self.set_density_and_stats_attribs()
+        self._set_density_and_stats_attribs()
 
         #### If reg.txt file exists, parse it for registration info
         if len(self.reginfo_list) == 0:
@@ -996,7 +996,7 @@ class SetsmDem(object):
                     # logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
                     fh.close()
 
-    def set_group_attribs_from_scenes(self):
+    def _set_group_attribs_from_scenes(self):
         needed_attribs = (
             self.avg_conv_angle, self.avg_exp_height_acc,
             self.avg_sun_el1, self.avg_sun_el2
@@ -1025,7 +1025,7 @@ class SetsmDem(object):
             if len(sun_els2) > 0:
                 self.avg_sun_el2 = numpy.mean(numpy.array(sun_els2))
 
-    def set_rmse_attrib(self):
+    def _set_rmse_attrib(self):
         values = []
         for scene_name, align_stats in self.alignment_dct.items():
             scene_rmse = align_stats[0]
@@ -1038,7 +1038,7 @@ class SetsmDem(object):
         else:
             self.rmse = -1
 
-    def set_acqtime_attribs(self):
+    def _set_acqtime_attribs(self):
         values = []
         for x in range(len(self.scenes)):
             acqtime_str = None
@@ -1081,7 +1081,7 @@ class SetsmDem(object):
             self.acqdate2 = values[0]
             self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
-    def set_density_and_stats_attribs(self):
+    def _set_density_and_stats_attribs(self):
         needed_attribs = (self.masked_density, self.max_elev_value, self.min_elev_value)
         if any([a is None for a in needed_attribs]):
             if os.path.isfile(self.density_file):
