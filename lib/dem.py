@@ -1619,7 +1619,7 @@ class SetsmTile(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
-            self.pairname_ids = self._get_pairname_ids_from_component_list(self.component_list)
+            self._set_component_attribs()
 
         else:
             self.srcfp = srcfp
@@ -1632,7 +1632,6 @@ class SetsmTile(object):
                 name_base = self.tileid
 
             self.id = self.tileid
-            self.pairname_ids = None
 
             self.matchtag = os.path.join(self.srcdir,name_base + '_matchtag.tif')
             if not os.path.isfile(self.matchtag):
@@ -1652,6 +1651,10 @@ class SetsmTile(object):
                 self.browse = os.path.join(self.srcdir,name_base + '_browse.tif')
 
             self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
+            
+            self.pairname_ids = None
+            self.acqdate_min = None
+            self.acqdate_max = None
 
             match = setsm_tile_pattern.match(self.srcfn)
             if match:
@@ -1814,7 +1817,7 @@ class SetsmTile(object):
         metad = self._parse_metadata_file()
         self.alignment_dct = metad['alignment_dct']
         self.component_list = metad['component_list']
-        self.pairname_ids = self._get_pairname_ids_from_component_list(self.component_list)
+        self._set_component_attribs()
 
         if 'Creation Date' in metad:
             self.creation_date = datetime.strptime(metad['Creation Date'],"%d-%b-%Y %H:%M:%S")
@@ -1920,10 +1923,12 @@ class SetsmTile(object):
 
     key_attribs = (
         'alignment_dct',
-        'component_list',
+        'acqdate_min',
+        'acqdate_max',
         'archive',
         'bands',
         'browse',
+        'component_list',
         'creation_date',
         'datatype',
         'datatype_readable',
@@ -1960,16 +1965,27 @@ class SetsmTile(object):
         # 'sum_gcps',
     )
 
-    def _get_pairname_ids_from_component_list(self, component_list):
+    def _set_component_attribs(self):
         pairname_ids = []
-        for component in component_list:
+        acqdate_min = None
+        acqdate_max = None
+
+        for component in self.component_list:
             match = setsm_pairname_pattern.match(component)
             if match:
                 groups = match.groupdict()
                 pairname_ids.append(groups['pairname'])
+                acqdate = datetime.strptime(groups['timestamp'], '%Y%m%d')
+                if acqdate_min is None or acqdate < acqdate_min:
+                    acqdate_min = acqdate
+                if acqdate_max is None or acqdate > acqdate_max:
+                    acqdate_max = acqdate
             else:
                 raise RuntimeError("Failed to parse pairname from tile meta strip component: {}".format(component))
-        return pairname_ids
+
+        self.pairname_ids = pairname_ids
+        self.acqdate_min = acqdate_min
+        self.acqdate_max = acqdate_max
 
 class RegInfo(object):
 
