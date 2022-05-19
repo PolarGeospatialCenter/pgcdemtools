@@ -10,6 +10,12 @@ from osgeo import gdal, osr, ogr, gdalconst
 
 from lib import utils, dem, taskhandler
 
+DOMAIN_TITLES = {
+    "arcticdem": "ArcticDEM",
+    "earthdem": "EarthDEM",
+    "rema": "REMA"
+}
+
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
@@ -32,6 +38,7 @@ def main():
                         help="validate stac item json")
     parser.add_argument('--stac-base-dir', help="base directory to write stac JSON files, otherwise write next to images")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
+    parser.add_argument('--domain', help="PGC Domain (arcticdem,earthdem,rema)")
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
@@ -41,6 +48,9 @@ def main():
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
 
+    if not args.domain in DOMAIN_TITLES:
+        parser.error("Domain must be one of: " + ", ".join(DOMAIN_TITLES.keys()))
+        
     if args.validate:
         import pystac
         
@@ -94,7 +104,7 @@ def main():
             j+=1
             utils.progress(j, total, "DEMs identified")
 
-            stac_item = build_stac_item(args.stac_base_url, raster)
+            stac_item = build_stac_item(args.stac_base_url, args.domain, raster)
             stac_item_json = json.dumps(stac_item, indent=2, sort_keys=False)
             #logger.debug(stac_item_json)
 
@@ -116,27 +126,9 @@ def main():
                     print(i)
 
 
-def build_stac_item(base_url, raster):
-    # move to collection
-    # "providers": [
-    #     {
-    #         "name": "maxar",
-    #         "description": "Maxar/Digital Globe",
-    #         "roles": ["producer"],
-    #         "url": "https://www.maxar.com"
-    #         },
-    #     {
-    #         "name": "pgc",
-    #         "description": "Polar Geospatial Center",
-    #         "roles": ["processor"],
-    #         "url": "https://pgc.umn.edu"
-    #         }
-    #     ],
-
-    #base_url = "s3://pgc-opendata-dems"
-    #base_url = "https://pgc-opendata-dems.s3.us-west-2.amazonaws.com"
-
-    collection_name = f'rema-strips-{raster.release_version}-{raster.res_str}'
+def build_stac_item(base_url, domain, raster):
+    collection_name = f'{domain}-strips-{raster.release_version}-{raster.res_str}'
+    domain_title = DOMAIN_TITLES[domain]
 
     stac_item = {
         "type": "Feature",
@@ -182,7 +174,7 @@ def build_stac_item(base_url, raster):
         "links": [
             {
                 "rel": "self",
-                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
+                "href": f"{base_url}/{domain}/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
                 "type": "application/geo+json"
             },
             {
@@ -193,8 +185,8 @@ def build_stac_item(base_url, raster):
             },
             {
                 "rel": "collection",
-                "title": f"REMA 2m DEM Strips, version {raster.release_version}",
-                "href": f"{base_url}/rema/strips/{raster.release_version}/{raster.res_str}.json",
+                "title": f"{domain_title} 2m DEM Strips, version {raster.release_version}",
+                "href": f"{base_url}/{domain}/strips/{raster.release_version}/{raster.res_str}.json",
                 "type": "application/json"
             },
             {
