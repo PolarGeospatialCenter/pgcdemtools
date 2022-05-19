@@ -307,7 +307,7 @@ def wrap_180(src_geom):
         if (pt1[0] > 0) - (pt1[0] < 0) != (pt2[0] > 0) - (pt2[0] < 0):
 
             ## if segment crosses,calculate interesection point y value
-            pt3_y = utils.calc_y_intersection_180(pt1, pt2)
+            pt3_y = calc_y_intersection_180(pt1, pt2)
 
             ## add intersection point to both bins (make sureot change 180 to -180 for western list)
             pt3_west = ( -180, pt3_y )
@@ -345,6 +345,27 @@ def wrap_180(src_geom):
 
     #print geom_multipoly
     return geom_multipoly
+
+
+def calc_y_intersection_180(pt1, pt2):
+
+    # add 360 to all x coords < 0
+    if pt1[0] < 0:
+        pt1_x = pt1[0] + 360
+    else:
+        pt1_x = pt1[0]
+
+    if pt2[0] < 0:
+        pt2_x = pt2[0] + 360
+    else:
+        pt2_x = pt2[0]
+
+    rise = pt2[1] - pt1[1]
+    run = pt2_x - pt1_x
+    run_prime = 180.0 - pt1_x
+    pt3_y = ((run_prime * rise) / run) + pt1[1]
+
+    return pt3_y
 
 
 if __name__ == '__main__':

@@ -85,7 +85,8 @@ def main():
 
     # Collect ID Tree
     pgc_catalog = { }
-  
+    
+    item_paths.sort() # this should also keep the order of links/assets in the catalog sorted
     for ip in item_paths:
         j+=1
         utils.progress(j, total, "STAC Items identified")
