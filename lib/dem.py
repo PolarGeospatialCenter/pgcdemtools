@@ -1619,7 +1619,6 @@ class SetsmTile(object):
         ## If md dictionary is passed in, recreate object from dict instead of from file location
         if md:
             self._rebuild_scene_from_dict(md)
-            self._set_component_attribs()
 
         else:
             self.srcfp = srcfp
@@ -1944,6 +1943,7 @@ class SetsmTile(object):
         'ndv',
         'num_components',
         'ortho',
+        'pairname_ids',
         'proj',
         'proj4',
         'regmetapath',
