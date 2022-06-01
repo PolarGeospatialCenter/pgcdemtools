@@ -88,23 +88,34 @@ def main():
                     scene_paths.append(srcfp)
 
     else:
-        logger.error("src must be a directory, a strip dem, or a text file")
+        logger.error("src must be a directory")
 
+    scene_paths.sort() # not strictly necessary, but makes logs easier to read
     logger.info('Reading rasters')
     j = 0
     total = len(scene_paths)
     scenes = []
     for sp in scene_paths:
         try:
-            raster = dem.SetsmDem(sp)
-            raster.get_dem_info()
+            if pathlib.Path(sp).name.startswith('SETSM_'):
+                # assume sp is a SETSM strip
+                raster = dem.SetsmDem(sp)
+                raster.get_dem_info()
+            
+                stac_item = build_strip_stac_item(args.stac_base_url, args.domain, raster)
+            else:
+                # assume sp is a mosaic tile
+                raster = dem.SetsmTile(sp)
+                raster.get_dem_info()
+
+                stac_item = build_mosaic_stac_item(args.stac_base_url, args.domain, raster)
+
         except RuntimeError as e:
-            logger.error( e )
+            logger.error( f'{e} while processing {sp}' )
         else:
             j+=1
             utils.progress(j, total, "DEMs identified")
 
-            stac_item = build_stac_item(args.stac_base_url, args.domain, raster)
             stac_item_json = json.dumps(stac_item, indent=2, sort_keys=False)
             #logger.debug(stac_item_json)
 
@@ -116,7 +127,7 @@ def main():
                 
             if not os.path.exists(stac_item_geojson_path) or args.overwrite:
                 with open(stac_item_geojson_path, "w") as f:
-                    logger.info('Writing '+stac_item_geojson_path)
+                    logger.debug('Writing '+stac_item_geojson_path)
                     f.write(stac_item_json)
             
             # validate stac item
@@ -126,7 +137,7 @@ def main():
                     print(i)
 
 
-def build_stac_item(base_url, domain, raster):
+def build_strip_stac_item(base_url, domain, raster):
     collection_name = f'{domain}-strips-{raster.release_version}-{raster.res_str}'
     domain_title = DOMAIN_TITLES[domain]
 
@@ -142,7 +153,7 @@ def build_stac_item(base_url, domain, raster):
             "description": "Imagine you are a bowl of petunias falling from a great height.  This tells you how far you can fall before saying 'hello ground'.",
             "created": raster.creation_date.strftime("%Y-%m-%dT%H:%M:%SZ"), # are these actually in UTC, does it matter?
             "published": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), # now?
-            "datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # this is only needed if start_datetime/end_datetime are not specified
+            "datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # TODO may need to min/max these to know right order
             "end_datetime": raster.avg_acqtime2.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "instruments": [ raster.sensor1, raster.sensor2 ],
@@ -168,7 +179,7 @@ def build_stac_item(base_url, domain, raster):
             "pgc:valid_area_sqkm": raster.valid_area,
             "pgc:avg_convergence_angle": raster.avg_conv_angle,
             "pgc:avg_expected_height_accuracy": raster.avg_exp_height_acc,
-           "pgc:avg_sun_elevs": [ raster.avg_sun_el1, raster.avg_sun_el2 ],
+            "pgc:avg_sun_elevs": [ raster.avg_sun_el1, raster.avg_sun_el2 ],
             "license": "CC-BY-4.0"
             },
         "links": [
@@ -185,7 +196,7 @@ def build_stac_item(base_url, domain, raster):
             },
             {
                 "rel": "collection",
-                "title": f"{domain_title} 2m DEM Strips, version {raster.release_version}",
+                "title": f"{domain_title} {raster.res_str} DEM Strips, version {raster.release_version}",
                 "href": f"{base_url}/{domain}/strips/{raster.release_version}/{raster.res_str}.json",
                 "type": "application/json"
             },
@@ -211,7 +222,7 @@ def build_stac_item(base_url, domain, raster):
                 "roles": [ "overview", "visual" ],
             },
             "dem": {
-                "title": "2m DEM",
+                "title": f"{raster.res_str} DEM",
                 "href": "./"+raster.stripid+"_dem.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "data" ]
@@ -250,6 +261,127 @@ def build_stac_item(base_url, domain, raster):
 
     return stac_item
 
+
+def build_mosaic_stac_item(base_url, domain, tile):
+    collection_name = f'{domain}-mosaics-{tile.release_version}-{tile.res}'
+    domain_title = DOMAIN_TITLES[domain]
+
+    # get geocell from name of directory the mosaic was in
+    geocell = pathlib.Path(tile.srcfp).parent.name
+    gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
+
+    stac_item = {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [ "https://stac-extensions.github.io/projection/v1.0.0/schema.json" ],
+        "id": tile.tileid,
+        "bbox": get_geojson_bbox(tile.get_geom_wgs84()),
+        "collection": collection_name,
+        "properties": {
+            "title": tile.tileid,
+            "description": "Imagine you are a bowl of petunias falling from a great height.  This tells you how far you can fall before saying 'hello ground'.",
+            "created": iso8601(tile.creation_date, tile.tileid),
+            "published": iso8601(datetime.datetime.utcnow()),
+            "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
+            "start_datetime": iso8601(tile.acqdate_min),
+            "end_datetime": iso8601(tile.acqdate_max),
+            "constellation": "maxar",
+            "gsd": gsd,
+            "proj:epsg": tile.epsg,
+            "pgc:pairname_ids": tile.pairname_ids,
+            "pgc:tile": tile.tileid,
+            "pgc:release_version": tile.release_version,
+            "pgc:data_perc": tile.density,
+            "pgc:num_components": tile.num_components,
+            "pgc:geocell": geocell, # can I add this? It helps the catalog generator.
+            "license": "CC-BY-4.0"
+            },
+        "links": [
+            {
+                "rel": "self",
+                "href": f"{base_url}/{domain}/mosaics/{tile.release_version}/{tile.res}/{geocell}/{tile.tileid}.json",
+                "type": "application/geo+json"
+            },
+            {
+                "rel": "parent",
+                "title": f"Geocell {geocell}",
+                "href": f"../{geocell}.json",
+                "type": "application/json"
+            },
+            {
+                "rel": "collection",
+                "title": f"{domain_title} {tile.res} DEM Mosaics, version {tile.release_version}",
+                "href": f"{base_url}/{domain}/mosaic/{tile.release_version}/{tile.res}.json",
+                "type": "application/json"
+            },
+            {
+                "rel": "root",
+                "title": "PGC Data Catalog",
+                "href": f"{base_url}/pgc-data-stac.json",
+                "type": "application/json"
+            }
+            ],
+        "assets": {
+            "hillshade": {
+                "title": "hillshade",
+                "href": "./"+tile.tileid+"_browse.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "overview", "visual" ]
+                
+            },
+            "dem": {
+                "title": f"{tile.res} DEM",
+                "href": "./"+tile.tileid+"_dem.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "data" ]
+            },
+            "count": {
+                "title": "Count",
+                "href": "./"+tile.tileid+"_count.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "count" ]
+            },
+            "count_matchtag": {
+                "title": "Count of Match points",
+                "href": "./"+tile.tileid+"_countmt.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "matchtag" ]
+            },
+            "mad": {
+                "title": "Median Absolute Deviation",
+                "href": "./"+tile.tileid+"_mad.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "mad" ]
+            },
+            "maxdate": {
+                "title": "Max date",
+                "href": "./"+tile.tileid+"_maxdate.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "date" ]
+            },
+            "mindate": {
+                "title": "Min date",
+                "href": "./"+tile.tileid+"_mindate.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "date" ]
+            },
+            "metadata": {
+                "title": "Metadata",
+                "href": "./"+tile.tileid+"_meta.txt",
+                "type": "text/plain",
+                "roles": [ "metadata" ]
+            }
+        },
+            # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
+            # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
+
+            # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
+            "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
+        }
+
+    return stac_item
+
+
 def get_geojson_bbox(src_geom):
     # Note: bbox of geometries that cross the antimeridian are represented by minx > maxx
     # https://datatracker.ietf.org/doc/html/rfc7946#section-5.2
@@ -276,6 +408,12 @@ def get_geojson_bbox(src_geom):
     return [ minx, miny, maxx, maxy ]
 
 
+def iso8601(date_time, msg=""):
+    if date_time:
+        return date_time.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    logger.error(f"null date: {msg}")
+    return None
 
 if __name__ == '__main__':
     main()

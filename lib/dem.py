@@ -1843,6 +1843,18 @@ class SetsmTile(object):
 
         ds = None
 
+    def get_geom_wgs84(self):
+        srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
+        rc = srs.ImportFromEPSG(self.epsg)
+        geom = self.geom.Clone()
+
+        if not srs_wgs84.IsSame(srs):
+            ctf = osr.CoordinateTransformation(srs, srs_wgs84)
+            geom.Transform(ctf)
+
+        return geom;
+
+
     def get_metafile_info(self):
 
         metad = self._parse_metadata_file()
