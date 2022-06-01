@@ -1828,6 +1828,8 @@ class SetsmTile(object):
 
         if 'Version' in metad:
             self.release_version = metad['Version']
+            if not self.release_version.startswith('v'):
+                self.release_version = 'v{}'.format(self.release_version)
 
         self.num_components = len(self.alignment_dct)
         if self.num_components == 0:
