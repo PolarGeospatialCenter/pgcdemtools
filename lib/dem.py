@@ -1827,9 +1827,7 @@ class SetsmTile(object):
             raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
 
         if 'Version' in metad:
-            self.release_version = metad['Version']
-            if not self.release_version.startswith('v'):
-                self.release_version = 'v{}'.format(self.release_version)
+            self.release_version = metad['Version'].strip('v')
 
         self.num_components = len(self.alignment_dct)
         if self.num_components == 0:
