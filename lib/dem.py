@@ -110,8 +110,11 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (reg_)?
                                    dem\.tif\Z""", re.I| re.X)
 
-setsm_pairname_pattern = re.compile("""(?P<pairname>
-                                       (?P<sensor>[A-Z]{2}\d{2})_
+setsm_pairname_pattern = re.compile("""((?P<algorithm>SETSM)_
+                                       (?P<relversion>s2s\d{3})_
+                                       )?
+                                       (?P<pairname>
+                                       (?P<sensor>[A-Z][A-Z\d]{2}\d)_
                                        (?P<timestamp>\d{8})_
                                        (?P<catid1>[A-Z0-9]{16})_
                                        (?P<catid2>[A-Z0-9]{16}))""", re.I | re.X)
@@ -1678,7 +1681,7 @@ class SetsmTile(object):
                 self.tilename = groups['tile']
                 self.res = groups['res']
                 # In case release version is in the file name and not the meta.txt
-                self.release_version = groups['relversion']
+                self.release_version = groups['relversion'].strip('v')
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
 
@@ -1841,7 +1844,7 @@ class SetsmTile(object):
             raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
 
         if 'Version' in metad:
-            self.release_version = metad['Version']
+            self.release_version = metad['Version'].strip('v')
 
         self.num_components = len(self.alignment_dct)
         if self.num_components == 0:
@@ -1890,7 +1893,7 @@ class SetsmTile(object):
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
 
-                elif l[:2] in ['WV','GE']:
+                elif l[:2] in ['WV','GE','W1','W2','W3','G1'] or l.startswith('SETSM_s2s'):
                     component_list.append(l)
 
         metad['alignment_dct'] = alignment_dct
