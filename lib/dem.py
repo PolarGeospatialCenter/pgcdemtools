@@ -1894,7 +1894,7 @@ class SetsmTile(object):
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
 
-                elif l.startswith(('WV', 'GE', 'W1', 'W2', 'W3', 'G1', ' SETSM_s2s')):
+                elif l.startswith(('WV', 'GE', 'W1', 'W2', 'W3', 'G1', 'SETSM_s2s')):
                     component_list.append(l)
 
         metad['alignment_dct'] = alignment_dct
