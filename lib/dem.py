@@ -110,6 +110,15 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (reg_)?
                                    dem\.tif\Z""", re.I| re.X)
 
+setsm_pairname_pattern = re.compile("""((?P<algorithm>SETSM)_
+                                       (?P<relversion>s2s\d{3})_
+                                       )?
+                                       (?P<pairname>
+                                       (?P<sensor>[A-Z][A-Z\d]{2}\d)_
+                                       (?P<timestamp>\d{8})_
+                                       (?P<catid1>[A-Z0-9]{16})_
+                                       (?P<catid2>[A-Z0-9]{16}))""", re.I | re.X)
+
 xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
 s2s_version_pattern = re.compile("Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
 
@@ -505,13 +514,13 @@ class SetsmDem(object):
                 elif type(getattr(self, a)) is str:
                     setattr(self, a, float(getattr(self, a)))
             if 'avg_acqtime1' not in md:
-                self.set_acqtime_attribs()
+                self._set_acqtime_attribs()
             if 'rmse' not in md:
-                self.set_rmse_attrib()
+                self._set_rmse_attrib()
             if self.rmse == -2:
                 self.rmse = -9999
-            self.set_density_and_stats_attribs()
-            self.set_group_attribs_from_scenes()
+            self._set_density_and_stats_attribs()
+            self._set_group_attribs_from_scenes()
 
         else:
             self.srcfp = filepath
@@ -817,13 +826,13 @@ class SetsmDem(object):
                 self.algm_version_key = semver2verkey(group_version)
 
             ## get scene coregistration rmse
-            self.set_rmse_attrib()
+            self._set_rmse_attrib()
 
             ## get acqdates and acqtimes
-            self.set_acqtime_attribs()
+            self._set_acqtime_attribs()
 
             ## get averages from scene attribs
-            self.set_group_attribs_from_scenes()
+            self._set_group_attribs_from_scenes()
 
             ## get sensors
             values = []
@@ -967,7 +976,7 @@ class SetsmDem(object):
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM: {}".format(self.srcfp))
 
         #### If density file exists, get density and stats from there
-        self.set_density_and_stats_attribs()
+        self._set_density_and_stats_attribs()
 
         #### If reg.txt file exists, parse it for registration info
         if len(self.reginfo_list) == 0:
@@ -990,7 +999,7 @@ class SetsmDem(object):
                     # logger.info("dz: {}, dx: {}, dy: {}".format(self.dz, self.dx, self.dy))
                     fh.close()
 
-    def set_group_attribs_from_scenes(self):
+    def _set_group_attribs_from_scenes(self):
         needed_attribs = (
             self.avg_conv_angle, self.avg_exp_height_acc,
             self.avg_sun_el1, self.avg_sun_el2
@@ -1019,7 +1028,7 @@ class SetsmDem(object):
             if len(sun_els2) > 0:
                 self.avg_sun_el2 = numpy.mean(numpy.array(sun_els2))
 
-    def set_rmse_attrib(self):
+    def _set_rmse_attrib(self):
         values = []
         for scene_name, align_stats in self.alignment_dct.items():
             scene_rmse = align_stats[0]
@@ -1032,7 +1041,7 @@ class SetsmDem(object):
         else:
             self.rmse = -1
 
-    def set_acqtime_attribs(self):
+    def _set_acqtime_attribs(self):
         values = []
         for x in range(len(self.scenes)):
             acqtime_str = None
@@ -1075,7 +1084,7 @@ class SetsmDem(object):
             self.acqdate2 = values[0]
             self.avg_acqtime2 = datetime.fromtimestamp(sum([time.mktime(t.timetuple()) + t.microsecond / 1e6 for t in values]) / len(values))
 
-    def set_density_and_stats_attribs(self):
+    def _set_density_and_stats_attribs(self):
         needed_attribs = (self.masked_density, self.max_elev_value, self.min_elev_value)
         if any([a is None for a in needed_attribs]):
             if os.path.isfile(self.density_file):
@@ -1645,6 +1654,10 @@ class SetsmTile(object):
 
             self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
 
+            self.pairname_ids = None
+            self.acqdate_min = None
+            self.acqdate_max = None
+
             match = setsm_tile_pattern.match(self.srcfn)
             if match:
                 groups = match.groupdict()
@@ -1806,6 +1819,7 @@ class SetsmTile(object):
         metad = self._parse_metadata_file()
         self.alignment_dct = metad['alignment_dct']
         self.component_list = metad['component_list']
+        self._set_component_attribs()
 
         if 'Creation Date' in metad:
             self.creation_date = datetime.strptime(metad['Creation Date'],"%d-%b-%Y %H:%M:%S")
@@ -1814,6 +1828,8 @@ class SetsmTile(object):
 
         if 'Version' in metad:
             self.release_version = metad['Version']
+            if not self.release_version.startswith('v'):
+                self.release_version = 'v{}'.format(self.release_version)
 
         self.num_components = len(self.alignment_dct)
         if self.num_components == 0:
@@ -1862,7 +1878,7 @@ class SetsmTile(object):
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
 
-                elif l[:2] in ['WV', 'GE', 'W1', 'W2', 'W3', 'SE']:
+                elif l[:2] in ['WV','GE','W1','W2','W3','G1'] or l.startswith('SETSM_s2s'):
                     component_list.append(l)
 
         metad['alignment_dct'] = alignment_dct
@@ -1911,9 +1927,12 @@ class SetsmTile(object):
 
     key_attribs = (
         'alignment_dct',
+        'acqdate_min',
+        'acqdate_max',
         'archive',
         'bands',
         'browse',
+        'component_list',
         'creation_date',
         'datatype',
         'datatype_readable',
@@ -1929,6 +1948,7 @@ class SetsmTile(object):
         'ndv',
         'num_components',
         'ortho',
+        'pairname_ids',
         'proj',
         'proj4',
         'regmetapath',
@@ -1950,6 +1970,27 @@ class SetsmTile(object):
         # 'sum_gcps',
     )
 
+    def _set_component_attribs(self):
+        pairname_ids = []
+        acqdate_min = None
+        acqdate_max = None
+
+        for component in self.component_list:
+            match = setsm_pairname_pattern.match(component)
+            if match:
+                groups = match.groupdict()
+                pairname_ids.append(groups['pairname'])
+                acqdate = datetime.strptime(groups['timestamp'], '%Y%m%d')
+                if acqdate_min is None or acqdate < acqdate_min:
+                    acqdate_min = acqdate
+                if acqdate_max is None or acqdate > acqdate_max:
+                    acqdate_max = acqdate
+            else:
+                raise RuntimeError("Failed to parse pairname from tile meta strip component: {}".format(component))
+
+        self.pairname_ids = pairname_ids
+        self.acqdate_min = acqdate_min
+        self.acqdate_max = acqdate_max
 
 class RegInfo(object):
 
