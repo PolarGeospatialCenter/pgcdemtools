@@ -103,7 +103,7 @@ asp_strip_pattern = re.compile("""(?P<pairname>
                                   (?P<res>\d+m)?-dem\.(tif|jpg)\Z""", re.I | re.X)
 
 setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
-                                   (?P<tile>\d+_\d+)_
+                                   (?P<tile>\d+_\d+s?)_
                                    ((?P<subtile>\d+_\d+)_)?
                                    (?P<res>(\d+|0\.\d+)c?m)_
                                    ((?P<relversion>v[\d\.]+)_)?
@@ -1651,7 +1651,7 @@ class SetsmTile(object):
                 self.tilename = groups['tile']
                 self.res = groups['res']
                 # In case release version is in the file name and not the meta.txt
-                self.release_version = groups['relversion']
+                self.release_version = groups['relversion'].strip('v')
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
 
@@ -1862,7 +1862,7 @@ class SetsmTile(object):
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
 
-                elif l[:2] in ['WV','GE']:
+                elif l[:2] in ['WV', 'GE', 'W1', 'W2', 'W3', 'SE']:
                     component_list.append(l)
 
         metad['alignment_dct'] = alignment_dct

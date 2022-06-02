@@ -262,8 +262,9 @@ def resample_setsm(task_src, args):
 
             for component in components:
                 inputp = os.path.join(ddir, '{}{}_{}{}'.format(dbase, src_res, release_version, component))
+                sptoutput = '{}{}_{}{}'.format(sptpath, tgt_res, release_version, component)
                 output = os.path.join(ddir, '{}{}_{}{}'.format(dbase, tgt_res, release_version, component))
-                if not os.path.isfile(output) or args.overwrite:
+                if (not os.path.isfile(output) and not os.path.isfile(sptoutput)) or args.overwrite:
                     if component == 'meta.txt':
                         build_meta([inputp], output, tgt_res, dbase.rstrip('_'), release_version, args)
                     else:
@@ -277,10 +278,12 @@ def resample_setsm(task_src, args):
                     for dpath, release_version in supertiles[sptpath]:
                         inputp = '{}{}_{}{}'.format(dpath, tgt_res, release_version, component)
                         output = '{}{}_{}{}'.format(sptpath, tgt_res, release_version, component)
+                        if os.path.isfile(output):
+                            break
                         if os.path.isfile(inputp):
                             inputps.append(inputp)
                         else:
-                            raise RuntimeError('expected source file not found: {}'.format(inputp))
+                            raise RuntimeError('Expected source file not found: {}'.format(inputp))
                     if component == 'meta.txt':
                         output = '{}{}_{}meta.txt'.format(sptpath, tgt_res, release_version)
                         if not os.path.isfile(output) or args.overwrite:
