@@ -1664,7 +1664,7 @@ class SetsmTile(object):
                 self.tilename = groups['tile']
                 self.res = groups['res']
                 # In case release version is in the file name and not the meta.txt
-                self.release_version = groups['relversion']
+                self.release_version = groups['relversion'].strip('v')
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
 
@@ -1827,9 +1827,7 @@ class SetsmTile(object):
             raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
 
         if 'Version' in metad:
-            self.release_version = metad['Version']
-            if not self.release_version.startswith('v'):
-                self.release_version = 'v{}'.format(self.release_version)
+            self.release_version = metad['Version'].strip('v')
 
         self.num_components = len(self.alignment_dct)
         if self.num_components == 0:
