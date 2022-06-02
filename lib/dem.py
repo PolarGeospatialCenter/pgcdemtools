@@ -503,7 +503,7 @@ class SetsmDem(object):
             if 's2s_version' not in md:
                 self.s2s_version = '4'
             if 'release_version' not in md:
-                self.release_version = md['version']
+                self._set_release_version_from_s2s_version()
             attribs = [a for _, a, _, in strip_coverage_stats] + ['max_elev_value', 'min_elev_value']
             for a in attribs:
                 if a not in md:
@@ -792,6 +792,9 @@ class SetsmDem(object):
                 pass
             else:
                 self.s2s_version = s2s_version
+
+            if self.release_version is None and self.s2s_version is not None:
+                self._set_release_version_from_s2s_version()
 
             if 'Strip creation date' in metad:
                 self.creation_date = datetime.strptime(metad['Strip creation date'],"%d-%b-%Y %H:%M:%S")
@@ -1101,6 +1104,20 @@ class SetsmDem(object):
                 except ValueError:
                     pass
                 fh.close()
+
+    def _set_release_version_from_s2s_version(self):
+        if self.s2s_version is None:
+            return
+        if self.s2s_version.count('.') == 0:
+            s2s_major_ver = self.s2s_version
+            s2s_minor_ver = '0'
+        elif self.s2s_version.count('.') == 1:
+            s2s_major_ver, s2s_minor_ver = self.s2s_version.split('.')
+        else:
+            raise RuntimeError("s2s version breaks '[major_ver].[minor_ver]' format limitation: {}".format(self.s2s_version))
+        if int(s2s_major_ver) > 99 or int(s2s_minor_ver) > 9:
+            raise RuntimeError("s2s version breaks '[major_ver].[minor_ver]' format limitation where max major_ver is 99 and max minor_ver is 9: {}".format(self.s2s_version))
+        self.release_version = 's2s{:0>2}{}'.format(s2s_major_ver, s2s_minor_ver)
 
     def write_mdf_file(self):
 
