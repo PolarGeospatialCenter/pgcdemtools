@@ -20,7 +20,7 @@ tgt_srs = osr.SpatialReference()
 tgt_srs.ImportFromEPSG(4326)
 
 AREA_THRESHOLD = 5500000  # Filter threshold in sq meters
-DENSITY_THRESHOLD = 0.2   # Masked matchtag density threshold
+DENSITY_THRESHOLD = 0.05   # Masked matchtag density threshold
 VALID_AREA_THRESHOLD = 16  # Valid area threshold in sqkm
 
 

@@ -103,7 +103,7 @@ asp_strip_pattern = re.compile("""(?P<pairname>
                                   (?P<res>\d+m)?-dem\.(tif|jpg)\Z""", re.I | re.X)
 
 setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
-                                   (?P<tile>\d+_\d+)_
+                                   (?P<tile>\d+_\d+s?)_
                                    ((?P<subtile>\d+_\d+)_)?
                                    (?P<res>(\d+|0\.\d+)c?m)_
                                    ((?P<relversion>v[\d\.]+)_)?
@@ -1670,7 +1670,7 @@ class SetsmTile(object):
                 self.browse = os.path.join(self.srcdir,name_base + '_browse.tif')
 
             self.archive = os.path.join(self.srcdir,self.tileid+".tar.gz")
-            
+
             self.pairname_ids = None
             self.acqdate_min = None
             self.acqdate_max = None
@@ -1707,6 +1707,7 @@ class SetsmTile(object):
                 else:
                     self.supertile_id = '_'.join([self.tilename,self.res])
                     self.supertile_id_no_res = self.tilename
+                self.tile_id_no_res = '_'.join([self.supertile_id_no_res, self.subtile]) if self.subtile else self.supertile_id_no_res
                 self.density = None
                 self.min_elev_value = None
                 self.max_elev_value = None
@@ -1893,7 +1894,7 @@ class SetsmTile(object):
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
 
-                elif l[:2] in ['WV','GE','W1','W2','W3','G1'] or l.startswith('SETSM_s2s'):
+                elif l.startswith(('WV', 'GE', 'W1', 'W2', 'W3', 'G1', 'SETSM_s2s')):
                     component_list.append(l)
 
         metad['alignment_dct'] = alignment_dct

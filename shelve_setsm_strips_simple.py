@@ -96,7 +96,7 @@ def main():
             logger.info(src)
             srcfps.append(src)
 
-        elif os.path.isfile(src) and src.endswith('.txt'):
+        elif os.path.isfile(src) and src.endswith(('.txt', '.csv')):
             fh = open(src, 'r')
             for line in fh.readlines():
                 l = line.strip()
