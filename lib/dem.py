@@ -1707,6 +1707,7 @@ class SetsmTile(object):
                 else:
                     self.supertile_id = '_'.join([self.tilename,self.res])
                     self.supertile_id_no_res = self.tilename
+                self.tile_id_no_res = '_'.join([self.supertile_id_no_res, self.subtile]) if self.subtile else self.supertile_id_no_res
                 self.density = None
                 self.min_elev_value = None
                 self.max_elev_value = None
