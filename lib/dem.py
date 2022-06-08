@@ -1681,7 +1681,7 @@ class SetsmTile(object):
                 self.tilename = groups['tile']
                 self.res = groups['res']
                 # In case release version is in the file name and not the meta.txt
-                self.release_version = groups['relversion'].strip('v')
+                self.release_version = groups['relversion'].strip('v') if groups['relversion'] else None
                 self.subtile = groups['subtile']
                 self.scheme = groups['scheme']
 
