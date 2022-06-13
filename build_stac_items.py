@@ -50,10 +50,10 @@ def main():
 
     if not args.domain in DOMAIN_TITLES:
         parser.error("Domain must be one of: " + ", ".join(DOMAIN_TITLES.keys()))
-        
+
     if args.validate:
         import pystac
-        
+
     ## Setup Logging options
     if args.v:
         log_level = logging.DEBUG
@@ -101,7 +101,7 @@ def main():
                 # assume sp is a SETSM strip
                 raster = dem.SetsmDem(sp)
                 raster.get_dem_info()
-            
+
                 stac_item = build_strip_stac_item(args.stac_base_url, args.domain, raster)
             else:
                 # assume sp is a mosaic tile
@@ -122,14 +122,14 @@ def main():
             if args.stac_base_dir:
                 stac_item_geojson_path = stac_item["links"][0]["href"].replace(args.stac_base_url, args.stac_base_dir)
                 pathlib.Path(stac_item_geojson_path).parent.mkdir(parents=True, exist_ok=True)
-            else:    
+            else:
                 stac_item_geojson_path = raster.srcfp.replace("_dem.tif", ".json")
-                
+
             if not os.path.exists(stac_item_geojson_path) or args.overwrite:
                 with open(stac_item_geojson_path, "w") as f:
                     logger.debug('Writing '+stac_item_geojson_path)
                     f.write(stac_item_json)
-            
+
             # validate stac item
             if args.validate:
                 pystac_item = pystac.Item.from_file(stac_item_geojson_path)
@@ -140,6 +140,8 @@ def main():
 def build_strip_stac_item(base_url, domain, raster):
     collection_name = f'{domain}-strips-{raster.release_version}-{raster.res_str}'
     domain_title = DOMAIN_TITLES[domain]
+    start_time = min(raster.avg_acqtime1, raster.avg_acqtime2)
+    end_time   = max(raster.avg_acqtime1, raster.avg_acqtime2)
 
     stac_item = {
         "type": "Feature",
@@ -150,15 +152,15 @@ def build_strip_stac_item(base_url, domain, raster):
         "collection": collection_name,
         "properties": {
             "title": raster.stripid,
-            "description": "Imagine you are a bowl of petunias falling from a great height.  This tells you how far you can fall before saying 'hello ground'.",
-            "created": raster.creation_date.strftime("%Y-%m-%dT%H:%M:%SZ"), # are these actually in UTC, does it matter?
-            "published": datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"), # now?
-            "datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # this is only required if start_datetime/end_datetime are not specified
-            "start_datetime": raster.avg_acqtime1.strftime("%Y-%m-%dT%H:%M:%SZ"), # TODO may need to min/max these to know right order
-            "end_datetime": raster.avg_acqtime2.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "description": "Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.",
+            "created": iso8601(raster.creation_date), # are these actually in UTC, does it matter?
+            "published": iso8601(datetime.datetime.utcnow()), # now
+            "datetime": iso8601(start_time), # this is only required if start_datetime/end_datetime are not specified
+            "start_datetime": iso8601(start_time),
+            "end_datetime": iso8601(end_time),
             "instruments": [ raster.sensor1, raster.sensor2 ],
             "constellation": "maxar",
-            "gsd": (raster.xres + raster.yres)/2.0,
+            "gsd": (raster.xres + raster.yres)/2.0, ## dem.res is a string ('2m','50cm'), gsd be a float (2.0).
             "proj:epsg": raster.epsg,
             "pgc:image_ids": [ raster.catid1, raster.catid2 ],
             "pgc:geocell": raster.geocell,
@@ -213,7 +215,7 @@ def build_strip_stac_item(base_url, domain, raster):
                 "href": "./"+raster.stripid+"_dem_10m_shade.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "overview", "visual" ]
-                
+
             },
             "hillshade_masked": {
                 "title": "Masked 10m hillshade",
@@ -265,9 +267,6 @@ def build_strip_stac_item(base_url, domain, raster):
 def build_mosaic_stac_item(base_url, domain, tile):
     collection_name = f'{domain}-mosaics-{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
-
-    # get geocell from name of directory the mosaic was in
-    geocell = pathlib.Path(tile.srcfp).parent.name
     gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
 
     stac_item = {
@@ -279,7 +278,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
         "collection": collection_name,
         "properties": {
             "title": tile.tileid,
-            "description": "Imagine you are a bowl of petunias falling from a great height.  This tells you how far you can fall before saying 'hello ground'.",
+            "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
             "created": iso8601(tile.creation_date, tile.tileid),
             "published": iso8601(datetime.datetime.utcnow()),
             "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
@@ -289,28 +288,28 @@ def build_mosaic_stac_item(base_url, domain, tile):
             "gsd": gsd,
             "proj:epsg": tile.epsg,
             "pgc:pairname_ids": tile.pairname_ids,
-            "pgc:tile": tile.tileid,
+            "pgc:supertile": tile.supertile_id_no_res, # use for dir path
+            "pgc:tile": tile.tile_id_no_res,
             "pgc:release_version": tile.release_version,
             "pgc:data_perc": tile.density,
             "pgc:num_components": tile.num_components,
-            "pgc:geocell": geocell, # can I add this? It helps the catalog generator.
             "license": "CC-BY-4.0"
             },
         "links": [
             {
                 "rel": "self",
-                "href": f"{base_url}/{domain}/mosaics/{tile.release_version}/{tile.res}/{geocell}/{tile.tileid}.json",
+                "href": f"{base_url}/{domain}/mosaics/{tile.release_version}/{tile.res}/{tile.supertile_id_no_res}/{tile.tileid}.json",
                 "type": "application/geo+json"
             },
             {
                 "rel": "parent",
-                "title": f"Geocell {geocell}",
-                "href": f"../{geocell}.json",
+                "title": f"Tile Catalog {tile.supertile_id_no_res}",
+                "href": f"../{tile.supertile_id_no_res}.json",
                 "type": "application/json"
             },
             {
                 "rel": "collection",
-                "title": f"{domain_title} {tile.res} DEM Mosaics, version {tile.release_version}",
+                "title": f"Resolution Collection {domain_title} {tile.res} DEM Mosaics, version {tile.release_version}",
                 "href": f"{base_url}/{domain}/mosaic/{tile.release_version}/{tile.res}.json",
                 "type": "application/json"
             },
@@ -327,7 +326,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
                 "href": "./"+tile.tileid+"_browse.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "overview", "visual" ]
-                
+
             },
             "dem": {
                 "title": f"{tile.res} DEM",
@@ -408,6 +407,7 @@ def get_geojson_bbox(src_geom):
     return [ minx, miny, maxx, maxy ]
 
 
+# Converts date to ISO-8601 format.  Returns None on None vs throwing.
 def iso8601(date_time, msg=""):
     if date_time:
         return date_time.strftime("%Y-%m-%dT%H:%M:%SZ")

@@ -10,11 +10,28 @@ from osgeo import gdal, osr, ogr, gdalconst
 
 from lib import utils, dem, taskhandler
 
-DOMAIN_TITLES = {
-    "arcticdem": "ArcticDEM",
-    "earthdem": "EarthDEM",
-    "rema": "REMA"
-}
+DOMAINS = {
+    "arcticdem": {
+        "title": "ArcticDEM",
+        "description": "ArcticDEM Project",
+        "keywords": [ "ArcticDEM" ]
+        },
+    "earthdem": {
+        "title": "EarthDEM",
+        "description": "EarthDEM Project",
+        "keywords": [ "EarthDEM" ]
+        },
+    "rema": {
+        "title": "REMA",
+        "description": "Reference Elevation Model of Antarctica (REMA) Project",
+        "keywords": [ "REMA", "Antarctica" ]
+        }
+    }
+
+KEYWORDS_COMMON = [
+    "DSM", "DEM", "elevation", "stereo", "photogrammetry", "digital surface model", "satellite"
+    ]
+
 
 
 #### Create Logger
@@ -96,7 +113,14 @@ def main():
             ids = stac_item["collection"].split("-")
 
         stac_geocell_catalog_dir = ip.parent
-        stac_geocell_catalog_id = stac_item["collection"] + "-" + stac_item["properties"]["pgc:geocell"]
+        if ids[1] == "strips":
+            # This is an item for a SETSM DEM
+            stac_geocell_catalog_id = stac_item["collection"] + "-" + stac_item["properties"]["pgc:geocell"]
+        elif ids[1] == "mosaics":
+            # This is an item for a mosaic tile
+            stac_geocell_catalog_id = stac_item["collection"] + "-" + stac_item["properties"]["pgc:supertile"]
+        else:
+            logger.error(f"Unknown item type {ids}.  Expecting a SETSM strip or a mosaic tile.")
         
         stac_resolution_collection_dir = stac_geocell_catalog_dir.parent
         stac_resolution_collection_id = "-".join(ids)
@@ -237,7 +261,22 @@ def write_json(stac_obj, stac_json_path, overwrite):
             logger.info('Writing '+stac_json_path)
             stac_json = json.dumps(stac_obj, indent=2, sort_keys=False)
             f.write(stac_json)
-    
+
+
+            
+# Returns arcticdem, earthdem, rema
+def get_domain(stac_id):
+    return stac_id.split('-')[0]
+
+
+# Returns strips or mosaics
+def get_kind(stac_id):
+    return stac_id.split('-')[1]
+
+# Returns version from id (s2s041 or v2.0)
+def get_version(stac_id):
+    return stac_id.split('-')[2]
+
 
 def stac_get_self_link(stac):
     for link in stac["links"]:
@@ -305,8 +344,8 @@ def stac_domain_collection(base_url, domain):
         "type": "Collection",
         "stac_version": "1.0.0",
         "id": id,
-        "title": DOMAIN_TITLES[domain],
-        "description": f"{domain} digital elevation models",
+        "title": DOMAINS[domain]["title"],
+        "description": DOMAINS[domain]["description"],
         "license": "CC-BY-4.0",
         "providers": [
             {
@@ -333,7 +372,7 @@ def stac_domain_collection(base_url, domain):
         "links": [
             {
                 "rel": "self",
-                "title": DOMAIN_TITLES[domain],
+                "title": DOMAINS[domain]["title"],
                 "href": f"{base_url}/{id}.json",
                 "type": "application/json"
             },
@@ -357,7 +396,7 @@ def stac_domain_collection(base_url, domain):
 # strips, mosaic
 def stac_kind_collection(base_url, domain, kind):
     id = kind.lower()
-    title = f"{domain['title']} {kind.split('-')[-1]}"
+    title = f"{domain['title']} DEM {get_kind(id)}"
     domain_self = stac_get_self_link(domain)
     
     collection = {
@@ -413,10 +452,14 @@ def stac_kind_collection(base_url, domain, kind):
     return collection
 
 
-# s2s041
+# s2s041, v2.0
 def stac_version_collection(base_url, kind, version):
     id = version.lower()
-    title = f"{kind['title']} {version.split('-')[-1]}"
+    if get_kind(id) == "mosaics":
+        title = f"{kind['title']} {version}"
+    else:
+        title = f"{kind['title']}, version {version}"
+
     kind_self = stac_get_self_link(kind)
     
     collection = {
@@ -472,10 +515,15 @@ def stac_version_collection(base_url, kind, version):
     return collection
 
 
-# 2m
+# 2m, 10m, 32m
 def stac_resolution_collection(base_url, version, resolution):
     id = resolution.lower()
-    title = f"{version['title']} {resolution.split('-')[-1]}"
+    if get_kind(id) == "mosaics":
+        title = f"{DOMAINS[get_domain(id)]['title']} DEM mosaics, version {get_version(id)}, {resolution}"
+        keywords = [ "mosaics" ]
+    else:
+        title = f"{DOMAINS[get_domain(id)]['title']} {resolution} DEM Strips, version {get_version(id)}"
+        keywords = [ "time series" ]
     version_self = stac_get_self_link(version)
     
     collection = {
@@ -484,6 +532,7 @@ def stac_resolution_collection(base_url, version, resolution):
         "id": id,
         "title": title,
         "description": f"{resolution} digital elevation models",
+        "keywords": DOMAINS[get_domain(id)]["keywords"] + KEYWORDS_COMMON + keywords,
         "license": "CC-BY-4.0",
         "providers": [
             {
@@ -530,18 +579,22 @@ def stac_resolution_collection(base_url, version, resolution):
         }
     return collection
 
-# n67w132
+# Geocell: n67w132 or Supertile: 34_45
 def stac_geocell_catalog(base_url, resolution, geocell):
     id = geocell.lower()
-    title = f"{resolution['title']} {geocell.split('-')[-1]}"
+    if get_kind(id) == "mosaic":
+        title = f"Tile {geocell.split('-')[-1]}"
+    else:
+        title = f"Geocell {geocell.split('-')[-1]}"
+    domain_title = DOMAINS[get_domain(id)]["title"]
     resolution_self = stac_get_self_link(resolution)
     
-    collection = {
+    catalog = {
         "type": "Catalog",
         "stac_version": "1.0.0",
         "id": id,
         "title": title,
-        "description": f"{geocell} digital elevation models",
+        "description": f"{domain_title} geographic grouping: {title}",
         "license": "CC-BY-4.0",
         "links": [
             {
@@ -564,7 +617,7 @@ def stac_geocell_catalog(base_url, resolution, geocell):
             }
             ]
         }
-    return collection
+    return catalog
 
 
 if __name__ == '__main__':
