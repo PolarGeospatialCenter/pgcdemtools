@@ -265,7 +265,7 @@ def build_strip_stac_item(base_url, domain, raster):
 
 
 def build_mosaic_stac_item(base_url, domain, tile):
-    collection_name = f'{domain}-mosaics-{tile.release_version}-{tile.res}'
+    collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
     gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
 
@@ -298,7 +298,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
         "links": [
             {
                 "rel": "self",
-                "href": f"{base_url}/{domain}/mosaics/{tile.release_version}/{tile.res}/{tile.supertile_id_no_res}/{tile.tileid}.json",
+                "href": f"{base_url}/{domain}/mosaics/v{tile.release_version}/{tile.res}/{tile.supertile_id_no_res}/{tile.tileid}.json",
                 "type": "application/geo+json"
             },
             {
