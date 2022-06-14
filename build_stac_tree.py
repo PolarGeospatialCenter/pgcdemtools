@@ -277,6 +277,10 @@ def get_kind(stac_id):
 def get_version(stac_id):
     return stac_id.split('-')[2]
 
+# Returns resolution from id (2m, 10m, 32m)
+def get_resolution(stac_id):
+    return stac_id.split('-')[3]
+
 
 def stac_get_self_link(stac):
     for link in stac["links"]:
@@ -346,6 +350,7 @@ def stac_domain_collection(base_url, domain):
         "id": id,
         "title": DOMAINS[domain]["title"],
         "description": DOMAINS[domain]["description"],
+        "keywords": DOMAINS[get_domain(id)]["keywords"] + KEYWORDS_COMMON + ["time series", "mosaic"],
         "license": "CC-BY-4.0",
         "providers": [
             {
@@ -397,6 +402,13 @@ def stac_domain_collection(base_url, domain):
 def stac_kind_collection(base_url, domain, kind):
     id = kind.lower()
     title = f"{domain['title']} DEM {get_kind(id)}"
+    if get_kind(id) == "mosaics":
+        description = f"{DOMAINS[get_domain(id)]['title']} DEM mosaics"
+        keywords = [ "mosaics" ]
+    else:
+        description = f"{DOMAINS[get_domain(id)]['title']} time-stamped strip DEMs"
+        keywords = [ "time series" ]
+
     domain_self = stac_get_self_link(domain)
     
     collection = {
@@ -404,7 +416,8 @@ def stac_kind_collection(base_url, domain, kind):
         "stac_version": "1.0.0",
         "id": id,
         "title": title,
-        "description": f"{kind} digital elevation models",
+        "description": description,
+        "keywords": DOMAINS[get_domain(id)]["keywords"] + KEYWORDS_COMMON + keywords,
         "license": "CC-BY-4.0",
         "providers": [
             {
@@ -456,9 +469,15 @@ def stac_kind_collection(base_url, domain, kind):
 def stac_version_collection(base_url, kind, version):
     id = version.lower()
     if get_kind(id) == "mosaics":
-        title = f"{kind['title']} {version}"
+        title = f"{kind['title']} {get_version(id)}"
+        description = f"{kind['description']}, version {get_version(id)[1:]}"
+        keywords = [ "mosaics" ]
     else:
-        title = f"{kind['title']}, version {version}"
+        s2sver = get_version(id) #s2s041 -> 4.1, ideally would be from properties.pgc:s2s_version, but we don't have access to that here.
+        numver = str(int(s2sver[3:5])) + "." + s2sver[5] 
+        title = f"{kind['title']}, version {s2sver}"
+        description = f"{kind['description']}, s2s version {numver}"
+        keywords = [ "time series" ]
 
     kind_self = stac_get_self_link(kind)
     
@@ -467,7 +486,8 @@ def stac_version_collection(base_url, kind, version):
         "stac_version": "1.0.0",
         "id": id,
         "title": title,
-        "description": f"{version} digital elevation models",
+        "description": description,
+        "keywords": DOMAINS[get_domain(id)]["keywords"] + KEYWORDS_COMMON + keywords,
         "license": "CC-BY-4.0",
         "providers": [
             {
@@ -518,11 +538,10 @@ def stac_version_collection(base_url, kind, version):
 # 2m, 10m, 32m
 def stac_resolution_collection(base_url, version, resolution):
     id = resolution.lower()
+    title = f"{version['title']} {get_resolution(id)}"
     if get_kind(id) == "mosaics":
-        title = f"{DOMAINS[get_domain(id)]['title']} DEM mosaics, version {get_version(id)}, {resolution}"
         keywords = [ "mosaics" ]
     else:
-        title = f"{DOMAINS[get_domain(id)]['title']} {resolution} DEM Strips, version {get_version(id)}"
         keywords = [ "time series" ]
     version_self = stac_get_self_link(version)
     
@@ -531,7 +550,7 @@ def stac_resolution_collection(base_url, version, resolution):
         "stac_version": "1.0.0",
         "id": id,
         "title": title,
-        "description": f"{resolution} digital elevation models",
+        "description": f"{version['description']}, {get_resolution(id)} resolution",
         "keywords": DOMAINS[get_domain(id)]["keywords"] + KEYWORDS_COMMON + keywords,
         "license": "CC-BY-4.0",
         "providers": [
@@ -582,7 +601,7 @@ def stac_resolution_collection(base_url, version, resolution):
 # Geocell: n67w132 or Supertile: 34_45
 def stac_geocell_catalog(base_url, resolution, geocell):
     id = geocell.lower()
-    if get_kind(id) == "mosaic":
+    if get_kind(id) == "mosaics":
         title = f"Tile {geocell.split('-')[-1]}"
     else:
         title = f"Geocell {geocell.split('-')[-1]}"
