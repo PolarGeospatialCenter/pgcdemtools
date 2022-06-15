@@ -34,8 +34,11 @@ def main():
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing stac item json")
-    parser.add_argument('--validate', action='store_true', default=False,
-                        help="validate stac item json")
+
+    # Disable: this isn't really useful because pystac wants to validate all the links, many of which are absolute
+    #          and won't exist until the whole catalog is generated and published.
+    #parser.add_argument('--validate', action='store_true', default=False,
+    #                    help="validate stac item json")
     parser.add_argument('--stac-base-dir', help="base directory to write stac JSON files, otherwise write next to images")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
     parser.add_argument('--domain', help="PGC Domain (arcticdem,earthdem,rema)", required=True, choices=DOMAIN_TITLES.keys())
@@ -51,8 +54,8 @@ def main():
     if not args.domain in DOMAIN_TITLES:
         parser.error("Domain must be one of: " + ", ".join(DOMAIN_TITLES.keys()))
 
-    if args.validate:
-        import pystac
+    #if args.validate:
+    #    import pystac
 
     ## Setup Logging options
     if args.v:
@@ -131,10 +134,10 @@ def main():
                     f.write(stac_item_json)
 
             # validate stac item
-            if args.validate:
-                pystac_item = pystac.Item.from_file(stac_item_geojson_path)
-                for i in pystac_item.validate():
-                    print(i)
+            #if args.validate:
+            #    pystac_item = pystac.Item.from_file(stac_item_geojson_path)
+            #    for i in pystac_item.validate():
+            #        print(i)
 
 
 def build_strip_stac_item(base_url, domain, raster):
