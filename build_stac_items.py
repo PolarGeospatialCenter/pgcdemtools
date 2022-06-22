@@ -325,7 +325,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
             ],
         "assets": {
             "hillshade": {
-                "title": "hillshade",
+                "title": "Hillshade",
                 "href": "./"+tile.tileid+"_browse.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "overview", "visual" ]
