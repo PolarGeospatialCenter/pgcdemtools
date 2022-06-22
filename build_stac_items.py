@@ -246,7 +246,7 @@ def build_strip_stac_item(base_url, domain, raster):
             },
             "metadata": {
                 "title": "Metadata",
-                "href": "./"+raster.stripid+".mdf.txt",
+                "href": "./"+raster.stripid+"_mdf.txt",
                 "type": "text/plain",
                 "roles": [ "metadata" ]
             },
