@@ -66,7 +66,7 @@ def main():
 
     if args.validate:
         import pystac
-        
+
     ## Setup Logging options
     if args.v:
         log_level = logging.DEBUG
@@ -95,14 +95,14 @@ def main():
         logger.error("src must be a directory")
 
     src_path = pathlib.Path(src)
-    
+
     logger.info('Reading STAC Items')
     j = 0
     total = len(item_paths)
 
     # Collect ID Tree
     pgc_catalog = { }
-    
+
     item_paths.sort() # this should also keep the order of links/assets in the catalog sorted
     for ip in item_paths:
         j+=1
@@ -121,19 +121,19 @@ def main():
             stac_geocell_catalog_id = stac_item["collection"] + "-" + stac_item["properties"]["pgc:supertile"]
         else:
             logger.error(f"Unknown item type {ids}.  Expecting a SETSM strip or a mosaic tile.")
-        
+
         stac_resolution_collection_dir = stac_geocell_catalog_dir.parent
         stac_resolution_collection_id = "-".join(ids)
-        
+
         stac_version_collection_dir = stac_resolution_collection_dir.parent
         stac_version_collection_id = "-".join(ids[0:-1])
-        
+
         stac_kind_collection_dir = stac_version_collection_dir.parent
         stac_kind_collection_id = "-".join(ids[0:-2])
-        
+
         stac_domain_collection_dir = stac_kind_collection_dir.parent
         stac_domain_collection_id = "-".join(ids[0:-3])
-        
+
         stac_pgc_catalog_dir = stac_domain_collection_dir.parent
 
         if stac_pgc_catalog_dir != src_path:
@@ -158,7 +158,7 @@ def main():
 
 
         pgc_catalog[stac_domain_collection_id][stac_kind_collection_id][stac_version_collection_id][stac_resolution_collection_id][stac_geocell_catalog_id][stac_item_id] = stac_item
-        
+
     #print(json.dumps(pgc_catalog))
 
     # Collate/roll-up PGC catalog levels and create STAC JSON items
@@ -200,20 +200,20 @@ def main():
                             stac_add_child(args.stac_base_url, geocell_catalog, item)
                             resolution_bbox = merge_bbox(resolution_bbox, item["bbox"])
                             resolution_mindate = min(resolution_mindate, item["properties"]["datetime"])
-                            
+
                         write_json(geocell_catalog, geocell_catalog_path, args.overwrite)
                         stac_add_child(args.stac_base_url, resolution_collection, geocell_catalog)
-                    # end geocell    
+                    # end geocell
                     version_bbox = merge_bbox(version_bbox, resolution_bbox)
                     version_mindate = min(version_mindate, resolution_mindate)
 
                     resolution_collection["extent"]["spatial"]["bbox"][0] = resolution_bbox
                     resolution_collection["extent"]["temporal"]["interval"][0][0] = resolution_mindate
-                    
+
                     write_json(resolution_collection, resolution_collection_path, args.overwrite)
                     stac_add_child(args.stac_base_url, version_collection, resolution_collection)
                 # end resolution
-                
+
                 kind_bbox = merge_bbox(kind_bbox, version_bbox)
                 kind_mindate = min(kind_mindate, version_mindate)
 
@@ -223,7 +223,7 @@ def main():
                 write_json(version_collection, version_collection_path, args.overwrite)
                 stac_add_child(args.stac_base_url, kind_collection, version_collection)
             # end version
-            
+
             domain_bbox = merge_bbox(domain_bbox, kind_bbox)
             domain_mindate = min(domain_mindate, kind_mindate)
 
@@ -240,7 +240,7 @@ def main():
         write_json(domain_collection, domain_collection_path, args.overwrite)
         stac_add_child(args.stac_base_url, stac_catalog, domain_collection)
     # end domain
-    
+
     write_json(stac_catalog, stac_catalog_path, args.overwrite)
 
 
@@ -254,7 +254,7 @@ def merge_bbox(bbox1, bbox2):
         ]
 
 
-    
+
 def write_json(stac_obj, stac_json_path, overwrite):
     if not os.path.exists(stac_json_path) or overwrite:
         with open(stac_json_path, "w") as f:
@@ -263,7 +263,7 @@ def write_json(stac_obj, stac_json_path, overwrite):
             f.write(stac_json)
 
 
-            
+
 # Returns arcticdem, earthdem, rema
 def get_domain(stac_id):
     return stac_id.split('-')[0]
@@ -287,10 +287,10 @@ def stac_get_self_link(stac):
         if link["rel"] == "self":
             return link
     return None
-    
+
 
 def stac_add_child(base_url, parent, child):
-    
+
     # find child.link{rel=self}
     child_href = stac_get_self_link(child)["href"]
 
@@ -314,7 +314,7 @@ def stac_add_child(base_url, parent, child):
     return parent
 
 
-        
+
 def stac_pgc_catalog(base_url):
     catalog = {
         "type": "Catalog",
@@ -343,7 +343,7 @@ def stac_pgc_catalog(base_url):
 # ArcticDEM, EarthDEM, REMA
 def stac_domain_collection(base_url, domain):
     id = domain.lower()
-    
+
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
@@ -373,7 +373,7 @@ def stac_domain_collection(base_url, domain):
             "temporal": {
                 "interval": [[ "1970-01-01T00:00:00Z", None ]]
             }
-        },                
+        },
         "links": [
             {
                 "rel": "self",
@@ -410,7 +410,7 @@ def stac_kind_collection(base_url, domain, kind):
         keywords = [ "time series" ]
 
     domain_self = stac_get_self_link(domain)
-    
+
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
@@ -440,7 +440,7 @@ def stac_kind_collection(base_url, domain, kind):
             "temporal": {
                 "interval": [[ "1970-01-01T00:00:00Z", None ]]
             }
-        },                
+        },
         "links": [
             {
                 "rel": "self",
@@ -474,13 +474,13 @@ def stac_version_collection(base_url, kind, version):
         keywords = [ "mosaics" ]
     else:
         s2sver = get_version(id) #s2s041 -> 4.1, ideally would be from properties.pgc:s2s_version, but we don't have access to that here.
-        numver = str(int(s2sver[3:5])) + "." + s2sver[5] 
+        numver = str(int(s2sver[3:5])) + "." + s2sver[5]
         title = f"{kind['title']}, version {s2sver}"
         description = f"{kind['description']}, s2s version {numver}"
         keywords = [ "time series" ]
 
     kind_self = stac_get_self_link(kind)
-    
+
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
@@ -510,7 +510,7 @@ def stac_version_collection(base_url, kind, version):
             "temporal": {
                 "interval": [[ "2010-01-01T00:00:00Z", None ]]
             }
-        },                
+        },
         "links": [
             {
                 "rel": "self",
@@ -544,7 +544,7 @@ def stac_resolution_collection(base_url, version, resolution):
     else:
         keywords = [ "time series" ]
     version_self = stac_get_self_link(version)
-    
+
     collection = {
         "type": "Collection",
         "stac_version": "1.0.0",
@@ -574,7 +574,7 @@ def stac_resolution_collection(base_url, version, resolution):
             "temporal": {
                 "interval": [[ "2010-01-01T00:00:00Z", None ]]
             }
-        },                
+        },
         "links": [
             {
                 "rel": "self",
@@ -607,7 +607,7 @@ def stac_geocell_catalog(base_url, resolution, geocell):
         title = f"Geocell {geocell.split('-')[-1]}"
     domain_title = DOMAINS[get_domain(id)]["title"]
     resolution_self = stac_get_self_link(resolution)
-    
+
     catalog = {
         "type": "Catalog",
         "stac_version": "1.0.0",
