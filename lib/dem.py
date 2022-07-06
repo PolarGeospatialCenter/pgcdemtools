@@ -621,6 +621,9 @@ class SetsmDem(object):
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfp))
 
     def get_geom_wgs84(self):
+        if not self.geom or not self.epsg:
+            self.get_geom()
+
         srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         rc = srs.ImportFromProj4(self.proj4_meta)
         geom = self.geom.Clone()
@@ -1844,6 +1847,9 @@ class SetsmTile(object):
         ds = None
 
     def get_geom_wgs84(self):
+        if not self.geom or not self.epsg:
+            self.get_geom()
+
         srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
         rc = srs.ImportFromEPSG(self.epsg)
         geom = self.geom.Clone()
