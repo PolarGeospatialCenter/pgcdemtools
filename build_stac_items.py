@@ -146,6 +146,13 @@ def build_strip_stac_item(base_url, domain, raster):
     start_time = min(raster.avg_acqtime1, raster.avg_acqtime2)
     end_time   = max(raster.avg_acqtime1, raster.avg_acqtime2)
 
+    # validate stripid matches metadata - stripid is built off the filename in dem.py
+    id_parts = raster.stripid.split('_')
+    if raster.res_str != id_parts[6]:
+        raise RuntimeError(f"Strip ID resolution mismatch: {raster.res_str} != {id_parts[6]}")
+    if raster.release_version != id_parts[1]:
+        raise RuntimeError(f"Strip ID version mismatch: v{raster.release_version} != {id_parts[1]}")
+
     stac_item = {
         "type": "Feature",
         "stac_version": "1.0.0",
@@ -271,6 +278,13 @@ def build_mosaic_stac_item(base_url, domain, tile):
     collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
     gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
+
+    # validate tileid matches metadata - tileid is built off the filename in dem.py
+    id_parts = tile.tileid.split('_')
+    if tile.res != id_parts[-2]:
+        raise RuntimeError(f"Tile ID resolution mismatch: {tile.res} != {id_parts[-2]}")
+    if "v"+tile.release_version != id_parts[-1]:
+        raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
 
     stac_item = {
         "type": "Feature",
