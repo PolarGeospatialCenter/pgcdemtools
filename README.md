@@ -35,6 +35,33 @@ resample_setsm - resample SETSM DEMs to a lower resolution.
 
 divide_setsm_tiles - Divide SETSM DEM mosaic tiles into subtiles.
 
+
+## SpatioTemporal Asset Catalog (STAC) Building Tools
+
+### Build STAC Items
+build_stac_items - scans a directory for DEMs and creates a STAC Item for each DEM.
+
+### Build STAC Tree
+build_stac_tree - scans a directory tree for STAC Items and builds a PGC STAC open data catalog
+
+
+### Example:
+
+```
+STAC_DIR: output base directory for STAC files
+DEM_DIR: A STAC item is created for each *_dem.tif found (recursively) under this directory
+DOMAIN: arcticdem, earthdem, or rema.  Must match the domain for the DEMs in DEM_DIR
+
+# Build STAC items in parallel
+find "${DEM_DIR} \
+	-maxdepth 1 -type d -print0 | \
+		xargs -0 -n 1 -I'{}' -P8 \
+			./build_stac_items.py --overwrite --stac-base-dir="${STAC_DIR}" --domain=${DOMAIN} '{}'
+
+# (re-)Build STAC Catalogs/Collections tree from STAC Items
+./build_stac_tree.py --overwrite "${STAC_DIR}"
+```
+
 ## Usage notes
 Some of the tools are designed to be run either in a serial, parallel, or with a PBS scheduler.  If a PBS scheduler is present, the --pbs option can often be used to submit the jobs to PBS.  The qsub* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
 
