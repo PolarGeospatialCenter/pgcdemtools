@@ -7,7 +7,7 @@ import sys
 import tarfile
 from datetime import *
 
-from osgeo import osr, ogr
+from osgeo import osr, ogr, gdal, gdalconst
 
 from lib import utils, dem, taskhandler
 
@@ -18,6 +18,7 @@ logger.setLevel(logging.DEBUG)
 ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
 
 default_epsg = 4326
+
 
 def main():
 
@@ -38,6 +39,8 @@ def main():
     parser.add_argument('--rasterproxy-prefix',
                         help="build rasterProxy .mrf files using this s3 bucket and path prefix\
                              for the source data path with geocell folder and dem tif appended (must start with s3://)")
+    parser.add_argument('--convert-to-cog', action='store_true', default=False,
+                        help="convert dem files to COG before building the archive")
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -150,7 +153,9 @@ def main():
             j += 1
             utils.progress(j, total, "DEMs identified")
 
-            proxy = os.path.join(raster.srcdir, raster.tileid + '_dem.mrf')
+            cog_sem = os.path.join(raster.srcdir, raster.tileid + '.cogfin')
+            suffix = raster.srcfn[len(raster.tileid):-4]  # eg "_dem"
+            proxy = '{}/{}{}.mrf'.format(raster.srcdir, raster.tileid, suffix)
             if args.overwrite:
                 rasters.append(raster)
 
@@ -158,6 +163,8 @@ def main():
                 expected_outputs = [
                     #raster.readme
                 ]
+                if args.convert_to_cog:
+                    expected_outputs.append(cog_sem)
                 if not args.skip_archive:
                     expected_outputs.append(raster.archive)
                 if args.rasterproxy_prefix:
@@ -247,6 +254,11 @@ def build_archive(raster, scratch, args):
             os.path.basename(raster.maxdate),
             ]
 
+        cog_params = {
+            os.path.basename(raster.srcfp): ('YES', 'BILINEAR'),  # dem
+            os.path.basename(raster.browse): ('YES', 'CUBIC'),  # browse
+        }
+
         tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
 
         ## create rasterproxy MRF file
@@ -282,6 +294,55 @@ def build_archive(raster, scratch, args):
                         mrf
                     )
                     subprocess.call(cmd, shell=True)
+
+        ## Convert all rasters to COG in place
+        if args.convert_to_cog:
+            cog_sem = raster.tileid + '.cogfin'
+            if os.path.isfile(cog_sem) and not args.overwrite:
+                logger.info('COG conversion already complete')
+
+            else:
+                logger.info("Converting Rasters to COG")
+                cog_cnt = 0
+                for tif in tifs:
+                    if tif in cog_params:
+                        predictor, resample = cog_params[tif]
+                        if os.path.isfile(tif):
+
+                            # if tif is already COG, increment cnt and move on
+                            if not args.overwrite:
+                                ds = gdal.Open(tif, gdalconst.GA_ReadOnly)
+                                if 'LAYOUT=COG' in ds.GetMetadata_List('IMAGE_STRUCTURE'):
+                                    cog_cnt += 1
+                                    logger.info('\tAlready converted: {}'.format(tif))
+                                    continue
+
+                            tifbn = os.path.splitext(tif)[0]
+                            cog = tifbn + '_cog.tif'
+                            logger.info('\tConverting {} with PREDICTOR={}, RESAMPLING={}'.format(
+                                tif, predictor, resample))
+
+                            # Remove temp COG file if it exists, it must be a partial file
+                            if os.path.isfile(cog):
+                                os.remove(cog)
+
+                            cos = '-co overviews=IGNORE_EXISTING -co compress=lzw -co predictor={} -co resampling={} -co bigtiff=yes'.format(
+                                predictor, resample)
+                            cmd = 'gdal_translate -q -a_srs EPSG:{} -of COG {} {} {}'.format(
+                                raster.epsg, cos, tif, cog)
+                            # logger.info(cmd)
+                            subprocess.call(cmd, shell=True)
+
+                            # delete original tif and increment cog count if successful
+                            if os.path.isfile(cog):
+                                os.remove(tif)
+                                os.rename(cog, tif)
+                            if os.path.isfile(tif):
+                                cog_cnt += 1
+
+                # if all tifs are now cog, add semophore file
+                if cog_cnt == len(tifs):
+                    open(cog_sem, 'w').close()
 
         ## Build Archive
         if not args.skip_archive:
