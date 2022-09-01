@@ -284,6 +284,7 @@ def resample_setsm(task_src, args):
                             inputps.append(inputp)
                         else:
                             raise RuntimeError('Expected source file not found: {}'.format(inputp))
+                    inputps.sort()
                     if component == 'meta.txt':
                         output = '{}{}_{}meta.txt'.format(sptpath, tgt_res, release_version)
                         if not os.path.isfile(output) or args.overwrite:
