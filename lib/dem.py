@@ -1922,6 +1922,7 @@ class SetsmTile(object):
                     alignment_stats = l.split()
                     scene_id = os.path.splitext(alignment_stats[0])[0]
                     alignment_dct[scene_id] = alignment_stats[1:]
+                    component_list.append('_'.join(scene_id.split('_')[:4]))
 
                 elif l.startswith(('WV', 'GE', 'W1', 'W2', 'W3', 'G1', 'SETSM_s2s')):
                     component_list.append(l)
