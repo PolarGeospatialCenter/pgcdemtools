@@ -206,11 +206,41 @@ class SetsmScene(object):
             # set shared attributes
             self.id = self.sceneid
 
-            if not os.path.isfile(self.ortho) \
-            or not os.path.isfile(self.matchtag) \
-            or not os.path.isfile(self.metapath) \
-            or not (os.path.isfile(self.dem) or os.path.isfile(self.lsf_dem)):
+            dem_files = [
+                self.lsf_dem,
+                self.dem,
+                self.dem_edge_masked,
+            ]
+            req_files = [
+                self.ortho,
+                self.matchtag,
+                self.metapath,
+            ]
+            opt_files = [
+                self.ortho2,
+                self.dspinfo,
+            ]
+
+            dem_exists = False
+            for f in dem_files:
+                if os.path.isfile(f):
+                    dem_exists = True
+                    if os.path.getsize(f) == 0:
+                        raise RuntimeError("DEM file is empty: {}".format(f))
+            if not dem_exists:
                 raise RuntimeError("DEM is part of an incomplete set: {}".format(self.sceneid))
+
+            for f in req_files:
+                if os.path.isfile(f):
+                    if os.path.getsize(f) == 0:
+                        raise RuntimeError("DEM file is empty: {}".format(f))
+                else:
+                    raise RuntimeError("DEM is part of an incomplete set: {}".format(self.sceneid))
+
+            for f in opt_files:
+                if os.path.isfile(f):
+                    if os.path.getsize(f) == 0:
+                        raise RuntimeError("DEM file is empty: {}".format(f))
 
             #### parse name
             match = setsm_scene_pattern.match(self.srcfn)
