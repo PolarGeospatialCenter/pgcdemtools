@@ -276,13 +276,15 @@ def divide_tile(src, args):
                 dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, version_str, reg_str, component)
                 logger.info("Building {}".format(dstfp))
                 if not os.path.isfile(dstfp):
-                    cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, minx, maxy, maxx, miny, resample)
+                    cmd = 'gdalwarp -ovr NONE -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -te {3} {4} {5} {6} {0} {1}'.format(
+                        srcfp, dstfp, args.res, minx, miny, maxx, maxy, resample
+                    )
                     logger.info(cmd)
                     subprocess.call(cmd, shell=True)
 
                     if mask:
                         if os.path.isfile(dstfp) and os.path.isfile(mask):
-                            cmd = 'gdalwarp {} {}'.format(mask, dstfp)
+                            cmd = 'gdalwarp -ovr NONE {} {}'.format(mask, dstfp)
                             logger.info(cmd)
                             subprocess.call(cmd, shell=True)
                             os.remove(mask)
@@ -312,13 +314,15 @@ def divide_tile(src, args):
                         dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, version_str, reg_str, component)
                         logger.info("Building {}".format(dstfp))
                         if not os.path.isfile(dstfp):
-                            cmd = 'gdal_translate  -stats -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -projwin {3} {4} {5} {6} {0} {1}'.format(srcfp, dstfp, args.res, xorigin, yorigin+tilesizey, xorigin+tilesizex, yorigin, resample)
+                            cmd = 'gdalwarp -ovr NONE -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -te {3} {4} {5} {6} {0} {1}'.format(
+                                srcfp, dstfp, args.res, xorigin, yorigin, xorigin+tilesizex,  yorigin+tilesizey, resample
+                            )
                             logger.info(cmd)
                             subprocess.call(cmd, shell=True)
 
                         if mask:
                             if os.path.isfile(dstfp) and os.path.isfile(mask):
-                                cmd = 'gdalwarp {} {}'.format(mask, dstfp)
+                                cmd = 'gdalwarp -ovr NONE {} {}'.format(mask, dstfp)
                                 logger.info(cmd)
                                 subprocess.call(cmd, shell=True)
 

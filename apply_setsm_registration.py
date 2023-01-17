@@ -247,14 +247,14 @@ def apply_reg(srcfp, args):
     
     if not srcfp.endswith("dem.tif"):
         if os.path.isfile(reg_vrt) and not os.path.isfile(temp_fp):
-            cmd = 'gdal_translate -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,dstfp)
+            cmd = 'gdalwarp -ovr NONE -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,dstfp)
             if not args.dryrun:
                 logger.info(cmd)
                 subprocess.call(cmd,shell=True)
     
     else:
         if os.path.isfile(reg_vrt) and not os.path.isfile(temp_fp):
-            cmd = 'gdal_translate -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,temp_fp)
+            cmd = 'gdalwarp -ovr NONE -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,temp_fp)
             if not args.dryrun:
                 logger.info(cmd)
                 subprocess.call(cmd,shell=True)
