@@ -248,7 +248,7 @@ def build_archive(raster, scratch, args):
             os.path.basename(raster.day), # day
             os.path.basename(raster.browse), # browse
             os.path.basename(raster.count),
-            os.path.basename(raster.countmt),
+            #os.path.basename(raster.countmt), # except countmt due to a bug in it's construction
             os.path.basename(raster.mad),
             os.path.basename(raster.mindate),
             os.path.basename(raster.maxdate),
@@ -295,7 +295,7 @@ def build_archive(raster, scratch, args):
                     )
                     subprocess.call(cmd, shell=True)
 
-        ## Convert all rasters to COG in place
+        ## Convert all rasters to COG in place (should no longer be needed)
         if args.convert_to_cog:
             cog_sem = raster.tileid + '.cogfin'
             if os.path.isfile(cog_sem) and not args.overwrite:
