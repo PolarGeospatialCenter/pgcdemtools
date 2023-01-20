@@ -279,6 +279,7 @@ def build_strip_stac_item(base_url, domain, raster):
 
 
 def build_mosaic_stac_item(base_url, domain, tile):
+    tile.release_version = "2.0" # TODO: HACK for broken metadata.
     collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
     gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
@@ -361,12 +362,12 @@ def build_mosaic_stac_item(base_url, domain, tile):
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "metadata", "count" ]
             },
-            "count_matchtag": {
-                "title": "Count of Match points",
-                "href": "./"+tile.tileid+"_countmt.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "matchtag" ]
-            },
+            #"count_matchtag": {
+            #    "title": "Count of Match points",
+            #    "href": "./"+tile.tileid+"_countmt.tif",
+            #    "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            #    "roles": [ "metadata", "matchtag" ]
+            #},
             "mad": {
                 "title": "Median Absolute Deviation",
                 "href": "./"+tile.tileid+"_mad.tif",
