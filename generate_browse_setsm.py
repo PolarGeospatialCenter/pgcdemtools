@@ -173,7 +173,7 @@ def resample_setsm(dem, args):
             cmd2 = None
             
         else:
-            cmd = 'gdal_translate -q -ot Byte -dstnodata 0 "{0}" "{1}"'.format(dem, tempfile)
+            cmd = 'gdal_translate -q -ot Byte -scale -dstnodata 0 "{0}" "{1}"'.format(dem, tempfile)
             cmd2 = 'gdalwarp -ovr NONE -tap -q -tr {0} {0} -of {3} -r cubic -dstnodata 0 "{1}" "{2}"'.format(
                 args.resolution, tempfile, low_res_dem, args.format
             )
