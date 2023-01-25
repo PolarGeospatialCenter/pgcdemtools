@@ -234,8 +234,9 @@ def apply_reg(srcfp, args):
         geom = ogr.Geometry(ogr.wkbPolygon)
         geom.AddGeometry(ring)
         
-        # [-projwin ulx uly lrx lry]
-        target_extent = "{} {} {} {}".format(minx, maxy, maxx, miny)
+        # -projwin ulx uly lrx lry
+        # -te xmin ymin xmax ymax
+        target_extent = "{} {} {} {}".format(minx, miny, maxx, maxy)
                 
         vds = VRTdrv.CreateCopy(reg_vrt,sds,0)
         dgtf = (trans_origin_x,gtf[1],gtf[2],trans_origin_y,gtf[4],gtf[5])
@@ -247,14 +248,14 @@ def apply_reg(srcfp, args):
     
     if not srcfp.endswith("dem.tif"):
         if os.path.isfile(reg_vrt) and not os.path.isfile(temp_fp):
-            cmd = 'gdalwarp -ovr NONE -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,dstfp)
+            cmd = 'gdalwarp -ovr NONE -te {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,dstfp)
             if not args.dryrun:
                 logger.info(cmd)
                 subprocess.call(cmd,shell=True)
     
     else:
         if os.path.isfile(reg_vrt) and not os.path.isfile(temp_fp):
-            cmd = 'gdalwarp -ovr NONE -projwin {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,temp_fp)
+            cmd = 'gdalwarp -ovr NONE -te {} -co COMPRESS=LZW -co TILED=YES "{}" "{}"'.format(target_extent,reg_vrt,temp_fp)
             if not args.dryrun:
                 logger.info(cmd)
                 subprocess.call(cmd,shell=True)
