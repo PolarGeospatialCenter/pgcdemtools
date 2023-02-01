@@ -415,7 +415,7 @@ def process_raster(inputp, output, component, args):
             if not args.dryrun:
                 taskhandler.exec_cmd(cmd)
 
-            if component in ('dem', 'mad'):
+            if component in ('dem.tif', 'mad.tif'):
                 # Round these rasters to 1/128 meters to optimize compression
                 output_tmp = '{}_tmp{}'.format(*os.path.splitext(output))
 
