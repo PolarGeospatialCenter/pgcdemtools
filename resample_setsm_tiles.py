@@ -20,13 +20,13 @@ res_min = 0.5
 res_max = 5000
 output_settings = {
     ## component: (resampling strategy, overview resampling, predictor, nodata value)
-    'dem':      ('bilinear', 'bilinear', 'yes', -9999),
-    'browse':   ('cubic', 'cubic', 'yes', 0),
-    'count':    ('near', 'nearest', 'no', 0),
-    'countmt':  ('near', 'nearest', 'no', 0),
-    'mad':      ('bilinear', 'bilinear', 'yes', -9999),
-    'maxdate':  ('near', 'nearest', 'no', 0),
-    'mindate':  ('near', 'nearest', 'no', 0)
+    'dem':      ('bilinear', 'bilinear', 3, -9999),
+    'browse':   ('cubic', 'cubic', 2, 0),
+    'count':    ('near', 'nearest', 1, 0),
+    'countmt':  ('near', 'nearest', 1, 0),
+    'mad':      ('bilinear', 'bilinear', 3, -9999),
+    'maxdate':  ('near', 'nearest', 1, 0),
+    'mindate':  ('near', 'nearest', 1, 0)
 }
 suffixes = list(output_settings.keys())
 
