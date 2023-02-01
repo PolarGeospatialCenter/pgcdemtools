@@ -429,7 +429,7 @@ def process_raster(inputp, output, component, args):
 
                 if args.output_cogs:
                     # Convert gdal_calc.py GTiff output to COG format
-                    cmd = 'gdalwarp -q -ovr NONE {2} "{0}" "{1}"'.format(
+                    cmd = 'gdalwarp -q -ovr NONE -overwrite {2} "{0}" "{1}"'.format(
                         output_tmp, output, cos_cog
                     )
                     logger.debug(cmd)
