@@ -505,12 +505,12 @@ def get_source_names2(src_str):
     src_str_abs = os.path.abspath(src_str)
 
     if src_str.lower().endswith(".shp"):
-        driver = "ESRI Shapefile"
+        driver = ["ESRI Shapefile"]
         src_ds = src_str_abs
         src_lyr = os.path.splitext(os.path.basename(src_str_abs))[0]
 
     elif ".gdb" in src_str.lower():
-        driver = "FileGDB"
+        driver = ["FileGDB", "OpenFileGDB"]
         if not src_str_abs.lower().endswith(".gdb"):
             src_ds, src_lyr = re.split(r"(?<=\.gdb)/", src_str_abs, re.I)
         else:
@@ -518,7 +518,7 @@ def get_source_names2(src_str):
             src_lyr = os.path.splitext(os.path.basename(src_str))[0]
 
     elif src_str.lower().startswith("pg:"):
-        driver = "PostgreSQL"
+        driver = ["PostgreSQL"]
         pfx, src_ds, src_lyr = src_str.split(":")
 
     else:
