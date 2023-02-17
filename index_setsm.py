@@ -233,10 +233,12 @@ def main():
         ogrDriver = None
         for ogr_driver_str in ogr_driver_list:
             ogrDriver = ogr.GetDriverByName(ogr_driver_str)
+            if ogrDriver is not None:
+                break
         if ogrDriver is None:
             parser.error("Driver(s) not available: {}".format(', '.join(ogr_driver_list)))
         else:
-            logger.info("Format Driver selected: {}".format(ogr_driver_str))
+            logger.info("Driver selected: {}".format(ogr_driver_str))
 
         #### Get Config file contents
         try:
