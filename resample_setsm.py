@@ -144,7 +144,7 @@ def resample_setsm(dem, args):
         logger.info("Resampling {}".format(dem))
         #print low_res_dem
         resampling_method = 'bilinear' if args.component == 'dem' else 'near'
-        cmd = 'gdalwarp -q -co tiled=yes -co compress=lzw -r {3} -tr {0} {0} "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, resampling_method)
+        cmd = 'gdalwarp -q -ovr NONE -co tiled=yes -co compress=lzw -r {3} -tr {0} {0} "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, resampling_method)
         #print cmd
         if not args.dryrun:
             taskhandler.exec_cmd(cmd)
