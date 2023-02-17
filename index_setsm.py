@@ -226,13 +226,19 @@ def main():
     ## If not writing to JSON, get OGR driver, ds name, and layer name
     else:
         try:
-            ogr_driver_str, dst_dsp, dst_lyr = utils.get_source_names2(dst)
+            ogr_driver_list, dst_dsp, dst_lyr = utils.get_source_names2(dst)
         except RuntimeError as e:
             parser.error(e)
 
-        ogrDriver = ogr.GetDriverByName(ogr_driver_str)
+        ogrDriver = None
+        for ogr_driver_str in ogr_driver_list:
+            ogrDriver = ogr.GetDriverByName(ogr_driver_str)
+            if ogrDriver is not None:
+                break
         if ogrDriver is None:
-            parser.error("Driver is not available: {}".format(ogr_driver_str))
+            parser.error("Driver(s) not available: {}".format(', '.join(ogr_driver_list)))
+        else:
+            logger.info("Driver selected: {}".format(ogr_driver_str))
 
         #### Get Config file contents
         try:
@@ -261,7 +267,7 @@ def main():
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
-        elif ogr_driver_str in ("ESRI Shapefile","FileGDB"):
+        elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB"):
             dst_ds = dst_dsp
 
         else:
@@ -439,7 +445,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         else:
             ds = ogrDriver.CreateDataSource(dst_ds)
 
-    elif ogr_driver_str == 'FileGDB':
+    elif ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
         max_fld_width = 1024
         if os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
