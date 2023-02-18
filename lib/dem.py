@@ -951,7 +951,7 @@ class SetsmDem(object):
                 pass
 
             try:
-                stripdemid_meta = metad['stripDemGroupId']
+                stripdemid_meta = metad['STRIP_DEM_stripDemGroupId']
                 self.algm_version_key = stripdemid_meta.split('_')[5]
                 self.algm_version = 'SETSM {}'.format(verstr2semver(self.algm_version_key))
             except KeyError as e:
