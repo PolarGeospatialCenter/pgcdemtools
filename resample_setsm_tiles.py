@@ -28,7 +28,7 @@ output_settings = {
     'maxdate':  ('near', 'nearest', 1, 0),
     'mindate':  ('near', 'nearest', 1, 0)
 }
-suffixes = list(output_settings.keys())
+suffixes = sorted(list(output_settings.keys()))
 
 
 def main():
@@ -36,8 +36,8 @@ def main():
     
     #### Set Up Options
     parser.add_argument("src", help="source directory or image")
-    parser.add_argument("-c", "--component",  choices=suffixes+['all'], default='all',
-                help="SETSM DEM component to resample (default = all")
+    parser.add_argument("-c", "--components",  nargs='+', choices=suffixes+['all'], default='all',
+                help="One or more SETSM DEM components to resample (default = all")
     parser.add_argument("-tr", "--tgt-resolution",  default=default_res, type=float,
                 help="output resolution in meters between {} and {} (default={})".format(res_min, res_max, default_res))
     parser.add_argument("-sr", "--src-resolution", default=default_src_res, type=float,
@@ -101,7 +101,7 @@ def main():
     task_queue = []
     i=0
     logger.info("Searching for SETSM rasters")
-    components = suffixes if args.component == 'all' else [args.component]
+    components = sorted(list(set(suffixes if 'all' in args.components else args.components)))
     components = ['{}.tif'.format(c) for c in components] + ['meta.txt']
 
     if os.path.isfile(src):
@@ -234,7 +234,7 @@ def resample_setsm(task_src, args):
 
     rasters = []
     supertiles = {}
-    components = suffixes if args.component == 'all' else [args.component]
+    components = sorted(list(set(suffixes if 'all' in args.components else args.components)))
     components = ['{}.tif'.format(c) for c in components] + ['meta.txt']
     src_res = res_float_to_str(args.src_resolution)
     tgt_res = res_float_to_str(args.tgt_resolution)
