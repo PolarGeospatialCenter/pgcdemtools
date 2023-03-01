@@ -328,7 +328,7 @@ def main():
                 logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
                 sys.exit(-1)
 
-        if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
+        if ogr_driver_str in ('FileGDB', 'OpenFileGDB') and os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
             if ds:
                 for i in range(ds.GetLayerCount()):
