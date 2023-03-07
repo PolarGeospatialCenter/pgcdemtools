@@ -272,6 +272,7 @@ def main():
 
         else:
             logger.error("Format {} is not supported".format(ogr_driver_str))
+            sys.exit(-1)
 
         ## Get pairname-region dict
         if args.skip_region_lookup or args.mode == 'tile':
@@ -319,33 +320,35 @@ def main():
             parser.error(e)
 
         #### Test if dst table exists
-        if ogr_driver_str == 'ESRI Shapefile' and os.path.isfile(dst_ds):
-            if args.overwrite:
-                logger.info("Removing old index... %s" %os.path.basename(dst_ds))
-                if not args.dryrun:
-                    ogrDriver.DeleteDataSource(dst_ds)
-            elif not args.append:
-                logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
-                sys.exit(-1)
+        if ogr_driver_str == 'ESRI Shapefile':
+            if os.path.isfile(dst_ds):
+                if args.overwrite:
+                    logger.info("Removing old index... %s" %os.path.basename(dst_ds))
+                    if not args.dryrun:
+                        ogrDriver.DeleteDataSource(dst_ds)
+                elif not args.append:
+                    logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
+                    sys.exit(-1)
 
-        if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
-            ds = ogrDriver.Open(dst_ds,1)
-            if ds:
-                for i in range(ds.GetLayerCount()):
-                    lyr = ds.GetLayer(i)
-                    if lyr.GetName() == dst_lyr:
-                        if args.overwrite:
-                            logger.info("Removing old index layer: {}".format(dst_lyr))
-                            del lyr
-                            ds.DeleteLayer(i)
-                            break
-                        elif not args.append:
-                            logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit(-1)
-                ds = None
+        elif ogr_driver_str in ('FileGDB', 'OpenFileGDB'):
+            if os.path.isdir(dst_ds):
+                ds = ogrDriver.Open(dst_ds,1)
+                if ds:
+                    for i in range(ds.GetLayerCount()):
+                        lyr = ds.GetLayer(i)
+                        if lyr.GetName() == dst_lyr:
+                            if args.overwrite:
+                                logger.info("Removing old index layer: {}".format(dst_lyr))
+                                del lyr
+                                ds.DeleteLayer(i)
+                                break
+                            elif not args.append:
+                                logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
+                                sys.exit(-1)
+                    ds = None
 
         ## Postgres check - do not overwrite
-        if ogr_driver_str == 'PostgreSQL':
+        elif ogr_driver_str == 'PostgreSQL':
             ds = ogrDriver.Open(dst_ds,1)
             if ds:
                 for i in range(ds.GetLayerCount()):
@@ -360,6 +363,10 @@ def main():
                             logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
                             sys.exit(-1)
                 ds = None
+
+        else:
+            logger.error("Format {} not handled in dst table existance check".format(ogr_driver_str))
+            sys.exit(-1)
 
 
     #### ID records
