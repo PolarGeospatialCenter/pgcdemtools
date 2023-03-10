@@ -121,6 +121,7 @@ setsm_pairname_pattern = re.compile("""((?P<algorithm>SETSM)_
 
 xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
 s2s_version_pattern = re.compile("Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
+source_image_pattern = re.compile("([\w\-]+?)(_temp)?(\.tif)?$")
 
 strip_masks = {
     ## name: (edgemask, watermask, cloudmask)
@@ -158,6 +159,19 @@ class SetsmScene(object):
             ## Check if epsg is valid and recalculate if not - catch effects of a jsons build with a bug
             if not self.epsg:
                 self.epsg = get_epsg(self.proj4)
+
+            ## Check and repair missing attributes using jsons built before code updates
+            key_property_map = {
+                'image_1': 'scene1',
+                'image_2': 'scene2',
+                'image_1_gen_time': 'gentime1',
+                'image_2_gem_time': 'gentime2',
+            }
+            if 'prod_version' not in md:
+                self.prod_version = 1
+            for k, p in key_property_map.items():
+                if k not in md:
+                    setattr(self, p, None)
 
         else:
             self.srcdir, self.srcfn = os.path.split(metapath)
@@ -207,12 +221,17 @@ class SetsmScene(object):
                 self.res = groups['res']
                 self.creation_date = None
                 self.algm_version = 'SETSM' # if present, the metadata file value will overwrite this
+                self.prod_version = 1  # if present the metadata file value will overwrite this
                 self.geom = None
                 self.group_version = None
                 self.version = None
                 self.is_dsp = None
                 self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
                 self.subtile = groups['subtile'] if 'subtile' in groups else None
+                self.gentime1 = None
+                self.gentime2 = None
+                self.scene1 = None
+                self.scene2 = None
             else:
                 raise RuntimeError("DEM name does not match expected pattern: {}".format(self.srcfn))
 
@@ -335,14 +354,41 @@ class SetsmScene(object):
             metad = self._parse_metadata_file(self.metapath)
 
             simple_attrib_map = {
+                # metad key name: property name
                 'group_version': 'group_version',
                 'image_1_satid': 'sensor1',
                 'image_2_satid': 'sensor2',
+                'setsm_version': 'version',
+                'prod_version': 'prod_version',
             }
 
-            for k, v in simple_attrib_map.items():
+            image_name_map = {
+                'image_1': 'scene1',
+                'image_2': 'scene2',
+            }
+
+            time_attrib_map = {
+                'image_1_acquisition_time': 'acqdate1',
+                'image_2_acquisition_time': 'acqdate2',
+                'image_1_gen_time': 'gentime1',
+                'image_2_gen_time': 'gentime2',
+            }
+
+            for k, p in simple_attrib_map.items():
                 if k in metad:
-                    setattr(self, v, metad[k])
+                    setattr(self, p, metad[k])
+
+            for k, p in image_name_map.items():
+                if k in metad:
+                    m = source_image_pattern.search(metad[k])
+                    if m:
+                        setattr(self, p, m.group(1))
+                    else:
+                        raise RuntimeError('{} value does not match pattern: {}'.format(k, metad[k]))
+
+            for k, p in time_attrib_map.items():
+                if k in metad:
+                    setattr(self, p, datetime.strptime(metad[k], "%Y-%m-%dT%H:%M:%S.%fZ"))
 
             if 'output_projection' in metad:
                 self.proj4_meta = metad['output_projection'].replace("'","")
@@ -354,17 +400,10 @@ class SetsmScene(object):
             else:
                 raise RuntimeError('Key "Creation Date" not found in meta dict from {}'.format(self.metapath))
 
-            if 'setsm_version' in metad:
-                self.algm_version = "SETSM {}".format(metad['setsm_version'])
-                self.version = metad['setsm_version']
+            if self.version:
+                self.algm_version = "SETSM {}".format(self.version)
             else:
                 raise RuntimeError('Key "SETSM Version" not found in meta dict from {}'.format(self.metapath))
-
-            if 'image_1_acquisition_time' in metad:
-                self.acqdate1 = datetime.strptime(metad["image_1_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
-
-            if 'image_2_acquisition_time' in metad:
-                self.acqdate2 = datetime.strptime(metad["image_2_acquisition_time"], "%Y-%m-%dT%H:%M:%S.%fZ")
 
             self.is_dsp = 'downsample_method_dem' in metad
 
@@ -487,6 +526,7 @@ class SetsmScene(object):
         'xsize',
         'yres',
         'ysize',
+        'prod_version',
     )
 
 

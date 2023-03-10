@@ -209,6 +209,7 @@ field_attrib_map = {
 StandardAttribute = namedtuple("StandardAttribute", ("fname", "ftype", "fwidth", "fprecision"))
 
 # Attributes
+# TODO change field type for strips
 DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
@@ -234,6 +235,7 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
     StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
+    # StandardAttribute("CR_DATE", ogr.OFTDateTime, 32, 0),
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
     StandardAttribute("S2S_VER", ogr.OFTString, 32, 0),
     StandardAttribute("IS_LSF", ogr.OFTInteger, 8, 8),
@@ -272,6 +274,7 @@ DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
     StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
+    # StandardAttribute("INDEX_DATE", ogr.OFTDateTime, 32, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITION_RELVER = [
@@ -287,10 +290,14 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
     StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
     StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
-    StandardAttribute("ACQDATE1", ogr.OFTString, 32, 0),
-    StandardAttribute("ACQDATE2", ogr.OFTString, 32, 0),
+    StandardAttribute("ACQDATE1", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("ACQDATE2", ogr.OFTDateTime, 0, 0),
     StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
     StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
+    StandardAttribute("SCENE1", ogr.OFTString, 100, 0),
+    StandardAttribute("SCENE2", ogr.OFTString, 100, 0),
+    StandardAttribute("GEN_TIME1", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("GEN_TIME2", ogr.OFTDateTime, 0, 0),
     StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
     StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
     StandardAttribute("REGION", ogr.OFTString, 64, 0),
@@ -300,12 +307,13 @@ SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("PROJ4", ogr.OFTString, 100, 0),
     StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
-    StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
+    StandardAttribute("CR_DATE", ogr.OFTDateTime, 0, 0),
     StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
-    StandardAttribute("HAS_LSF", ogr.OFTInteger, 8, 8),
-    StandardAttribute("HAS_NONLSF", ogr.OFTInteger, 8, 8),
-    StandardAttribute("IS_XTRACK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("IS_DSP", ogr.OFTInteger, 8, 8),
+    StandardAttribute("PROD_VER", ogr.OFTInteger, 8, 8),
+    StandardAttribute("HAS_LSF", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("HAS_NONLSF", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("IS_XTRACK", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("IS_DSP", ogr.OFSTBoolean, 0, 0),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION = []
@@ -317,7 +325,7 @@ SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
-    StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
+    StandardAttribute("INDEX_DATE", ogr.OFTDateTime, 0, 0),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
@@ -327,7 +335,7 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("TILE", ogr.OFTString, 20, 0),
     StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
-    StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
+    StandardAttribute("CR_DATE", ogr.OFTDateTime, 0, 0),
     StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
     StandardAttribute("NUM_COMP", ogr.OFTInteger, 8, 8),
 ]
@@ -341,7 +349,7 @@ TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
 TILE_DEM_ATTRIBUTE_DEFINITIONS = TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
     StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
-    StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
+    StandardAttribute("INDEX_DATE", ogr.OFTDateTime, 0, 0),
 ]
 
 OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS = [
