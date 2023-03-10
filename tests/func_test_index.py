@@ -105,6 +105,18 @@ class TestIndexerIO(unittest.TestCase):
                 is_xtrack = 0 if srcfn.startswith(('WV', 'GE', 'QB')) else 1
                 self.assertEqual(feat.GetField('IS_XTRACK'), is_xtrack)
                 self.assertIsNotNone(feat.GetField('PROD_VER'))
+                record_res = feat.GetField('DEM_RES')
+                has_lsf = feat.GetField("HAS_LSF")
+                has_nonlsf = feat.GetField("HAS_NONLSF")
+                if record_res == 0.5:
+                    self.assertTrue(has_nonlsf)
+                    self.assertFalse(has_lsf)
+                elif record_res == 2.0:
+                    self.assertTrue(has_lsf)
+                    if feat.GetField("CENT_LAT") < -60:
+                        self.assertFalse(has_lsf)
+                    else:
+                        self.assertTrue(has_nonlsf)
             ds, layer = None, None
 
             ## Test if stdout has proper error
@@ -347,6 +359,19 @@ class TestIndexerIO(unittest.TestCase):
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt, result_cnt)
+            for feat in layer:
+                record_res = feat.GetField('DEM_RES')
+                has_lsf = feat.GetField("HAS_LSF")
+                has_nonlsf = feat.GetField("HAS_NONLSF")
+                if record_res == 0.5:
+                    self.assertTrue(has_nonlsf)
+                    self.assertFalse(has_lsf)
+                elif record_res == 2.0:
+                    self.assertTrue(has_lsf)
+                    if feat.GetField("CENT_LAT") < -60:
+                        self.assertFalse(has_lsf)
+                    else:
+                        self.assertTrue(has_nonlsf)
             ds, layer = None, None
 
             ##Test if stdout has proper error
@@ -503,6 +528,19 @@ class TestIndexerIO(unittest.TestCase):
         self.assertIsNotNone(layer)
         cnt = layer.GetFeatureCount()
         self.assertEqual(cnt, self.scene_count)
+        for feat in layer:
+            record_res = feat.GetField('DEM_RES')
+            has_lsf = feat.GetField("HAS_LSF")
+            has_nonlsf = feat.GetField("HAS_NONLSF")
+            if record_res == 0.5:
+                self.assertTrue(has_nonlsf)
+                self.assertFalse(has_lsf)
+            elif record_res == 2.0:
+                self.assertTrue(has_lsf)
+                if feat.GetField("CENT_LAT") < -60:
+                    self.assertFalse(has_lsf)
+                else:
+                    self.assertTrue(has_nonlsf)
         ds, layer = None, None
 
     # @unittest.skip("test")

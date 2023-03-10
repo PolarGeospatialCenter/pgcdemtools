@@ -173,6 +173,10 @@ class SetsmScene(object):
                 if k not in md:
                     setattr(self, p, None)
 
+            self.has_lsf = os.path.isfile(self.lsf_dem)
+            self.has_nonlsf = os.path.isfile(self.dem)
+            self.is_xtrack = bool(self.is_xtrack)
+
         else:
             self.srcdir, self.srcfn = os.path.split(metapath)
             self.sceneid = self.srcfn[:-9]
@@ -226,7 +230,9 @@ class SetsmScene(object):
                 self.group_version = None
                 self.version = None
                 self.is_dsp = None
-                self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                self.has_lsf = os.path.isfile(self.lsf_dem)
+                self.has_nonlsf = os.path.isfile(self.dem)
+                self.is_xtrack = True if xtrack_sensor_pattern.match(self.sensor1) else False
                 self.subtile = groups['subtile'] if 'subtile' in groups else None
                 self.gentime1 = None
                 self.gentime2 = None
