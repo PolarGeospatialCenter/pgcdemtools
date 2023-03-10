@@ -432,9 +432,9 @@ class TestIndexerIO(unittest.TestCase):
                 self.assertEqual(feat.GetField('IS_DSP'), 1 if record_res == 2.0 else 0)
                 if '--status-dsp-record-mode-orig aws' in options:
                     if '--custom-paths BP' in options:
-                        self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'tape')
+                        self.assertEqual(feat.GetField('STATUS'), 'aws' if record_res == 0.5 else 'tape')
                     else:
-                        self.assertEqual(feat.GetField('STATUS'), 'aws' if feat.GetField('DEM_RES') == 0.5 else 'online')
+                        self.assertEqual(feat.GetField('STATUS'), 'aws' if record_res == 0.5 else 'online')
 
                 # TODO revert to all records using assertIsNotNone after all incorrect 50cminfo.txt files are ingested
                 if record_res == 0.5:
@@ -590,13 +590,14 @@ class TestIndexerIO(unittest.TestCase):
             scenedemid = feat.GetField('SCENEDEMID')
             stripdemid = feat.GetField('STRIPDEMID')
             scenedemid_lastpart = scenedemid.split('_')[-1]
+            record_res = feat.GetField('DEM_RES')
             if res:
                 self.assertEqual(feat.GetField('DEM_RES'), res)
                 self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
                 self.assertTrue(res_str[res] in stripdemid)
                 self.assertEqual(feat.GetField('IS_DSP'), 1 if res == 2.0 else 0)
-            self.assertEqual(feat.GetField('IS_DSP'), 1 if feat.GetField('DEM_RES') == 2.0 else 0)
-            self.assertTrue(scenedemid_lastpart.startswith('2' if feat.GetField('DEM_RES') == 2.0 else '0'))
+            self.assertEqual(feat.GetField('IS_DSP'), 1 if record_res == 2.0 else 0)
+            self.assertTrue(scenedemid_lastpart.startswith('2' if record_res == 2.0 else '0'))
 
             # TODO revert to all records using assertIsNotNone after all incorrect 50cminfo.txt files are ingested
             if res == 0.5:

@@ -173,8 +173,9 @@ class SetsmScene(object):
                 if k not in md:
                     setattr(self, p, None)
 
-            self.has_lsf = os.path.isfile(self.lsf_dem)
-            self.has_nonlsf = os.path.isfile(self.dem)
+            # Note: this approach will not work for DSP dems being used as proxies for 50cm
+            self.has_lsf = self.filesz_lsf > 0
+            self.has_nonlsf = self.filesz_dem > 0
             self.is_xtrack = bool(self.is_xtrack)
 
         else:
