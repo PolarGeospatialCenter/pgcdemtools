@@ -160,6 +160,7 @@ class SetsmScene(object):
                 self.epsg = get_epsg(self.proj4)
 
         else:
+            self.srcfp = metapath
             self.srcdir, self.srcfn = os.path.split(metapath)
             self.sceneid = self.srcfn[:-9]
 
@@ -185,7 +186,6 @@ class SetsmScene(object):
 
             # set shared attributes
             self.id = self.sceneid
-            self.srcfp = self.metapath
 
             if not os.path.isfile(self.ortho) \
             or not os.path.isfile(self.matchtag) \

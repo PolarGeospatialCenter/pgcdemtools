@@ -387,11 +387,14 @@ def main():
             temp_records = read_json(os.path.join(src_fp),args.mode)
             records.extend(temp_records)
         else:
+            record = None
             try:
                 record = dem_class(src_fp)
                 record.get_dem_info()
-            except RuntimeError as e:
-                logger.error( e )
+            except Exception as e:
+                logger.error(e)
+                if record is not None and hasattr(record, 'srcfp'):
+                    logger.error("Error encountered on DEM record: {}".format(record.srcfp))
             else:
                 ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
                 if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
