@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 
 import argparse
-import datetime
 import json
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
+import logging
+import os
 import pathlib
+import sys
 
-from osgeo import gdal, osr, ogr, gdalconst
-
-from lib import utils, dem, taskhandler
+from lib import utils
+from lib import VERSION
 
 DOMAINS = {
     "arcticdem": {
@@ -55,17 +55,23 @@ def main():
     parser.add_argument('--validate', action='store_true', default=False,
                         help="validate stac item json")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
     src = os.path.abspath(args.src)
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
 
     if args.validate:
-        import pystac
+        pass
 
     ## Setup Logging options
     if args.v:
@@ -78,6 +84,8 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
+
+    logger.info("Current version: %s", VERSION)
 
     #### ID rasters
     logger.info('Identifying STAC Items')

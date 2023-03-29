@@ -2,9 +2,11 @@ import argparse
 import glob
 import logging
 import os
+import sys
 from datetime import *
 
 from lib import utils, dem
+from lib import VERSION
 
 #### Create Logger
 logger = utils.get_logger()
@@ -46,9 +48,14 @@ def main():
                         help="overwrite existing index")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
     
     #### Parse Arguments
     args = parser.parse_args()
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
     
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
@@ -76,7 +83,9 @@ def main():
         formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     rasters = []
 
     ### Open shp, verify field, verify projection, extract tile geoms

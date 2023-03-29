@@ -1,6 +1,11 @@
-import os, string, sys, re, glob, argparse, subprocess, logging
-from osgeo import gdal, gdalconst
-from lib import dem, utils, taskhandler
+import argparse
+import logging
+import os
+import re
+import sys
+
+from lib import taskhandler
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -29,14 +34,19 @@ def main():
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                       help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+
     pos_arg_keys = ['srcdir']
-    
-    
+
     #### Parse Arguments
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     path = os.path.abspath(args.srcdir)
-    
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
+
     #### Validate Required Arguments
     if not os.path.isdir(path) and not os.path.isfile(path):
         parser.error('src must be avalid directory or file')
@@ -59,7 +69,9 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)

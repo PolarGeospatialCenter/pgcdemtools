@@ -1,6 +1,14 @@
-import os, string, sys, re, glob, argparse, subprocess, logging
-from osgeo import gdal, gdalconst, ogr, osr
-from lib import dem, utils, taskhandler
+import argparse
+import logging
+import os
+import re
+import subprocess
+import sys
+
+from osgeo import gdal, gdalconst, ogr
+from lib import VERSION
+
+from lib import taskhandler
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -11,6 +19,7 @@ default_res = 16
 default_format = 'JPEG'
 suffixes = ('ortho', 'matchtag', 'dem')
 formats = ('JPEG', 'GTiff')
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,12 +39,18 @@ def main():
                 help="qsub script to use in scheduler submission (PBS default is qsub_resample.sh, SLURM default is slurm_resample.sh)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+
     pos_arg_keys = ['src']
     
     #### Parse Arguments
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     src = os.path.abspath(args.src)
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
     
     #### Validate Required Arguments
     if not os.path.isdir(src) and not os.path.isfile(src):
@@ -65,6 +80,8 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
+
+    logger.info("Current version: %s", VERSION)
     
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'slurm', 'parallel_processes')

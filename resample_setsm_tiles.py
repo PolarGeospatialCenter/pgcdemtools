@@ -8,6 +8,7 @@ import sys
 from osgeo import gdal
 
 from lib import taskhandler, dem, walk as wk
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -60,12 +61,18 @@ def main():
                 help="print debug level logger messages")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+
     pos_arg_keys = ['src']
 
     ## Parse Arguments
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     src = os.path.abspath(args.src)
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
     
     ## Validate Required Arguments
     if not os.path.isdir(src) and not os.path.isfile(src):
@@ -92,7 +99,9 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)

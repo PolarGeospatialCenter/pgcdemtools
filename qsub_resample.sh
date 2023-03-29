@@ -4,6 +4,7 @@
 #PBS -m n
 #PBS -k oe
 #PBS -j oe
+#PBS -q batch
 
 cd $PBS_O_WORKDIR
 

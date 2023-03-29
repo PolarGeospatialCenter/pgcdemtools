@@ -1,8 +1,16 @@
-import os, sys, string, shutil, glob, re, logging, math, subprocess
-from datetime import *
-from osgeo import gdal, osr, ogr, gdalconst
 import argparse
+import glob
+import logging
+import math
+import os
+import shutil
+import subprocess
+import sys
+
+from osgeo import gdal
+
 from lib import utils, dem, taskhandler
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -47,9 +55,14 @@ def main():
                         help="number of parallel processes to spawn (default 1)")
     parser.add_argument("--qsubscript",
                         help="qsub script to use in PBS submission (default is qsub_divide.sh in script root folder)")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
 
     #### Parse Arguments
     args = parser.parse_args()
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
 
     #### Verify Arguments
     src = os.path.abspath(args.src)
@@ -89,6 +102,8 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
+
+    logger.info("Current version: %s", VERSION)
 
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes','tiles')

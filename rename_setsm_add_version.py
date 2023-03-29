@@ -1,6 +1,11 @@
-import os, string, sys, logging, argparse, glob
-from datetime import datetime
-from lib import utils, dem
+import argparse
+import glob
+import logging
+import os
+import sys
+
+from lib import dem
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -15,19 +20,26 @@ def main():
         )
     
     parser.add_argument("srcdir", help="source directory")
-    parser.add_argument("version", help="version string (ex: s2s041)")
+    parser.add_argument("version", help="strip DEM version string (ex: s2s041)")
     parser.add_argument("--dryrun", action='store_true', default=False,
                         help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print script version and exit')
     
     #### Parse Arguments
     args = parser.parse_args()
     src = args.srcdir
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
 
     lsh = logging.StreamHandler()
     lsh.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
+
+    logger.info("Current version: %s", VERSION)
 
     rasters = []
     #### ID rasters

@@ -10,6 +10,7 @@ from datetime import *
 from osgeo import osr, ogr, gdal, gdalconst
 
 from lib import utils, dem, taskhandler
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -53,10 +54,14 @@ def main():
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
-
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
 
     #### Parse Arguments
     args = parser.parse_args()
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
@@ -113,6 +118,7 @@ def main():
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
 
+    logger.info("Current version: %s", VERSION)
 
     #### ID rasters
     logger.info('Identifying DEMs')
@@ -384,7 +390,7 @@ def build_archive(raster, scratch, args):
                             if lyr is not None:
 
                                 for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
-                                    if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
+                                    if field_def.ftype == ogr.OFTDateTime:
                                         ftype = ogr.OFTDate
                                     else:
                                         ftype = field_def.ftype

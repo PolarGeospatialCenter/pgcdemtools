@@ -10,6 +10,7 @@ from datetime import *
 from osgeo import gdal, osr, ogr, gdalconst
 
 from lib import utils, dem, taskhandler
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -62,6 +63,8 @@ def main():
                         help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+
     pos_arg_keys = ['src','scratch']
     
     #### Parse Arguments
@@ -69,6 +72,10 @@ def main():
     args = parser.parse_args()
     src = os.path.abspath(args.src)
     scratch = os.path.abspath(args.scratch)
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
     
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
@@ -105,7 +112,9 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)

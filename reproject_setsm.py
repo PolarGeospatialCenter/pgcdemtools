@@ -1,6 +1,14 @@
-import os, string, sys, re, glob, argparse, subprocess, logging, math, numpy
-from osgeo import gdal, ogr, osr, gdalconst
+import argparse
+import logging
+import numpy
+import os
+import re
+import sys
+
+from osgeo import ogr, osr
+
 from lib import taskhandler
+from lib import VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -29,6 +37,8 @@ def main():
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
+    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+
     pos_arg_keys = ['srcdir','dstdir','epsg']
 
 
@@ -36,6 +46,10 @@ def main():
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     srcpath = os.path.abspath(args.srcdir)
+
+    if args.version:
+        print("Current version: %s", VERSION)
+        sys.exit(0)
 
     #### Validate Required Arguments
     if not os.path.isdir(srcpath) and not os.path.isfile(srcpath):
@@ -68,6 +82,8 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
+
+    logger.info("Current version: %s", VERSION)
 
     #### Get args ready to pass to task handler
     arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
