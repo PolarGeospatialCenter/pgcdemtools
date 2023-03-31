@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 
-from lib import dem
+from lib import dem, SHORT_VERSION
 from lib import VERSION
 
 #### Create Logger
@@ -23,15 +23,12 @@ def main():
     parser.add_argument("version", help="strip DEM version string (ex: s2s041)")
     parser.add_argument("--dryrun", action='store_true', default=False,
                         help="print actions without executing")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print script version and exit')
-    
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
     #### Parse Arguments
     args = parser.parse_args()
     src = args.srcdir
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     lsh = logging.StreamHandler()
     lsh.setLevel(logging.INFO)

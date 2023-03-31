@@ -7,7 +7,7 @@ import os
 import pathlib
 import sys
 
-from lib import utils
+from lib import utils, SHORT_VERSION
 from lib import VERSION
 
 DOMAINS = {
@@ -55,16 +55,13 @@ def main():
     parser.add_argument('--validate', action='store_true', default=False,
                         help="validate stac item json")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
     src = os.path.abspath(args.src)
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):

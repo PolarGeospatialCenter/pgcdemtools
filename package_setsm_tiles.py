@@ -9,7 +9,7 @@ from datetime import *
 
 from osgeo import osr, ogr, gdal, gdalconst
 
-from lib import utils, dem, taskhandler
+from lib import utils, dem, taskhandler, SHORT_VERSION
 from lib import VERSION
 
 #### Create Logger
@@ -54,14 +54,10 @@ def main():
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
-
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
     #### Parse Arguments
     args = parser.parse_args()
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):

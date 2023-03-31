@@ -7,7 +7,7 @@ import sys
 
 from osgeo import gdal
 
-from lib import taskhandler, dem, walk as wk
+from lib import taskhandler, dem, walk as wk, SHORT_VERSION
 from lib import VERSION
 
 #### Create Logger
@@ -61,7 +61,8 @@ def main():
                 help="print debug level logger messages")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     pos_arg_keys = ['src']
 
@@ -69,10 +70,6 @@ def main():
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     src = os.path.abspath(args.src)
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
     
     ## Validate Required Arguments
     if not os.path.isdir(src) and not os.path.isfile(src):

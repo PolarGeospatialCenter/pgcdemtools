@@ -4,7 +4,7 @@ import os
 import re
 import sys
 
-from lib import taskhandler
+from lib import taskhandler, SHORT_VERSION
 from lib import VERSION
 
 #### Create Logger
@@ -34,7 +34,8 @@ def main():
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                       help="print actions without executing")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     pos_arg_keys = ['srcdir']
 
@@ -42,10 +43,6 @@ def main():
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     path = os.path.abspath(args.srcdir)
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     #### Validate Required Arguments
     if not os.path.isdir(path) and not os.path.isfile(path):

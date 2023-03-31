@@ -6,7 +6,7 @@ from datetime import *
 
 from osgeo import osr, ogr
 
-from lib import dem, taskhandler
+from lib import dem, taskhandler, SHORT_VERSION
 from lib import VERSION
 
 #### Create Logger
@@ -41,7 +41,8 @@ def main():
                         help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     pos_arg_keys = ['src','scratch']
     
@@ -50,10 +51,6 @@ def main():
     args = parser.parse_args()
     src = os.path.abspath(args.src)
     scratch = os.path.abspath(args.scratch)
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
     
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):

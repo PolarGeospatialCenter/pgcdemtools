@@ -9,7 +9,7 @@ import sys
 
 from osgeo import gdal
 
-from lib import utils, dem, taskhandler
+from lib import utils, dem, taskhandler, SHORT_VERSION
 from lib import VERSION
 
 #### Create Logger
@@ -42,7 +42,7 @@ def main():
     parser.add_argument('--res', type=int, default=2,
                         help="resolution in meters")
     parser.add_argument('--tiles', help="list of tiles to process, comma delimited")
-    parser.add_argument("--version", help="version string (ex: v1.2)")
+    parser.add_argument("--dem-version", help="version string (ex: v1.2)")
     parser.add_argument("--cutline-loc", help="directory containing cutline shps indicating areas of bad data")
     parser.add_argument('--build-ovr', action='store_true', default=False,
                         help="build overviews")
@@ -55,14 +55,11 @@ def main():
                         help="number of parallel processes to spawn (default 1)")
     parser.add_argument("--qsubscript",
                         help="qsub script to use in PBS submission (default is qsub_divide.sh in script root folder)")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     #### Parse Arguments
     args = parser.parse_args()
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     #### Verify Arguments
     src = os.path.abspath(args.src)
@@ -88,10 +85,10 @@ def main():
     if args.pbs and args.parallel_processes > 1:
         parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
 
-    if args.version:
-        version_str = '_{}'.format(args.version)
+    if args.dem_version:
+        dem_version_str = '_{}'.format(args.dem_version)
     else:
-        version_str = ''
+        dem_version_str = ''
 
     if args.tiles:
         tiles = args.tiles.split(',')
@@ -121,9 +118,9 @@ def main():
             logger.error( e )
         else:
             if src.endswith('reg_dem.tif'):
-                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], args.res, version_str))
+                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], args.res, dem_version_str))
             else:
-                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], args.res, version_str))
+                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], args.res, dem_version_str))
 
             #### verify that cutlines can be found if requested
             if args.cutline_loc:
@@ -164,9 +161,9 @@ def main():
                             logger.error( e )
                         else:
                             if srcfp.endswith('reg_dem.tif'):
-                                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(srcfp[:-15], args.res, version_str))
+                                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(srcfp[:-15], args.res, dem_version_str))
                             else:
-                                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], args.res, version_str))
+                                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], args.res, dem_version_str))
                             if len(dstfp_list) == 0:
                                 logger.info("computing tile: {}".format(srcfp))
 
@@ -230,10 +227,10 @@ def main():
 
 def divide_tile(src, args):
 
-    if args.version:
-        version_str = '_{}'.format(args.version)
+    if args.dem_version:
+        dem_version_str = '_{}'.format(args.dem_version)
     else:
-        version_str = ''
+        dem_version_str = ''
 
     ## get tile geom and make subtiles
     ds = gdal.Open(src)
@@ -258,8 +255,8 @@ def divide_tile(src, args):
 
         src_metapath = '{}_dem_meta.txt'.format(tile_base)
         src_regmetapath = '{}_reg.txt'.format(tile_base)
-        dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], args.res, version_str)
-        dst_regmetapath = '{}_{}m{}_reg.txt'.format(tile_base[:-3], args.res, version_str)
+        dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], args.res, dem_version_str)
+        dst_regmetapath = '{}_{}m{}_reg.txt'.format(tile_base[:-3], args.res, dem_version_str)
 
         shutil.copy2(src_metapath, dst_metapath)
         if os.path.isfile(src_regmetapath):
@@ -269,7 +266,7 @@ def divide_tile(src, args):
         if args.cutline_loc:
             tile = '_'.join(os.path.basename(src).split('_')[:2])
             cutline_shp = os.path.join(args.cutline_loc, tile + '_cut.shp')
-            mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], args.res, version_str)
+            mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], args.res, dem_version_str)
             if not os.path.isfile(cutline_shp):
                 logger.info('No cutline file found for src tile: {}'.format(cutline_shp))
             else:
@@ -288,7 +285,7 @@ def divide_tile(src, args):
                 else:
                     resample = args.resample
                 srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
-                dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, version_str, reg_str, component)
+                dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, dem_version_str, reg_str, component)
                 logger.info("Building {}".format(dstfp))
                 if not os.path.isfile(dstfp):
                     cmd = 'gdalwarp -ovr NONE -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -te {3} {4} {5} {6} {0} {1}'.format(
@@ -326,7 +323,7 @@ def divide_tile(src, args):
                         else:
                             resample = args.resample
                         srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
-                        dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, version_str, reg_str, component)
+                        dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, dem_version_str, reg_str, component)
                         logger.info("Building {}".format(dstfp))
                         if not os.path.isfile(dstfp):
                             cmd = 'gdalwarp -ovr NONE -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -te {3} {4} {5} {6} {0} {1}'.format(

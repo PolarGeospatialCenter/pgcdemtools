@@ -5,7 +5,7 @@ import sys
 
 from osgeo import ogr
 
-from lib import utils
+from lib import utils, SHORT_VERSION
 from lib import VERSION
 
 
@@ -42,16 +42,12 @@ def main():
                         help='ASP: include non-interpolated DEM')
     parser.add_argument('--include-logs', action='store_true', default=False,
                         help='ASP: include stereo logs')
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
-
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     #### Parse Arguments
     args = parser.parse_args()
     src = os.path.abspath(args.src)
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     if args.dems_only and args.tar_only:
         parser.error("options --tar-only and --dems-only are not not compatible")

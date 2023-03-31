@@ -8,7 +8,7 @@ import os
 import pathlib
 import sys
 
-from lib import utils, dem
+from lib import utils, dem, SHORT_VERSION
 from lib import VERSION
 
 DOMAIN_TITLES = {
@@ -43,16 +43,13 @@ def main():
     parser.add_argument('--stac-base-dir', help="base directory to write stac JSON files, otherwise write next to images")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
     parser.add_argument('--domain', help="PGC Domain (arcticdem,earthdem,rema)", required=True, choices=DOMAIN_TITLES.keys())
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
     src = os.path.abspath(args.src)
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):

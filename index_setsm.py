@@ -8,7 +8,7 @@ import sys
 
 from osgeo import gdal, osr, ogr
 
-from lib import utils, dem, walk
+from lib import utils, dem, walk, SHORT_VERSION
 from lib import VERSION
 
 try:
@@ -149,14 +149,10 @@ def main():
     parser.add_argument('--debug', action='store_true', default=False, help='print DEBUG level logger messages to terminal')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
     parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
-
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
     #### Parse Arguments
     args = parser.parse_args()
-
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
 
     if args.debug:
         utils.logger_streamhandler_debug()

@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 from osgeo import gdal, gdalconst, ogr
-from lib import VERSION
+from lib import VERSION, SHORT_VERSION
 
 from lib import taskhandler
 
@@ -39,7 +39,8 @@ def main():
                 help="qsub script to use in scheduler submission (PBS default is qsub_resample.sh, SLURM default is slurm_resample.sh)")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
-    parser.add_argument('-v', '--version', action='store_true', default=False, help='print version and exit')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     pos_arg_keys = ['src']
     
@@ -48,10 +49,6 @@ def main():
     scriptpath = os.path.abspath(sys.argv[0])
     src = os.path.abspath(args.src)
 
-    if args.version:
-        print("Current version: %s", VERSION)
-        sys.exit(0)
-    
     #### Validate Required Arguments
     if not os.path.isdir(src) and not os.path.isfile(src):
         parser.error('src must be avalid directory or file')
