@@ -165,17 +165,19 @@ def resample_setsm(dem, args):
         logger.info("Resampling {}".format(dem))
         #print low_res_dem
         if args.component == 'dem':
-            cmd = 'gdalwarp -tap -q -tr {0} {0} -r bilinear -dstnodata -9999 "{1}" "{2}"'.format(args.resolution, dem, tempfile)
+            cmd = 'gdalwarp -ovr NONE -tap -q -tr {0} {0} -r bilinear -dstnodata -9999 "{1}" "{2}"'.format(args.resolution, dem, tempfile)
             cmd2 = 'gdaldem hillshade -q -z 3 -compute_edges -of {2} -co TILED=YES -co BIGTIFF=YES -co COMPRESS=LZW "{0}" "{1}"'.format(tempfile, low_res_dem, args.format)
             
         elif args.component == 'matchtag':
-            cmd = 'gdal_translate -q -tr {0} {0} -of {3} -r near -a_nodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
+            cmd = 'gdalwarp -ovr NONE -q -tr {0} {0} -of {3} -r near -dstnodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
             cmd2 = None
             
         else:
-            cmd = 'gdal_translate -tap -q -ot Byte -scale -tr {0} {0} -of {3} -r cubic -a_nodata 0 "{1}" "{2}"'.format(args.resolution, dem, low_res_dem, args.format)
-            cmd2 = None
-            
+            cmd = 'gdal_translate -q -ot Byte -scale -dstnodata 0 "{0}" "{1}"'.format(dem, tempfile)
+            cmd2 = 'gdalwarp -ovr NONE -tap -q -tr {0} {0} -of {3} -r cubic -dstnodata 0 "{1}" "{2}"'.format(
+                args.resolution, tempfile, low_res_dem, args.format
+            )
+
         #print cmd
         if not args.dryrun:
             taskhandler.exec_cmd(cmd)

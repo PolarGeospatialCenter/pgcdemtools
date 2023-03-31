@@ -226,13 +226,19 @@ def main():
     ## If not writing to JSON, get OGR driver, ds name, and layer name
     else:
         try:
-            ogr_driver_str, dst_dsp, dst_lyr = utils.get_source_names2(dst)
+            ogr_driver_list, dst_dsp, dst_lyr = utils.get_source_names2(dst)
         except RuntimeError as e:
             parser.error(e)
 
-        ogrDriver = ogr.GetDriverByName(ogr_driver_str)
+        ogrDriver = None
+        for ogr_driver_str in ogr_driver_list:
+            ogrDriver = ogr.GetDriverByName(ogr_driver_str)
+            if ogrDriver is not None:
+                break
         if ogrDriver is None:
-            parser.error("Driver is not available: {}".format(ogr_driver_str))
+            parser.error("Driver(s) not available: {}".format(', '.join(ogr_driver_list)))
+        else:
+            logger.info("Driver selected: {}".format(ogr_driver_str))
 
         #### Get Config file contents
         try:
@@ -261,11 +267,12 @@ def main():
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
-        elif ogr_driver_str in ("ESRI Shapefile","FileGDB"):
+        elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB"):
             dst_ds = dst_dsp
 
         else:
             logger.error("Format {} is not supported".format(ogr_driver_str))
+            sys.exit(-1)
 
         ## Get pairname-region dict
         if args.skip_region_lookup or args.mode == 'tile':
@@ -313,33 +320,35 @@ def main():
             parser.error(e)
 
         #### Test if dst table exists
-        if ogr_driver_str == 'ESRI Shapefile' and os.path.isfile(dst_ds):
-            if args.overwrite:
-                logger.info("Removing old index... %s" %os.path.basename(dst_ds))
-                if not args.dryrun:
-                    ogrDriver.DeleteDataSource(dst_ds)
-            elif not args.append:
-                logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
-                sys.exit(-1)
+        if ogr_driver_str == 'ESRI Shapefile':
+            if os.path.isfile(dst_ds):
+                if args.overwrite:
+                    logger.info("Removing old index... %s" %os.path.basename(dst_ds))
+                    if not args.dryrun:
+                        ogrDriver.DeleteDataSource(dst_ds)
+                elif not args.append:
+                    logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
+                    sys.exit(-1)
 
-        if ogr_driver_str == 'FileGDB' and os.path.isdir(dst_ds):
-            ds = ogrDriver.Open(dst_ds,1)
-            if ds:
-                for i in range(ds.GetLayerCount()):
-                    lyr = ds.GetLayer(i)
-                    if lyr.GetName() == dst_lyr:
-                        if args.overwrite:
-                            logger.info("Removing old index layer: {}".format(dst_lyr))
-                            del lyr
-                            ds.DeleteLayer(i)
-                            break
-                        elif not args.append:
-                            logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit(-1)
-                ds = None
+        elif ogr_driver_str in ('FileGDB', 'OpenFileGDB'):
+            if os.path.isdir(dst_ds):
+                ds = ogrDriver.Open(dst_ds,1)
+                if ds:
+                    for i in range(ds.GetLayerCount()):
+                        lyr = ds.GetLayer(i)
+                        if lyr.GetName() == dst_lyr:
+                            if args.overwrite:
+                                logger.info("Removing old index layer: {}".format(dst_lyr))
+                                del lyr
+                                ds.DeleteLayer(i)
+                                break
+                            elif not args.append:
+                                logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
+                                sys.exit(-1)
+                    ds = None
 
         ## Postgres check - do not overwrite
-        if ogr_driver_str == 'PostgreSQL':
+        elif ogr_driver_str == 'PostgreSQL':
             ds = ogrDriver.Open(dst_ds,1)
             if ds:
                 for i in range(ds.GetLayerCount()):
@@ -354,6 +363,10 @@ def main():
                             logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
                             sys.exit(-1)
                 ds = None
+
+        else:
+            logger.error("Format {} not handled in dst table existence check".format(ogr_driver_str))
+            sys.exit(-1)
 
 
     #### ID records
@@ -442,7 +455,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         else:
             ds = ogrDriver.CreateDataSource(dst_ds)
 
-    elif ogr_driver_str == 'FileGDB':
+    elif ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
         max_fld_width = 1024
         if os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
@@ -487,7 +500,19 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             layer = ds.CreateLayer(dst_lyr, tgt_srs, ogr.wkbMultiPolygon)
             if layer:
                 for field_def in fld_defs:
-                    field = ogr.FieldDefn(field_def.fname, field_def.ftype)
+                    fstype = None
+                    if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
+                        ftype = ogr.OFTDate
+                    elif field_def.ftype == ogr.OFSTBoolean:
+                        ftype = ogr.OFTInteger
+                        fstype = field_def.ftype
+                    # elif field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
+                    #         ftype = ogr.OFTString
+                    else:
+                        ftype = field_def.ftype
+                    field = ogr.FieldDefn(field_def.fname, ftype)
+                    if fstype:
+                        field.SetSubType(fstype)
                     field.SetWidth(min(max_fld_width, field_def.fwidth))
                     field.SetPrecision(field_def.fprecision)
                     layer.CreateField(field)
@@ -496,7 +521,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         if layer:
             # Get field widths
             lyr_def = layer.GetLayerDefn()
-            fwidths = {lyr_def.GetFieldDefn(i).GetName().upper(): lyr_def.GetFieldDefn(i).GetWidth() for i in range(lyr_def.GetFieldCount())}
+            fwidths = {lyr_def.GetFieldDefn(i).GetName().upper():
+                    (lyr_def.GetFieldDefn(i).GetWidth(), lyr_def.GetFieldDefn(i).GetType())
+                    for i in range(lyr_def.GetFieldCount())}
 
             logger.info("Appending records...")
             #### loop through records and add features
@@ -536,15 +563,20 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
                                 'SENSOR2': record.sensor2,
-                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d'),
-                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d'),
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d %H:%M:%S.%fZ'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d %H:%M:%S.%fZ'),
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
-                                'HAS_LSF': int(os.path.isfile(record.lsf_dem)),
-                                'HAS_NONLSF': int(os.path.isfile(record.dem)),
-                                'IS_XTRACK': int(record.is_xtrack),
-                                'IS_DSP': 0 if dsp_mode == 'orig' else int(record.is_dsp),
+                                'SCENE1': record.scene1,
+                                'SCENE2': record.scene2,
+                                'GEN_TIME1': record.gentime1.strftime('%Y-%m-%d %H:%M:%S.%fZ') if record.gentime1 else None,
+                                'GEN_TIME2': record.gentime2.strftime('%Y-%m-%d %H:%M:%S.%fZ') if record.gentime2 else None,
+                                'HAS_LSF': record.has_lsf,
+                                'HAS_NONLSF': record.has_nonlsf,
+                                'IS_XTRACK': record.is_xtrack,
+                                'IS_DSP': False if dsp_mode == 'orig' else record.is_dsp,
                                 'ALGM_VER': record.algm_version,
+                                'PROD_VER': record.prod_version,
                                 'PROJ4': record.proj4,
                                 'EPSG': record.epsg,
                             }
@@ -912,13 +944,13 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         if valid_record:
                             for fld,val in attrib_map.items():
                                 if fld in fwidths:
-                                    if isinstance(val, str) and len(val) > fwidths[fld]:
+                                    if isinstance(val, str) and fwidths[fld][1] == ogr.OFTString and len(val) > fwidths[fld][0]:
                                         logger.error("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
-                                            val, fld, fwidths[fld]
+                                            val, fld, fwidths[fld][0]
                                         ))
                                         valid_record = False
                                         if fld.upper() == 'LOCATION' and ogr_driver_str == 'ESRI Shapefile':
-                                            if fld_def_location_fwidth_gdb is not None and fld_def_location_fwidth_gdb > fwidths[fld]:
+                                            if fld_def_location_fwidth_gdb is not None and fld_def_location_fwidth_gdb > fwidths[fld][0]:
                                                 logger.warning("Tip: LOCATION field values can be longer (width={}) \
                                                     if you write to a non-Shapefile index such as FileGDB or PostgreSQL table".format(
                                                     fld_def_location_fwidth_gdb
@@ -989,7 +1021,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             if args.check and not args.dryrun:
                 logger.info("Checking for new records in target table")
                 layer.ResetReading()
-                attrib_maps = [{id_fld: feat.GetField(id_fld) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
+                attrib_maps = [{id_fld: convert_value(id_fld, feat.GetField(id_fld)) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
                 layer_recordids = [recordid_map[args.mode].format(**attrib_map) for attrib_map in attrib_maps]
                 layer_recordids = set(layer_recordids)
 
@@ -1018,6 +1050,22 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
     else:
         logger.info("Done")
     sys.exit(0)
+
+
+def convert_value(fld, val):
+    # Convert date to expected string
+    if fld == 'INDEX_DATE':
+        try:
+            dt = datetime.datetime.strptime(val[:10], "%Y/%m/%d")
+        except ValueError:
+            pass
+        else:
+            return dt.strftime("%Y-%m-%d")
+    # Convert boolean to expected integer
+    # if fld == 'IS_DSP':
+    #     return int(val)
+
+    return val
 
 
 def read_json(json_fp, mode):
@@ -1107,17 +1155,17 @@ def get_pair_region_dict(conn_info):
 
 
 def encode_json(o):
-    if isinstance(o,datetime.datetime):
+    if isinstance(o, datetime.datetime):
         return {
             '__datetime__': True,
             'value': o.__repr__(),
         }
-    if isinstance(o,ogr.Geometry):
+    if isinstance(o, ogr.Geometry):
         return {
             '__geometry__': True,
             'value': o.__str__(),
         }
-    if isinstance(o,osr.SpatialReference):
+    if isinstance(o, osr.SpatialReference):
         return {
             '__srs__': True,
             'value': o.__str__(),

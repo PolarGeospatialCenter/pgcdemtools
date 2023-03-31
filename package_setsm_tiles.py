@@ -248,7 +248,7 @@ def build_archive(raster, scratch, args):
             os.path.basename(raster.day), # day
             os.path.basename(raster.browse), # browse
             os.path.basename(raster.count),
-            os.path.basename(raster.countmt),
+            #os.path.basename(raster.countmt), # except countmt due to a bug in it's construction
             os.path.basename(raster.mad),
             os.path.basename(raster.mindate),
             os.path.basename(raster.maxdate),
@@ -295,7 +295,7 @@ def build_archive(raster, scratch, args):
                     )
                     subprocess.call(cmd, shell=True)
 
-        ## Convert all rasters to COG in place
+        ## Convert all rasters to COG in place (should no longer be needed)
         if args.convert_to_cog:
             cog_sem = raster.tileid + '.cogfin'
             if os.path.isfile(cog_sem) and not args.overwrite:
@@ -384,8 +384,11 @@ def build_archive(raster, scratch, args):
                             if lyr is not None:
 
                                 for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
-
-                                    field = ogr.FieldDefn(field_def.fname, field_def.ftype)
+                                    if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
+                                        ftype = ogr.OFTDate
+                                    else:
+                                        ftype = field_def.ftype
+                                    field = ogr.FieldDefn(field_def.fname, ftype)
                                     field.SetWidth(field_def.fwidth)
                                     field.SetPrecision(field_def.fprecision)
                                     lyr.CreateField(field)

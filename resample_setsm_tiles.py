@@ -19,16 +19,16 @@ default_depth = float('inf')
 res_min = 0.5
 res_max = 5000
 output_settings = {
-    ## component: (resampling strategy, overview resampling, predictor)
-    'dem':      ('bilinear', 'bilinear', 'yes'),
-    'browse':   ('cubic', 'cubic', 'yes'),
-    'count':    ('near', 'nearest', 'no'),
-    'countmt':  ('near', 'nearest', 'no'),
-    'mad':      ('bilinear', 'bilinear', 'yes'),
-    'maxdate':  ('near', 'nearest', 'no'),
-    'mindate':  ('near', 'nearest', 'no')
+    ## component: (resampling strategy, overview resampling, predictor, nodata value)
+    'dem':      ('bilinear', 'bilinear', 3, -9999),
+    'browse':   ('cubic', 'cubic', 2, 0),
+    'count':    ('near', 'nearest', 1, 0),
+    'countmt':  ('near', 'nearest', 1, 0),
+    'mad':      ('bilinear', 'bilinear', 3, -9999),
+    'maxdate':  ('near', 'nearest', 1, 0),
+    'mindate':  ('near', 'nearest', 1, 0)
 }
-suffixes = list(output_settings.keys())
+suffixes = sorted(list(output_settings.keys()))
 
 
 def main():
@@ -36,8 +36,8 @@ def main():
     
     #### Set Up Options
     parser.add_argument("src", help="source directory or image")
-    parser.add_argument("-c", "--component",  choices=suffixes+['all'], default='all',
-                help="SETSM DEM component to resample (default = all")
+    parser.add_argument("-c", "--components",  nargs='+', choices=suffixes+['all'], default='all',
+                help="One or more SETSM DEM components to resample (default = all")
     parser.add_argument("-tr", "--tgt-resolution",  default=default_res, type=float,
                 help="output resolution in meters between {} and {} (default={})".format(res_min, res_max, default_res))
     parser.add_argument("-sr", "--src-resolution", default=default_src_res, type=float,
@@ -56,6 +56,8 @@ def main():
                 help="number of parallel processes to spawn (default 1)")
     parser.add_argument("--qsubscript",
                 help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
+    parser.add_argument("--debug", action="store_true", default=False,
+                help="print debug level logger messages")
     parser.add_argument("--dryrun", action="store_true", default=False,
                 help="print actions without executing")
     pos_arg_keys = ['src']
@@ -86,8 +88,7 @@ def main():
     
     #### Set up console logging handler
     lso = logging.StreamHandler()
-    lso.setLevel(logging.INFO)
-    #lso.setLevel(logging.DEBUG)
+    lso.setLevel(logging.DEBUG if args.debug else logging.INFO)
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
@@ -100,7 +101,7 @@ def main():
     task_queue = []
     i=0
     logger.info("Searching for SETSM rasters")
-    components = suffixes if args.component == 'all' else [args.component]
+    components = sorted(list(set(suffixes if 'all' in args.components else args.components)))
     components = ['{}.tif'.format(c) for c in components] + ['meta.txt']
 
     if os.path.isfile(src):
@@ -233,7 +234,7 @@ def resample_setsm(task_src, args):
 
     rasters = []
     supertiles = {}
-    components = suffixes if args.component == 'all' else [args.component]
+    components = sorted(list(set(suffixes if 'all' in args.components else args.components)))
     components = ['{}.tif'.format(c) for c in components] + ['meta.txt']
     src_res = res_float_to_str(args.src_resolution)
     tgt_res = res_float_to_str(args.tgt_resolution)
@@ -354,23 +355,25 @@ def merge_rasters(inputps, output, component, args):
     if os.path.isfile(output):
         logger.info("Merging files into {}".format(output))
 
-    resampling_method, ovr_resample, predictor = output_settings[component[:-4]] # remove .tif from component
+    resampling_method, ovr_resample, predictor, nodata_value = output_settings[component[:-4]] # remove .tif from component
 
     vrt = output[:-4] + 'temp.vrt'
     cmd = 'gdalbuildvrt {} {}'.format(vrt, ' '.join([i for i in inputps]))
+    logger.debug(cmd)
     if not args.dryrun:
         taskhandler.exec_cmd(cmd)
 
-    if args.output_cogs:
-        cos = '-of COG -co compress=lzw -co bigtiff=yes -co overviews=IGNORE_EXISTING ' \
-              '-co compress=lzw -co predictor={} -co resampling={}'.format(predictor, ovr_resample)
-    else:
-        cos = '-of GTiff -co tiled=yes -co compress=lzw -co bigtiff=yes'
+    cos_cog = '-of COG -co bigtiff=yes -co overviews=ignore_existing -co resampling={} ' \
+              '-co compress=lzw -co predictor={} '.format(ovr_resample, predictor)
+    cos_gtiff = '-of GTiff -co bigtiff=yes -co tiled=yes ' \
+                '-co compress=lzw -co predictor={}'.format(predictor)
 
-    cmd = 'gdal_translate -q {} "{}" "{}"'.format(
+    cos = cos_cog if args.output_cogs else cos_gtiff
+    cmd = 'gdalwarp -q -ovr NONE {} "{}" "{}"'.format(
         cos, vrt, output
     )
 
+    logger.debug(cmd)
     if not args.dryrun:
         taskhandler.exec_cmd(cmd)
         os.remove(vrt)
@@ -397,19 +400,44 @@ def process_raster(inputp, output, component, args):
                 new_xmin, new_ymin, new_xmax, new_ymax
             )
 
-            resampling_method, ovr_resample, predictor = output_settings[component[:-4]]
-            if args.output_cogs:
-                cos = '-of COG -co tiled=yes -co compress=lzw -co bigtiff=yes -co overviews=IGNORE_EXISTING' \
-                      ' -co compress=lzw -co predictor={} -co resampling={}'.format(predictor, ovr_resample)
-            else:
-                cos = '-of GTiff -co tiled=yes -co compress=lzw -co bigtiff=yes'
+            resampling_method, ovr_resample, predictor, nodata_value = output_settings[component[:-4]]
 
-            cmd = 'gdalwarp -q {5} -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
+            cos_cog = '-of COG -co bigtiff=yes -co overviews=ignore_existing -co resampling={} ' \
+                      '-co compress=lzw -co predictor={} '.format(ovr_resample, predictor)
+            cos_gtiff = '-of GTiff -co bigtiff=yes -co tiled=yes ' \
+                        '-co compress=lzw -co predictor={}'.format(predictor)
+
+            cos = cos_cog if args.output_cogs else cos_gtiff
+            cmd = 'gdalwarp -q -ovr NONE {5} -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
                 args.tgt_resolution, inputp, output, resampling_method, co_extent, cos
             )
-
+            logger.debug(cmd)
             if not args.dryrun:
                 taskhandler.exec_cmd(cmd)
+
+            if component in ('dem.tif', 'mad.tif'):
+                # Round these rasters to 1/128 meters to optimize compression
+                output_tmp = '{}_tmp{}'.format(*os.path.splitext(output))
+
+                # I can't get gdal_calc.py to output in COG format, so output in GTiff format instead
+                cmd = 'gdal_calc.py --quiet {3} --calc="round_(A*128.0)/128.0" --NoDataValue={2} -A "{0}" --outfile="{1}"'.format(
+                    output, output_tmp, nodata_value, cos_gtiff.replace('-of', '--format').replace('-co', '--co')
+                )
+                logger.debug(cmd)
+                if not args.dryrun:
+                    taskhandler.exec_cmd(cmd)
+
+                if args.output_cogs:
+                    # Convert gdal_calc.py GTiff output to COG format
+                    cmd = 'gdalwarp -q -ovr NONE -overwrite {2} "{0}" "{1}"'.format(
+                        output_tmp, output, cos_cog
+                    )
+                    logger.debug(cmd)
+                    if not args.dryrun:
+                        taskhandler.exec_cmd(cmd)
+
+                if os.path.isfile(output_tmp):
+                    os.remove(output_tmp)
         else:
             logger.error("Cannot open {}".format(inputp))
 
