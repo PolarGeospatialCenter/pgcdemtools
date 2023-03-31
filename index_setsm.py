@@ -404,11 +404,14 @@ def main():
             temp_records = read_json(os.path.join(src_fp),args.mode)
             records.extend(temp_records)
         else:
+            record = None
             try:
                 record = dem_class(src_fp)
                 record.get_dem_info()
-            except RuntimeError as e:
-                logger.error( e )
+            except Exception as e:
+                logger.error(e)
+                if record is not None and hasattr(record, 'srcfp'):
+                    logger.error("Error encountered on DEM record: {}".format(record.srcfp))
             else:
                 ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
                 if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
@@ -480,6 +483,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     dsp_orig_status = args.status_dsp_record_mode_orig if args.status_dsp_record_mode_orig else status
 
+    fld_def_location_fwidth_gdb = None
+    for f in fld_defs:
+        if f.fname.upper() == 'LOCATION':
+            fld_def_location_fwidth_gdb = min(f.fwidth, 1024)
+            break
+
     if ds is not None:
 
         ## Create table if it does not exist
@@ -525,6 +534,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             i=0
             recordids = []
             invalid_record_cnt = 0
+            duplicate_record_cnt = 0
 
             dsp_modes = ['orig','dsp'] if args.dsp_record_mode == 'both' else [args.dsp_record_mode]
 
@@ -939,12 +949,18 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             for fld,val in attrib_map.items():
                                 if fld in fwidths:
                                     if isinstance(val, str) and fwidths[fld][1] == ogr.OFTString and len(val) > fwidths[fld][0]:
-                                        logger.warning("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
+                                        logger.error("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
                                             val, fld, fwidths[fld][0]
                                         ))
                                         valid_record = False
+                                        if fld.upper() == 'LOCATION' and ogr_driver_str == 'ESRI Shapefile':
+                                            if fld_def_location_fwidth_gdb is not None and fld_def_location_fwidth_gdb > fwidths[fld][0]:
+                                                logger.warning("Tip: LOCATION field values can be longer (width={}) \
+                                                    if you write to a non-Shapefile index such as FileGDB or PostgreSQL table".format(
+                                                    fld_def_location_fwidth_gdb
+                                                ))
                                 else:
-                                    logger.warning("Field {} is not in target table. Feature skipped".format(fld))
+                                    logger.error("Field {} is not in target table. Feature skipped".format(fld))
                                     valid_record = False
 
                                 if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
@@ -967,20 +983,39 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     recordids.append(recordid_map[args.mode].format(**attrib_map))
 
                                     # Append record
-                                    try:
-                                        if ogr_driver_str in ('PostgreSQL'):
-                                            layer.StartTransaction()
+                                    if ogr_driver_str in ('PostgreSQL'):
+                                        layer.StartTransaction()
+                                        utils.GDAL_ERROR_HANDLER.reset_error_state()
+                                        try:
                                             layer.CreateFeature(feat)
-                                            layer.CommitTransaction()
-                                        else:
-                                            layer.CreateFeature(feat)
-                                    except Exception as e:
-                                        raise e
+                                        except Exception as e:
+                                            if utils.GDAL_ERROR_HANDLER.errored:
+                                                gdal_errmsg = utils.GDAL_ERROR_HANDLER.err_msg
+                                                if "duplicate key value violates unique constraint" in gdal_errmsg:
+                                                    duplicate_record_cnt += 1
+                                                    log_errmsg = "Skipping duplciate record error in OGR CreateFeature call:\n{}".format(gdal_errmsg)
+                                                    if duplicate_record_cnt <= 30:
+                                                        logger.error(log_errmsg)
+                                                        if duplicate_record_cnt == 30:
+                                                            logger.warning("Maximum 'duplicate record' error messages printed to terminal,"
+                                                                           " further messages will be printed to debug")
+                                                    else:
+                                                        logger.debug(log_errmsg)
+                                                else:
+                                                    raise
+                                            else:
+                                                raise
+                                        layer.CommitTransaction()
+                                    else:
+                                        layer.CreateFeature(feat)
             if not args.np:
                 print('')
 
             if invalid_record_cnt > 0:
-                logger.info("{} invalid records skipped".format(invalid_record_cnt))
+                logger.error("{} invalid records skipped".format(invalid_record_cnt))
+
+            if duplicate_record_cnt > 0:
+                logger.warning("{} duplicate records skipped".format(duplicate_record_cnt))
 
             if len(recordids) == 0 and not args.dryrun:
                 logger.error("No valid records found")
