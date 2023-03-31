@@ -465,7 +465,7 @@ class TestIndexerIO(unittest.TestCase):
             os.path.join(self.output_dir, 'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json'),
             os.path.join(self.output_dir, 'WV02_20190705_103001009505B700_10300100934D1000_2m_v040002.json'),
             os.path.join(self.output_dir, 'W1W1_20190426_102001008466F300_1020010089C2DB00_2m_v030403.json'),
-            os.path.join(self.output_dir, 'WV02_20220813_10300100D7D7F300_10300100D86CC000_2m_v040313.json'),
+            os.path.join(self.output_dir, 'WV02_20220813_10300100D7D7F300_10300100D86CC000_2m_v040311.json'),
         ]
 
         counter = 0
