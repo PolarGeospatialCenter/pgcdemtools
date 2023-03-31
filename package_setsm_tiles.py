@@ -9,8 +9,7 @@ from datetime import *
 
 from osgeo import osr, ogr, gdal, gdalconst
 
-from lib import utils, dem, taskhandler, SHORT_VERSION
-from lib import VERSION
+from lib import utils, dem, taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")

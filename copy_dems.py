@@ -5,9 +5,7 @@ import sys
 
 from osgeo import ogr
 
-from lib import utils, SHORT_VERSION
-from lib import VERSION
-
+from lib import utils, VERSION, SHORT_VERSION
 
 
 def main():

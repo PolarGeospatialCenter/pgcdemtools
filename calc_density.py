@@ -6,8 +6,7 @@ from datetime import *
 
 from osgeo import osr, ogr
 
-from lib import dem, taskhandler, SHORT_VERSION
-from lib import VERSION
+from lib import dem, taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")

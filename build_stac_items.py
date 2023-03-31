@@ -8,8 +8,7 @@ import os
 import pathlib
 import sys
 
-from lib import utils, dem, SHORT_VERSION
-from lib import VERSION
+from lib import utils, dem, VERSION, SHORT_VERSION
 
 DOMAIN_TITLES = {
     "arcticdem": "ArcticDEM",

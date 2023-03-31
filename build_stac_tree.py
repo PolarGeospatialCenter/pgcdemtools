@@ -7,8 +7,7 @@ import os
 import pathlib
 import sys
 
-from lib import utils, SHORT_VERSION
-from lib import VERSION
+from lib import utils, VERSION, SHORT_VERSION
 
 DOMAINS = {
     "arcticdem": {

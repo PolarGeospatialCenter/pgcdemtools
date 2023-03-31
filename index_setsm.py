@@ -8,8 +8,8 @@ import sys
 
 from osgeo import gdal, osr, ogr
 
-from lib import utils, dem, walk, SHORT_VERSION
-from lib import VERSION
+from lib import utils, dem, walk
+from lib import VERSION, SHORT_VERSION
 
 try:
     import ConfigParser

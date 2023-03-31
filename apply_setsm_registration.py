@@ -6,9 +6,7 @@ import subprocess
 import sys
 
 from osgeo import gdal, gdalconst, ogr
-from lib import VERSION, SHORT_VERSION
-
-from lib import taskhandler
+from lib import taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")

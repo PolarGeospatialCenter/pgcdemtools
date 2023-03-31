@@ -7,8 +7,7 @@ import sys
 
 from osgeo import gdal
 
-from lib import taskhandler, dem, walk as wk, SHORT_VERSION
-from lib import VERSION
+from lib import taskhandler, dem, walk as wk, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")

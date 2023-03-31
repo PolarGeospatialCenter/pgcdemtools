@@ -4,8 +4,7 @@ import logging
 import os
 import sys
 
-from lib import dem, SHORT_VERSION
-from lib import VERSION
+from lib import dem, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")

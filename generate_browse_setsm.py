@@ -3,8 +3,7 @@ import logging
 import os
 import sys
 
-from lib import taskhandler, SHORT_VERSION
-from lib import VERSION
+from lib import taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")

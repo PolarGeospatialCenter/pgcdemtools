@@ -5,8 +5,7 @@ import os
 import sys
 from datetime import *
 
-from lib import utils, dem, SHORT_VERSION
-from lib import VERSION
+from lib import utils, dem, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = utils.get_logger()
