@@ -111,7 +111,11 @@ def main():
                 raster = dem.SetsmTile(sp)
                 raster.get_dem_info()
 
-                stac_item = build_mosaic_stac_item(args.stac_base_url, args.domain, raster)
+                if raster.release_version == "3.0":
+                    # special case for ArcticDEM mosaics v3.0
+                    stac_item = build_mosaic_v3_stac_item(args.stac_base_url, args.domain, raster)
+                else:
+                    stac_item = build_mosaic_stac_item(args.stac_base_url, args.domain, raster)
 
         except RuntimeError as e:
             logger.error( f'{e} while processing {sp}' )
@@ -163,11 +167,11 @@ def build_strip_stac_item(base_url, domain, raster):
         "properties": {
             "title": raster.stripid,
             "description": "Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.",
-            "created": iso8601(raster.creation_date), # are these actually in UTC, does it matter?
+            "created": iso8601(raster.creation_date, f"{raster.stripid} creation_date"), # are these actually in UTC, does it matter?
             "published": iso8601(datetime.datetime.utcnow()), # now
             "datetime": iso8601(start_time), # this is only required if start_datetime/end_datetime are not specified
-            "start_datetime": iso8601(start_time),
-            "end_datetime": iso8601(end_time),
+            "start_datetime": iso8601(start_time, f"{raster.stripid} start_time"),
+            "end_datetime": iso8601(end_time, f"{raster.stripid} end_time"),
             "instruments": [ raster.sensor1, raster.sensor2 ],
             "constellation": "maxar",
             "gsd": (raster.xres + raster.yres)/2.0, ## dem.res is a string ('2m','50cm'), gsd be a float (2.0).
@@ -275,6 +279,7 @@ def build_strip_stac_item(base_url, domain, raster):
 
 
 def build_mosaic_stac_item(base_url, domain, tile):
+    tile.release_version = "2.0" # TODO: HACK for broken metadata.
     collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
     gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
@@ -299,8 +304,8 @@ def build_mosaic_stac_item(base_url, domain, tile):
             "created": iso8601(tile.creation_date, tile.tileid),
             "published": iso8601(datetime.datetime.utcnow()),
             "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
-            "start_datetime": iso8601(tile.acqdate_min),
-            "end_datetime": iso8601(tile.acqdate_max),
+            "start_datetime": iso8601(tile.acqdate_min, tile.tileid),
+            "end_datetime": iso8601(tile.acqdate_max, tile.tileid),
             "constellation": "maxar",
             "gsd": gsd,
             "proj:epsg": tile.epsg,
@@ -357,12 +362,12 @@ def build_mosaic_stac_item(base_url, domain, tile):
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "metadata", "count" ]
             },
-            "count_matchtag": {
-                "title": "Count of Match points",
-                "href": "./"+tile.tileid+"_countmt.tif",
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "matchtag" ]
-            },
+            #"count_matchtag": {
+            #    "title": "Count of Match points",
+            #    "href": "./"+tile.tileid+"_countmt.tif",
+            #    "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            #    "roles": [ "metadata", "matchtag" ]
+            #},
             "mad": {
                 "title": "Median Absolute Deviation",
                 "href": "./"+tile.tileid+"_mad.tif",
@@ -394,6 +399,105 @@ def build_mosaic_stac_item(base_url, domain, tile):
             # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
             "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
         }
+
+    return stac_item
+
+
+# For ArcticDEM v3 mosaics
+def build_mosaic_v3_stac_item(base_url, domain, tile):
+    collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
+    domain_title = DOMAIN_TITLES[domain]
+    gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
+
+    # validate tileid matches metadata - tileid is built off the filename in dem.py
+    id_parts = tile.tileid.split('_')
+    if tile.res != id_parts[-2]:
+        raise RuntimeError(f"Tile ID resolution mismatch: {tile.res} != {id_parts[-2]}")
+    if "v"+tile.release_version != id_parts[-1]:
+        raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
+
+    stac_item = {
+        "type": "Feature",
+        "stac_version": "1.0.0",
+        "stac_extensions": [ "https://stac-extensions.github.io/projection/v1.0.0/schema.json" ],
+        "id": tile.tileid,
+        "bbox": get_geojson_bbox(tile.get_geom_wgs84()),
+        "collection": collection_name,
+        "properties": {
+            "title": tile.tileid,
+            "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
+            "created": iso8601(tile.creation_date, f"{tile.tileid} creation_date"),
+            "published": iso8601(datetime.datetime.utcnow()),
+            "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
+            "start_datetime": iso8601(tile.acqdate_min, f"{tile.tileid} acqdate_min"),
+            "end_datetime": iso8601(tile.acqdate_max, f"{tile.tileid} acqdate_max"),
+            "constellation": "maxar",
+            "gsd": gsd,
+            "proj:epsg": tile.epsg,
+            "pgc:pairname_ids": tile.pairname_ids,
+            "pgc:supertile": tile.supertile_id_no_res, # use for dir path
+            "pgc:tile": tile.tile_id_no_res,
+            "pgc:release_version": tile.release_version,
+            "pgc:data_perc": tile.density,
+            "pgc:num_components": tile.num_components,
+            "license": "CC-BY-4.0"
+            },
+        "links": [
+            {
+                "rel": "self",
+                "href": f"{base_url}/{domain}/mosaics/v{tile.release_version}/{tile.res}/{tile.supertile_id_no_res}/{tile.tileid}.json",
+                "type": "application/geo+json"
+            },
+            {
+                "rel": "parent",
+                "title": f"Tile Catalog {tile.supertile_id_no_res}",
+                "href": f"../{tile.supertile_id_no_res}.json",
+                "type": "application/json"
+            },
+            {
+                "rel": "collection",
+                "title": f"Resolution Collection {domain_title} {tile.res} DEM Mosaics, version {tile.release_version}",
+                "href": f"{base_url}/{domain}/mosaic/{tile.release_version}/{tile.res}.json",
+                "type": "application/json"
+            },
+            {
+                "rel": "root",
+                "title": "PGC Data Catalog",
+                "href": f"{base_url}/pgc-data-stac.json",
+                "type": "application/json"
+            }
+            ],
+        "assets": {
+            "browse": {
+                "title": "Browse",
+                "href": "./"+tile.tileid+"_reg_dem_browse.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "overview", "visual" ]
+
+            },
+            "dem": {
+                "title": f"{tile.res} DEM",
+                "href": "./"+tile.tileid+"_reg_dem.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "data" ]
+            },
+            "metadata": {
+                "title": "Metadata",
+                "href": f"./{tile.supertile_id}_v{tile.release_version}_dem_meta.txt",
+                "type": "text/plain",
+                "roles": [ "metadata" ]
+            }
+        },
+            # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
+            # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
+
+            # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
+            "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
+        }
+
+    # _reg_dem_browse.tif only exists for 2m, remove for other resolutions
+    if tile.res != "2m":
+        del stac_item["assets"]["browse"]
 
     return stac_item
 
