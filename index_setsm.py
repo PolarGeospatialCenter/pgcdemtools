@@ -989,7 +989,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                                 gdal_errmsg = utils.GDAL_ERROR_HANDLER.err_msg
                                                 if "duplicate key value violates unique constraint" in gdal_errmsg:
                                                     duplicate_record_cnt += 1
-                                                    log_errmsg = "Skipping duplciate record error in OGR CreateFeature call:\n{}".format(gdal_errmsg)
+                                                    log_errmsg = "Skipping duplicate record error in OGR CreateFeature call:\n{}".format(gdal_errmsg)
                                                     if duplicate_record_cnt <= 30:
                                                         logger.error(log_errmsg)
                                                         if duplicate_record_cnt == 30:
