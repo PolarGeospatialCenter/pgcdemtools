@@ -1029,7 +1029,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                 for recordid in recordids:
                     if recordid not in layer_recordids:
                         err_cnt += 1
-                        logger.error("Record not found in target layer: {}".format(recordid))
+                        if err_cnt == 1 and layer_recordids:
+                            logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
+                        logger.error("New record not found in target layer: {}".format(recordid))
+                if err_cnt > 1:
+                    logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
 
                 if err_cnt > 0:
                     sys.exit(-1)
@@ -1053,17 +1057,33 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
 
 def convert_value(fld, val):
-    # Convert date to expected string
-    if fld == 'INDEX_DATE':
-        try:
-            dt = datetime.datetime.strptime(val[:10], "%Y/%m/%d")
-        except ValueError:
-            pass
-        else:
+    # Convert target layer field value that was read with GDAL to expected value.
+
+    # Convert date to expected string.
+    # Reading a datetime field can return a string in several possible timestamp formats,
+    # depending on the table format (Shapefile vs FileGDB vs Postgres, etc).
+    if fld == 'INDEX_DATE' and type(val) is str:
+        dt = None
+        for case in range(2):
+            try:
+                if case == 0:
+                    dt = datetime.datetime.strptime(val[:10], "%Y/%m/%d")
+                # elif case == 1:
+                #     dt = datetime.datetime.strptime(val[:10], "%Y-%m-%d")
+            except ValueError:
+                pass
+            else:
+                if dt is not None:
+                    break
+        if dt is not None:
             return dt.strftime("%Y-%m-%d")
-    # Convert boolean to expected integer
-    # if fld == 'IS_DSP':
-    #     return int(val)
+
+    # Convert integer to expected boolean
+    elif fld == 'IS_DSP':
+        if type(val) is int and val in (0, 1):
+            return bool(val)
+        elif type(val) is str and val in ('0', '1'):
+            return bool(int(val))
 
     return val
 
