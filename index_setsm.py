@@ -517,6 +517,18 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                     field.SetPrecision(field_def.fprecision)
                     layer.CreateField(field)
 
+                # When creating a new dataset/layer schema with GDAL, something about the schema
+                # is kept in cache tied to the dataset connection instance.
+                # If after writing to the new layer, the layer records are read back in with GDAL
+                # using the same connection instance (with the --check option for example),
+                # GDAL may fail to read certain field data types properly (such as boolean fields).
+                # This is likely a bug in GDAL!
+                # To avoid this, manually close and reopen the connection.
+                ds = None
+                layer = None
+                ds = ogrDriver.Open(dst_ds, 1)
+                layer = ds.GetLayerByName(dst_lyr)
+
         ## Append Records
         if layer:
             # Get field widths
