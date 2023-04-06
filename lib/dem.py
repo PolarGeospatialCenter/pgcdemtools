@@ -533,7 +533,6 @@ class SetsmScene(object):
         'xsize',
         'yres',
         'ysize',
-        'prod_version',
     )
 
 
