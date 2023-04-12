@@ -534,8 +534,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             # Get field widths
             lyr_def = layer.GetLayerDefn()
             fwidths = {lyr_def.GetFieldDefn(i).GetName().upper():
-                    (lyr_def.GetFieldDefn(i).GetWidth(), lyr_def.GetFieldDefn(i).GetType())
-                    for i in range(lyr_def.GetFieldCount())}
+                           (lyr_def.GetFieldDefn(i).GetWidth(), lyr_def.GetFieldDefn(i).GetType())
+                            for i in range(lyr_def.GetFieldCount())
+                       }
 
             logger.info("Appending records...")
             #### loop through records and add features
@@ -954,15 +955,19 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Write feature
                         if valid_record:
-                            for fld,val in attrib_map.items():
+                            for fld, val in attrib_map.items():
                                 if fld in fwidths:
-                                    if isinstance(val, str) and fwidths[fld][1] == ogr.OFTString and len(val) > fwidths[fld][0]:
-                                        logger.error("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
-                                            val, fld, fwidths[fld][0]
-                                        ))
+                                    fwidth, ftype = fwidths[fld]
+                                    # Check if attribute length is too long for the field width. Note that the varchar
+                                    # type in postgres returns a width of 0 if no max width is specified in the table
+                                    # creation
+                                    if isinstance(val, str) and ftype == ogr.OFTString and 0 < fwidth < len(val):
+                                        logger.error("Attribute value {} is too long for field {} (width={}). "
+                                                     "Feature skipped".format(val, fld, fwidth))
                                         valid_record = False
                                         if fld.upper() == 'LOCATION' and ogr_driver_str == 'ESRI Shapefile':
-                                            if fld_def_location_fwidth_gdb is not None and fld_def_location_fwidth_gdb > fwidths[fld][0]:
+                                            if fld_def_location_fwidth_gdb is not None \
+                                                    and fld_def_location_fwidth_gdb > fwidth:
                                                 logger.warning("Tip: LOCATION field values can be longer (width={}) \
                                                     if you write to a non-Shapefile index such as FileGDB or PostgreSQL table".format(
                                                     fld_def_location_fwidth_gdb
