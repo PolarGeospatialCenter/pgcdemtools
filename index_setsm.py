@@ -576,14 +576,14 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
                                 'SENSOR2': record.sensor2,
-                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d %H:%M:%S.%fZ'),
-                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d %H:%M:%S.%fZ'),
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%dT%H:%M:%SZ'),
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
                                 'SCENE1': record.scene1,
                                 'SCENE2': record.scene2,
-                                'GEN_TIME1': record.gentime1.strftime('%Y-%m-%d %H:%M:%S.%fZ') if record.gentime1 else None,
-                                'GEN_TIME2': record.gentime2.strftime('%Y-%m-%d %H:%M:%S.%fZ') if record.gentime2 else None,
+                                'GEN_TIME1': record.gentime1.strftime('%Y-%m-%dT%H:%M:%SZ') if record.gentime1 else None,
+                                'GEN_TIME2': record.gentime2.strftime('%Y-%m-%dT%H:%M:%SZ') if record.gentime2 else None,
                                 'HAS_LSF': record.has_lsf,
                                 'HAS_NONLSF': record.has_nonlsf,
                                 'IS_XTRACK': record.is_xtrack,
@@ -1019,6 +1019,20 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             else:
                                                 raise
                                         layer.CommitTransaction()
+                                    elif ogr_driver_str in ['OpenFileGDB', 'FileGDB']:
+                                        utils.GDAL_ERROR_HANDLER.reset_error_state()
+                                        try:
+                                            # Writing a date to a datetime field in GDB (date fields are not allowed)
+                                            # results in an error "Attempt at writing a datetime with a unknown time
+                                            # zone or local time in a layer that expects dates to be convertible to
+                                            # UTC. It will be written as if it was expressed in UTC." This happens
+                                            # even if the datetime string is expressed in proper ISO UTC syntax.
+                                            # Therefore, we have to refrain from catching warnings when writing to GDB.
+                                            with utils.GdalAllowWarnings():
+                                                layer.CreateFeature(feat)
+                                        except Exception as e:
+                                            raise
+
                                     else:
                                         layer.CreateFeature(feat)
             if not args.np:
