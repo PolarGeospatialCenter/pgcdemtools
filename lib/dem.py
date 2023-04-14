@@ -179,6 +179,7 @@ class SetsmScene(object):
             self.is_xtrack = bool(self.is_xtrack)
 
         else:
+            self.srcfp = metapath
             self.srcdir, self.srcfn = os.path.split(metapath)
             self.sceneid = self.srcfn[:-9]
 
@@ -204,7 +205,6 @@ class SetsmScene(object):
 
             # set shared attributes
             self.id = self.sceneid
-            self.srcfp = self.metapath
 
             if not os.path.isfile(self.ortho) \
             or not os.path.isfile(self.matchtag) \
