@@ -170,7 +170,7 @@ class SetsmScene(object):
             if 'prod_version' not in md:
                 self.prod_version = 1
             for k, p in key_property_map.items():
-                if k not in md:
+                if p not in md:
                     setattr(self, p, None)
 
             # Note: this approach will not work for DSP dems being used as proxies for 50cm
@@ -533,7 +533,6 @@ class SetsmScene(object):
         'xsize',
         'yres',
         'ysize',
-        'prod_version',
     )
 
 
