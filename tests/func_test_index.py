@@ -21,7 +21,6 @@ res_str = {
     0.5: '_50cm_v',
 }
 
-
 # logger = logging.getLogger("logger")
 # lso = logging.StreamHandler()
 # lso.setLevel(logging.ERROR)
@@ -214,9 +213,9 @@ class TestIndexerIO(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (self.scene_dir, self.test_str, '', self.scene_count, 'Done'),  # test creation
-            # (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append - TODO Append fails on DateTime warning
-            # (self.scene_dir, self.test_str, '', self.scene_count * 2,
-            #  'Dst GDB layer exists.  Use the --overwrite or --append options.'),  # test error meeasge on existing
+            (self.scene_dir, self.test_str, '--append', self.scene_count * 2, 'Done'),  # test append
+            (self.scene_dir, self.test_str, '', self.scene_count * 2,
+            'Dst GDB layer exists.  Use the --overwrite or --append options.'),  # test error message on existing
             (self.scene_dir, self.test_str, '--overwrite --check', self.scene_count, 'Removing old index'), # test overwrite
         )
 
@@ -232,7 +231,7 @@ class TestIndexerIO(unittest.TestCase):
             # print(se)
             # print(so)
 
-            ## Test if ds exists and has corrent number of records
+            ## Test if ds exists and has correct number of records
             gdb, lyr = os.path.split(o)
             self.assertTrue(os.path.isdir(gdb))
             ds = ogr.Open(gdb, 0)
@@ -272,10 +271,10 @@ class TestIndexerIO(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.pg_test_str, '', self.scene_count, 'Done', 2),  # test creation
+            (self.scene_dir, self.pg_test_str, '--check ', self.scene_count, 'Done', 2),  # test creation and check
             (self.scene_dir, self.pg_test_str, '--append --check', self.scene_count * 2, 'Done', 2),  # test append and check
             (self.scene_dir, self.pg_test_str, '', self.scene_count * 2,
-             'Dst DB layer exists.  Use the --overwrite or --append options.', 2),  # test error meeasge on existing
+             'Dst DB layer exists.  Use the --overwrite or --append options.', 2),  # test error message on existing layer
             (self.scene_dir, self.pg_test_str, '--overwrite', self.scene_count, 'Removing old index', 2), # test overwrite
             (self.scenedsp_dir, self.pg_test_str, '--overwrite', self.scenedsp_count, 'Done', 2), # test as 2m_dsp record
             (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-record-mode orig', self.scenedsp_count, 'Done', 0.5),
@@ -465,7 +464,7 @@ class TestIndexerIO(unittest.TestCase):
             os.path.join(self.output_dir, 'WV02_20190419_103001008C4B0400_103001008EC59A00_2m_v040002.json'),
             os.path.join(self.output_dir, 'WV02_20190705_103001009505B700_10300100934D1000_2m_v040002.json'),
             os.path.join(self.output_dir, 'W1W1_20190426_102001008466F300_1020010089C2DB00_2m_v030403.json'),
-            os.path.join(self.output_dir, 'WV02_20220813_10300100D7D7F300_10300100D86CC000_2m_v040313.json'),
+            os.path.join(self.output_dir, 'WV02_20220813_10300100D7D7F300_10300100D86CC000_2m_v040311.json'),
         ]
 
         counter = 0

@@ -517,13 +517,26 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                     field.SetPrecision(field_def.fprecision)
                     layer.CreateField(field)
 
+                # When creating a new dataset/layer schema with GDAL, something about the schema
+                # is kept in cache tied to the dataset connection instance.
+                # If after writing to the new layer, the layer records are read back in with GDAL
+                # using the same connection instance (with the --check option for example),
+                # GDAL may fail to read certain field data types properly (such as boolean fields).
+                # This is likely a bug in GDAL!
+                # To avoid this, manually close and reopen the connection.
+                ds = None
+                layer = None
+                ds = ogrDriver.Open(dst_ds, 1)
+                layer = ds.GetLayerByName(dst_lyr)
+
         ## Append Records
         if layer:
             # Get field widths
             lyr_def = layer.GetLayerDefn()
             fwidths = {lyr_def.GetFieldDefn(i).GetName().upper():
-                    (lyr_def.GetFieldDefn(i).GetWidth(), lyr_def.GetFieldDefn(i).GetType())
-                    for i in range(lyr_def.GetFieldCount())}
+                           (lyr_def.GetFieldDefn(i).GetWidth(), lyr_def.GetFieldDefn(i).GetType())
+                            for i in range(lyr_def.GetFieldCount())
+                       }
 
             logger.info("Appending records...")
             #### loop through records and add features
@@ -563,14 +576,14 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 'PAIRNAME': record.pairname,
                                 'SENSOR1': record.sensor1,
                                 'SENSOR2': record.sensor2,
-                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%d %H:%M:%S.%fZ'),
-                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%d %H:%M:%S.%fZ'),
+                                'ACQDATE1': record.acqdate1.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                                'ACQDATE2': record.acqdate2.strftime('%Y-%m-%dT%H:%M:%SZ'),
                                 'CATALOGID1': record.catid1,
                                 'CATALOGID2': record.catid2,
                                 'SCENE1': record.scene1,
                                 'SCENE2': record.scene2,
-                                'GEN_TIME1': record.gentime1.strftime('%Y-%m-%d %H:%M:%S.%fZ') if record.gentime1 else None,
-                                'GEN_TIME2': record.gentime2.strftime('%Y-%m-%d %H:%M:%S.%fZ') if record.gentime2 else None,
+                                'GEN_TIME1': record.gentime1.strftime('%Y-%m-%dT%H:%M:%SZ') if record.gentime1 else None,
+                                'GEN_TIME2': record.gentime2.strftime('%Y-%m-%dT%H:%M:%SZ') if record.gentime2 else None,
                                 'HAS_LSF': record.has_lsf,
                                 'HAS_NONLSF': record.has_nonlsf,
                                 'IS_XTRACK': record.is_xtrack,
@@ -942,15 +955,19 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Write feature
                         if valid_record:
-                            for fld,val in attrib_map.items():
+                            for fld, val in attrib_map.items():
                                 if fld in fwidths:
-                                    if isinstance(val, str) and fwidths[fld][1] == ogr.OFTString and len(val) > fwidths[fld][0]:
-                                        logger.error("Attribute value {} is too long for field {} (width={}). Feature skipped".format(
-                                            val, fld, fwidths[fld][0]
-                                        ))
+                                    fwidth, ftype = fwidths[fld]
+                                    # Check if attribute length is too long for the field width. Note that the varchar
+                                    # type in postgres returns a width of 0 if no max width is specified in the table
+                                    # creation
+                                    if isinstance(val, str) and ftype == ogr.OFTString and 0 < fwidth < len(val):
+                                        logger.error("Attribute value {} is too long for field {} (width={}). "
+                                                     "Feature skipped".format(val, fld, fwidth))
                                         valid_record = False
                                         if fld.upper() == 'LOCATION' and ogr_driver_str == 'ESRI Shapefile':
-                                            if fld_def_location_fwidth_gdb is not None and fld_def_location_fwidth_gdb > fwidths[fld][0]:
+                                            if fld_def_location_fwidth_gdb is not None \
+                                                    and fld_def_location_fwidth_gdb > fwidth:
                                                 logger.warning("Tip: LOCATION field values can be longer (width={}) \
                                                     if you write to a non-Shapefile index such as FileGDB or PostgreSQL table".format(
                                                     fld_def_location_fwidth_gdb
@@ -1002,6 +1019,20 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             else:
                                                 raise
                                         layer.CommitTransaction()
+                                    elif ogr_driver_str in ['OpenFileGDB', 'FileGDB']:
+                                        utils.GDAL_ERROR_HANDLER.reset_error_state()
+                                        try:
+                                            # Writing a date to a datetime field in GDB (date fields are not allowed)
+                                            # results in an error "Attempt at writing a datetime with a unknown time
+                                            # zone or local time in a layer that expects dates to be convertible to
+                                            # UTC. It will be written as if it was expressed in UTC." This happens
+                                            # even if the datetime string is expressed in proper ISO UTC syntax.
+                                            # Therefore, we have to refrain from catching warnings when writing to GDB.
+                                            with utils.GdalAllowWarnings():
+                                                layer.CreateFeature(feat)
+                                        except Exception as e:
+                                            raise
+
                                     else:
                                         layer.CreateFeature(feat)
             if not args.np:
@@ -1029,7 +1060,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                 for recordid in recordids:
                     if recordid not in layer_recordids:
                         err_cnt += 1
-                        logger.error("Record not found in target layer: {}".format(recordid))
+                        if err_cnt == 1 and layer_recordids:
+                            logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
+                        logger.error("New record not found in target layer: {}".format(recordid))
+                if err_cnt > 1:
+                    logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
 
                 if err_cnt > 0:
                     sys.exit(-1)
@@ -1053,17 +1088,33 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
 
 def convert_value(fld, val):
-    # Convert date to expected string
-    if fld == 'INDEX_DATE':
-        try:
-            dt = datetime.datetime.strptime(val[:10], "%Y/%m/%d")
-        except ValueError:
-            pass
-        else:
+    # Convert target layer field value that was read with GDAL to expected value.
+
+    # Convert date to expected string.
+    # Reading a datetime field can return a string in several possible timestamp formats,
+    # depending on the table format (Shapefile vs FileGDB vs Postgres, etc).
+    if fld == 'INDEX_DATE' and type(val) is str:
+        dt = None
+        for case in range(2):
+            try:
+                if case == 0:
+                    dt = datetime.datetime.strptime(val[:10], "%Y/%m/%d")
+                # elif case == 1:
+                #     dt = datetime.datetime.strptime(val[:10], "%Y-%m-%d")
+            except ValueError:
+                pass
+            else:
+                if dt is not None:
+                    break
+        if dt is not None:
             return dt.strftime("%Y-%m-%d")
-    # Convert boolean to expected integer
-    # if fld == 'IS_DSP':
-    #     return int(val)
+
+    # Convert integer to expected boolean
+    elif fld == 'IS_DSP':
+        if type(val) is int and val in (0, 1):
+            return bool(val)
+        elif type(val) is str and val in ('0', '1'):
+            return bool(int(val))
 
     return val
 
