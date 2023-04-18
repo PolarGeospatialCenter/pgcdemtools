@@ -58,7 +58,7 @@ def main():
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
     parser.add_argument("--tasks-per-job", type=int,
-                        help="number of tasks to bundle into a single job (requires pbs option)")
+                        help="number of tasks to bundle into a single job (requires scheduler option)")
     parser.add_argument("--scheduler", choices=utils.SCHEDULERS,
                         help="submit tasks to the specified scheduler")
     parser.add_argument("--qsubscript",

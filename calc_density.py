@@ -35,7 +35,7 @@ def main():
     
     #### Optionsl Arguments
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
-    parser.add_argument("--tasks-per-job", type=int, help="number of tasks to bundle into a single job (requires pbs option)")
+    parser.add_argument("--tasks-per-job", type=int, help="number of tasks to bundle into a single job (requires scheduler option)")
     parser.add_argument("--scheduler", choices=utils.SCHEDULERS,
                         help="submit tasks to the specified scheduler")
     parser.add_argument("--qsubscript",
@@ -59,7 +59,7 @@ def main():
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
-    if not os.path.isdir(args.scratch) and not args.pbs:  #scratch dir may not exist on head node when running jobs via pbs
+    if not os.path.isdir(args.scratch) and not args.scheduler:  #scratch dir may not exist on head node when running jobs via pbs
         parser.error("Scratch directory does not exist: %s" %args.scratch)
     
     ## Verify qsubscript
