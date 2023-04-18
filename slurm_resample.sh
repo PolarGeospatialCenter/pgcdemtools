@@ -7,8 +7,7 @@
 #SBATCH -c 4
 
 # job log path
-#SBATCH -o slurm.%N.%j.out
-#SBATCH -e slurm.%N.%j.err
+#SBATCH -o %x.%j.out
 
 echo ________________________________________
 echo

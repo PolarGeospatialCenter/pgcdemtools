@@ -15,6 +15,8 @@ from collections import namedtuple
 
 from osgeo import osr, ogr, gdalconst, gdal
 
+SCHEDULERS = ['pbs', 'slurm']
+
 gdal.UseExceptions()
 
 
@@ -850,3 +852,24 @@ def getWrappedGeometry(src_geom):
             del ring
 
     return mp_geometry
+
+
+def verify_scheduler_args(parser, args, scriptpath, submission_script_map):
+    qsubpath = None
+    if args.scheduler:
+        if not args.qsubscript:
+            qsubpath = os.path.join(os.path.dirname(scriptpath), submission_script_map[args.scheduler])
+        else:
+            qsubpath = os.path.abspath(args.qsubscript)
+        if not os.path.isfile(qsubpath):
+            parser.error("qsub script path is not valid: %s" % qsubpath)
+
+    ## Verify processing options do not conflict
+    if args.scheduler and args.parallel_processes > 1:
+        parser.error("HPC Options --scheduler and --parallel-processes > 1 are mutually exclusive")
+
+    if hasattr(args, 'tasks_per_job'):
+        if args.tasks_per_job and not args.scheduler:
+            parser.error("jobs-per-task argument requires the scheduler option")
+
+    return qsubpath

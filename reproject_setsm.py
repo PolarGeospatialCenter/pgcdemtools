@@ -7,7 +7,7 @@ import sys
 
 from osgeo import ogr, osr
 
-from lib import taskhandler, VERSION, SHORT_VERSION
+from lib import taskhandler, VERSION, SHORT_VERSION, utils
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -18,6 +18,12 @@ default_res = 2
 suffixes = ['ortho.tif', 'matchtag.tif', 'dem.tif', 'meta.txt']
 component_choices = suffixes + ['all']
 
+submission_script_map = {
+    'pbs': 'pbs_resample.sh',
+    'slurm': 'slurm_resample.sh'
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
 
@@ -27,15 +33,16 @@ def main():
     parser.add_argument("epsg", type=int, help="target epsg code")
     
     parser.add_argument("-r", "--resolution",  default=default_res, type=int,
-                help="output resolution (default={})".format(default_res))
-    parser.add_argument("--pbs", action='store_true', default=False,
-                help="submit tasks to PBS")
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                help="number of parallel processes to spawn (default 1)")
+                        help="output resolution (default={})".format(default_res))
+    parser.add_argument("--scheduler", choices=utils.SCHEDULERS,
+                        help="submit tasks to the specified scheduler")
     parser.add_argument("--qsubscript",
-                help="qsub script to use in PBS submission (default is qsub_resample.sh in script root folder)")
+                        help="script to use in scheduler submission "
+                             "({})".format(', '.join([f'{k}: {v}' for k, v in submission_script_map.items()])))
+    parser.add_argument("--parallel-processes", type=int, default=1,
+                        help="number of parallel processes to spawn (default 1)")
     parser.add_argument("--dryrun", action="store_true", default=False,
-                help="print actions without executing")
+                        help="print actions without executing")
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
                         help='print version and exit')
 
@@ -60,16 +67,7 @@ def main():
         parser.error('EPSG test osr.SpatialReference.ImportFromEPSG returns error code %d' %status)
 
     ## Verify qsubscript
-    if args.qsubscript is None:
-        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_resample.sh')
-    else:
-        qsubpath = os.path.abspath(args.qsubscript)
-    if not os.path.isfile(qsubpath):
-        parser.error("qsub script path is not valid: %s" %qsubpath)
-
-    ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
 
     #### Set up console logging handler
     lso = logging.StreamHandler()
@@ -81,7 +79,7 @@ def main():
     logger.info("Current version: %s", VERSION)
 
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
+    arg_keys_to_remove = ('qsubscript', 'dryrun', 'scheduler', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
 
     task_queue = []
@@ -125,10 +123,14 @@ def main():
     logger.info('Number of incomplete tasks: {}'.format(i))
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+        if args.scheduler:
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
 
         elif args.parallel_processes > 1:
             task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)

@@ -6,7 +6,7 @@ from datetime import *
 
 from osgeo import osr, ogr
 
-from lib import dem, taskhandler, VERSION, SHORT_VERSION
+from lib import dem, taskhandler, VERSION, SHORT_VERSION, utils
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -16,6 +16,10 @@ ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
 tgt_srs = osr.SpatialReference()
 tgt_srs.ImportFromEPSG(4326)
 
+submission_script_map = {
+    'pbs': 'pbs_package.sh',
+    'slurm': 'slurm_package.sh'
+}
 
 
 def main():
@@ -32,12 +36,13 @@ def main():
     #### Optionsl Arguments
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument("--tasks-per-job", type=int, help="number of tasks to bundle into a single job (requires pbs option)")
-    parser.add_argument("--pbs", action='store_true', default=False,
-                        help="submit tasks to PBS")
+    parser.add_argument("--scheduler", choices=utils.SCHEDULERS,
+                        help="submit tasks to the specified scheduler")
+    parser.add_argument("--qsubscript",
+                        help="script to use in scheduler submission "
+                             "({})".format(', '.join([f'{k}: {v}' for k, v in submission_script_map.items()])))
     parser.add_argument("--parallel-processes", type=int, default=1,
                         help="number of parallel processes to spawn (default 1)")
-    parser.add_argument("--qsubscript",
-                        help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
@@ -58,19 +63,7 @@ def main():
         parser.error("Scratch directory does not exist: %s" %args.scratch)
     
     ## Verify qsubscript
-    if args.qsubscript is None:
-        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_package.sh')
-    else:
-        qsubpath = os.path.abspath(args.qsubscript)
-    if not os.path.isfile(qsubpath):
-        parser.error("qsub script path is not valid: %s" %qsubpath)
-    
-    if args.tasks_per_job and not args.pbs:
-        parser.error("jobs-per-task argument requires the pbs option")
-    
-    ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
     
     if args.v:
         log_level = logging.DEBUG
@@ -86,7 +79,7 @@ def main():
     logger.info("Current version: %s", VERSION)
 
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
+    arg_keys_to_remove = ('qsubscript', 'dryrun', 'scheduler', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
       
     j=0
@@ -195,11 +188,15 @@ def main():
        
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
-            
+        if args.scheduler:
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
+
         elif args.parallel_processes > 1:
             task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
             logger.info("Number of child processes to spawn: {0}".format(task_handler.num_processes))
@@ -215,7 +212,8 @@ def main():
     
     else:
         logger.info("No tasks found to process")
-        
+
+
 def build_archive(src,scratch,args):
 
     logger.info("Calculating density of raster: {}".format(src))
