@@ -127,14 +127,13 @@ def main():
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
         if args.scheduler:
-            if args.scheduler:
-                try:
-                    task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
-                except RuntimeError as e:
-                    logger.error(e)
-                else:
-                    if not args.dryrun:
-                        task_handler.run_tasks(task_queue)
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
 
         elif args.parallel_processes > 1:
             try:
