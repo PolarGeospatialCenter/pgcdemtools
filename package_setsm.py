@@ -451,12 +451,17 @@ def build_archive(raster, scratch, args):
                                 if lyr is not None:
                             
                                     for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS_BASIC:
-                                        
-                                        field = ogr.FieldDefn(field_def.fname, field_def.ftype)
-                                        field.SetWidth(field_def.fwidth)
+                                        if field_def.ftype == ogr.OFTDateTime:
+                                            ftype = ogr.OFTString
+                                            fwidth = 28
+                                        else:
+                                            ftype = field_def.ftype
+                                            fwidth = field_def.fwidth
+                                        field = ogr.FieldDefn(field_def.fname, ftype)
+                                        field.SetWidth(fwidth)
                                         field.SetPrecision(field_def.fprecision)
                                         lyr.CreateField(field)
-                                        
+
                                     feat = ogr.Feature(lyr.GetLayerDefn())
                                     valid_record = True
 

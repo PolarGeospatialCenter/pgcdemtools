@@ -386,11 +386,13 @@ def build_archive(raster, scratch, args):
 
                                 for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
                                     if field_def.ftype == ogr.OFTDateTime:
-                                        ftype = ogr.OFTDate
+                                        ftype = ogr.OFTString
+                                        fwidth = 28
                                     else:
                                         ftype = field_def.ftype
+                                        fwidth = field_def.fwidth
                                     field = ogr.FieldDefn(field_def.fname, ftype)
-                                    field.SetWidth(field_def.fwidth)
+                                    field.SetWidth(fwidth)
                                     field.SetPrecision(field_def.fprecision)
                                     lyr.CreateField(field)
 
