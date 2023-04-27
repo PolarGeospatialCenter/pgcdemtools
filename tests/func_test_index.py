@@ -29,19 +29,12 @@ res_str = {
 # logger.addHandler(lso)
 
 
-class TestIndexerIO(unittest.TestCase):
+class TestIndexerScenes(unittest.TestCase):
 
     def setUp(self):
         self.scene_dir = os.path.join(testdata_dir, 'setsm_scene')
         self.scene50cm_dir = os.path.join(testdata_dir, 'setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
-        self.strip_dir = os.path.join(testdata_dir, 'setsm_strip')
-        self.strip_json_dir = os.path.join(testdata_dir, 'setsm_strip_json')
-        self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
-        self.strip_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_mdf')
-        self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
-        self.striprenamed_dir = os.path.join(testdata_dir, 'setsm_strip_renamed')
-        self.tile_dir = os.path.join(testdata_dir, 'setsm_tile')
         self.output_dir = os.path.join(testdata_dir, 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
@@ -49,11 +42,6 @@ class TestIndexerIO(unittest.TestCase):
         self.scene_count = 52
         self.scene50cm_count = 14
         self.scenedsp_count = 102
-        self.strip_count = 6
-        self.stripmasked_count = 3
-        self.strip_mixedver_count = 4
-        self.strip_json_count = 6
-        self.strip_renamed_count = 1
 
     def tearDown(self):
         ## Clean up output
@@ -606,6 +594,35 @@ class TestIndexerIO(unittest.TestCase):
 
             ds, layer = None, None
 
+
+class TestIndexerStrips(unittest.TestCase):
+
+    def setUp(self):
+        self.strip_dir = os.path.join(testdata_dir, 'setsm_strip')
+        self.strip_json_dir = os.path.join(testdata_dir, 'setsm_strip_json')
+        self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
+        self.strip_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_mdf')
+        self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
+        self.striprenamed_dir = os.path.join(testdata_dir, 'setsm_strip_renamed')
+        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.test_str = os.path.join(self.output_dir, 'test.shp')
+        self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
+
+        self.strip_count = 6
+        self.stripmasked_count = 3
+        self.strip_mixedver_count = 4
+        self.strip_json_count = 6
+        self.strip_renamed_count = 1
+
+    def tearDown(self):
+        ## Clean up output
+        for f in os.listdir(self.output_dir):
+            fp = os.path.join(self.output_dir, f)
+            if os.path.isfile(fp):
+                os.remove(fp)
+            else:
+                shutil.rmtree(fp)
+
     # @unittest.skip("test")
     def testStrip(self):
 
@@ -795,6 +812,24 @@ class TestIndexerIO(unittest.TestCase):
             # Test if stdout has proper error
             self.assertIn(msg, so.decode())
 
+
+class TestIndexerTiles(unittest.TestCase):
+
+    def setUp(self):
+        self.tile_dir = os.path.join(testdata_dir, 'setsm_tile')
+        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.test_str = os.path.join(self.output_dir, 'test.shp')
+        self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
+
+    def tearDown(self):
+        ## Clean up output
+        for f in os.listdir(self.output_dir):
+            fp = os.path.join(self.output_dir, f)
+            if os.path.isfile(fp):
+                os.remove(fp)
+            else:
+                shutil.rmtree(fp)
+
     # @unittest.skip("test")
     def testTile(self):
 
@@ -966,7 +1001,9 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     test_cases = [
-        TestIndexerIO,
+        TestIndexerScenes,
+        TestIndexerStrips,
+        TestIndexerTiles,
     ]
 
     suites = []

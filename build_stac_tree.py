@@ -67,7 +67,7 @@ def main():
         parser.error("Source directory or file does not exist: %s" %args.src)
 
     if args.validate:
-        pass
+        import pystac
 
     ## Setup Logging options
     if args.v:

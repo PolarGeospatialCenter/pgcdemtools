@@ -36,7 +36,7 @@ def main():
 
     #### Positional Arguments
     parser.add_argument('src', help="source directory or dem")
-    pos_arg_keys = ['src']
+
 
     #### Optionsl Arguments
     parser.add_argument('--log', help="directory for log output")
@@ -52,17 +52,14 @@ def main():
     parser.add_argument('--build-ovr', action='store_true', default=False,
                         help="build overviews")
     parser.add_argument('--resample', default="bilinear", help="dem_resampling strategy (default=bilinear). matchtag resampling is always nearest neighbor")
-    parser.add_argument("--scheduler", choices=utils.SCHEDULERS,
-                        help="submit tasks to the specified scheduler")
-    parser.add_argument("--qsubscript",
-                        help="script to use in scheduler submission "
-                             "({})".format(', '.join([f'{k}: {v}' for k, v in submission_script_map.items()])))
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                        help="number of parallel processes to spawn (default 1)")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
                         help='print version and exit')
+
+    pos_arg_keys = ['src']
+    arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun', 'tiles']
+    utils.add_scheduler_options(parser, submission_script_map)
 
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
@@ -98,7 +95,6 @@ def main():
     logger.info("Current version: %s", VERSION)
 
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'scheduler', 'parallel_processes','tiles')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
 
     task_queue = []
