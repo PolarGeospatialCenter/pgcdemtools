@@ -205,3 +205,21 @@ def convert_optional_args_to_string(args, positional_arg_keys, arg_keys_to_remov
 
     arg_str_base = " ".join(arg_list)
     return arg_str_base
+
+
+def get_scheduler_taskhandler(scheduler, qsubpath):
+
+    scheduler_taskhandler_map = {
+        'pbs': PBSTaskHandler,
+        'slurm': SLURMTaskHandler,
+    }
+    if scheduler in scheduler_taskhandler_map:
+        th_class = scheduler_taskhandler_map[scheduler]
+        try:
+            task_handler = th_class(qsubpath)
+        except RuntimeError as e:
+            raise
+        else:
+            return task_handler
+    else:
+        raise RuntimeError(f'{scheduler} not found in scheduler to task handler map')

@@ -63,7 +63,7 @@ find "${DEM_DIR} \
 ```
 
 ## Usage notes
-Some of the tools are designed to be run either in a serial, parallel, or with a PBS scheduler.  If a PBS scheduler is present, the --pbs option can often be used to submit the jobs to PBS.  The qsub* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
+Some of the tools are designed to be run either in a serial, parallel, or with a PBS or SLURM scheduler.  If a scheduler is present, the --scheduler option can be used to submit the jobs to PBS or SLURM.  The pbs_* and slurm_* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
 
 ## Contact
 Claire Porter

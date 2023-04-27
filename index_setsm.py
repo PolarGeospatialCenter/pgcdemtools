@@ -9,6 +9,7 @@ import sys
 from osgeo import gdal, osr, ogr
 
 from lib import utils, dem, walk
+from lib import VERSION, SHORT_VERSION
 
 try:
     import ConfigParser
@@ -148,7 +149,8 @@ def main():
     parser.add_argument('--debug', action='store_true', default=False, help='print DEBUG level logger messages to terminal')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
     parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
-
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
     #### Parse Arguments
     args = parser.parse_args()
 
@@ -218,6 +220,8 @@ def main():
 
         if args.epsg:
             logger.warning('--epsg and --dsp-original-res will be ignored with the --write-json option')
+
+    logger.info("Current repo version: %s", VERSION)
 
     if args.write_json:
         logger.info("Forcing indexer to use absolute paths for writing JSONs")
@@ -502,18 +506,21 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                 for field_def in fld_defs:
                     fstype = None
                     if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
-                        ftype = ogr.OFTDate
+                        ftype = ogr.OFTString
+                        fwidth = 28
                     elif field_def.ftype == ogr.OFSTBoolean:
                         ftype = ogr.OFTInteger
                         fstype = field_def.ftype
+                        fwidth = field_def.fwidth
                     # elif field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
                     #         ftype = ogr.OFTString
                     else:
                         ftype = field_def.ftype
+                        fwidth = field_def.fwidth
                     field = ogr.FieldDefn(field_def.fname, ftype)
                     if fstype:
                         field.SetSubType(fstype)
-                    field.SetWidth(min(max_fld_width, field_def.fwidth))
+                    field.SetWidth(min(max_fld_width, fwidth))
                     field.SetPrecision(field_def.fprecision)
                     layer.CreateField(field)
 

@@ -2,9 +2,10 @@ import argparse
 import glob
 import logging
 import os
+import sys
 from datetime import *
 
-from lib import utils, dem
+from lib import utils, dem, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = utils.get_logger()
@@ -46,7 +47,9 @@ def main():
                         help="overwrite existing index")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
-    
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
     #### Parse Arguments
     args = parser.parse_args()
     
@@ -76,7 +79,9 @@ def main():
         formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     rasters = []
 
     ### Open shp, verify field, verify projection, extract tile geoms

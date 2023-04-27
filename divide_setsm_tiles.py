@@ -1,8 +1,15 @@
-import os, sys, string, shutil, glob, re, logging, math, subprocess
-from datetime import *
-from osgeo import gdal, osr, ogr, gdalconst
 import argparse
-from lib import utils, dem, taskhandler
+import glob
+import logging
+import math
+import os
+import shutil
+import subprocess
+import sys
+
+from osgeo import gdal
+
+from lib import utils, dem, taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -14,6 +21,12 @@ components = (
     #'ortho',
 )
 
+submission_script_map = {
+    'pbs': 'pbs_divide.sh',
+    'slurm': 'slurm_divide.sh'
+}
+
+
 def main():
 
     #### Set Up Arguments
@@ -23,7 +36,7 @@ def main():
 
     #### Positional Arguments
     parser.add_argument('src', help="source directory or dem")
-    pos_arg_keys = ['src']
+
 
     #### Optionsl Arguments
     parser.add_argument('--log', help="directory for log output")
@@ -34,21 +47,22 @@ def main():
     parser.add_argument('--res', type=int, default=2,
                         help="resolution in meters")
     parser.add_argument('--tiles', help="list of tiles to process, comma delimited")
-    parser.add_argument("--version", help="version string (ex: v1.2)")
+    parser.add_argument("--dem-version", help="version string (ex: v1.2)")
     parser.add_argument("--cutline-loc", help="directory containing cutline shps indicating areas of bad data")
     parser.add_argument('--build-ovr', action='store_true', default=False,
                         help="build overviews")
     parser.add_argument('--resample', default="bilinear", help="dem_resampling strategy (default=bilinear). matchtag resampling is always nearest neighbor")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
-    parser.add_argument("--pbs", action='store_true', default=False,
-                        help="submit tasks to PBS")
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                        help="number of parallel processes to spawn (default 1)")
-    parser.add_argument("--qsubscript",
-                        help="qsub script to use in PBS submission (default is qsub_divide.sh in script root folder)")
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
+    pos_arg_keys = ['src']
+    arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun', 'tiles']
+    utils.add_scheduler_options(parser, submission_script_map)
 
     #### Parse Arguments
+    scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
 
     #### Verify Arguments
@@ -60,25 +74,13 @@ def main():
         if not os.path.isdir(args.cutline_loc):
             parser.error("Cutline directory does not exist: {}".format(args.cutline_loc))
 
-    scriptpath = os.path.abspath(sys.argv[0])
-
     ## Verify qsubscript
-    if args.pbs:
-        if args.qsubscript is None:
-            qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_divide.sh')
-        else:
-            qsubpath = os.path.abspath(args.qsubscript)
-        if not os.path.isfile(qsubpath):
-            parser.error("qsub script path is not valid: %s" %qsubpath)
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
 
-    ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
-
-    if args.version:
-        version_str = '_{}'.format(args.version)
+    if args.dem_version:
+        dem_version_str = '_{}'.format(args.dem_version)
     else:
-        version_str = ''
+        dem_version_str = ''
 
     if args.tiles:
         tiles = args.tiles.split(',')
@@ -90,8 +92,9 @@ def main():
     lso.setFormatter(formatter)
     logger.addHandler(lso)
 
+    logger.info("Current version: %s", VERSION)
+
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes','tiles')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
 
     task_queue = []
@@ -106,9 +109,9 @@ def main():
             logger.error( e )
         else:
             if src.endswith('reg_dem.tif'):
-                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], args.res, version_str))
+                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(src[:-15], args.res, dem_version_str))
             else:
-                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], args.res, version_str))
+                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(src[:-12], args.res, dem_version_str))
 
             #### verify that cutlines can be found if requested
             if args.cutline_loc:
@@ -149,9 +152,9 @@ def main():
                             logger.error( e )
                         else:
                             if srcfp.endswith('reg_dem.tif'):
-                                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(srcfp[:-15], args.res, version_str))
+                                dstfp_list = glob.glob('{}*{}m{}_reg_dem.tif'.format(srcfp[:-15], args.res, dem_version_str))
                             else:
-                                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], args.res, version_str))
+                                dstfp_list = glob.glob('{}*{}m{}_dem.tif'.format(srcfp[:-12], args.res, dem_version_str))
                             if len(dstfp_list) == 0:
                                 logger.info("computing tile: {}".format(srcfp))
 
@@ -180,10 +183,14 @@ def main():
 
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+        if args.scheduler:
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
 
         elif args.parallel_processes > 1:
             task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
@@ -215,10 +222,10 @@ def main():
 
 def divide_tile(src, args):
 
-    if args.version:
-        version_str = '_{}'.format(args.version)
+    if args.dem_version:
+        dem_version_str = '_{}'.format(args.dem_version)
     else:
-        version_str = ''
+        dem_version_str = ''
 
     ## get tile geom and make subtiles
     ds = gdal.Open(src)
@@ -243,8 +250,8 @@ def divide_tile(src, args):
 
         src_metapath = '{}_dem_meta.txt'.format(tile_base)
         src_regmetapath = '{}_reg.txt'.format(tile_base)
-        dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], args.res, version_str)
-        dst_regmetapath = '{}_{}m{}_reg.txt'.format(tile_base[:-3], args.res, version_str)
+        dst_metapath = '{}_{}m{}_dem_meta.txt'.format(tile_base[:-3], args.res, dem_version_str)
+        dst_regmetapath = '{}_{}m{}_reg.txt'.format(tile_base[:-3], args.res, dem_version_str)
 
         shutil.copy2(src_metapath, dst_metapath)
         if os.path.isfile(src_regmetapath):
@@ -254,7 +261,7 @@ def divide_tile(src, args):
         if args.cutline_loc:
             tile = '_'.join(os.path.basename(src).split('_')[:2])
             cutline_shp = os.path.join(args.cutline_loc, tile + '_cut.shp')
-            mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], args.res, version_str)
+            mask = '{}_{}m{}_mask.tif'.format(tile_base[:-3], args.res, dem_version_str)
             if not os.path.isfile(cutline_shp):
                 logger.info('No cutline file found for src tile: {}'.format(cutline_shp))
             else:
@@ -273,7 +280,7 @@ def divide_tile(src, args):
                 else:
                     resample = args.resample
                 srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
-                dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, version_str, reg_str, component)
+                dstfp = '{}_{}m{}_{}{}.tif'.format(tile_base[:-3], args.res, dem_version_str, reg_str, component)
                 logger.info("Building {}".format(dstfp))
                 if not os.path.isfile(dstfp):
                     cmd = 'gdalwarp -ovr NONE -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -te {3} {4} {5} {6} {0} {1}'.format(
@@ -311,7 +318,7 @@ def divide_tile(src, args):
                         else:
                             resample = args.resample
                         srcfp = '{}_{}{}.tif'.format(tile_base, reg_str, component)
-                        dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, version_str, reg_str, component)
+                        dstfp = '{}_{}_{}m{}_{}{}.tif'.format(tile_base[:-3], subtile_name, args.res, dem_version_str, reg_str, component)
                         logger.info("Building {}".format(dstfp))
                         if not os.path.isfile(dstfp):
                             cmd = 'gdalwarp -ovr NONE -co tiled=yes -co bigtiff=yes -co compress=lzw -tr {2} {2} -r {7} -te {3} {4} {5} {6} {0} {1}'.format(

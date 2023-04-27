@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 
 import argparse
-import datetime
 import json
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
+import logging
+import os
 import pathlib
+import sys
 
-from osgeo import gdal, osr, ogr, gdalconst
-
-from lib import utils, dem, taskhandler
+from lib import utils, VERSION, SHORT_VERSION
 
 DOMAINS = {
     "arcticdem": {
@@ -55,6 +54,9 @@ def main():
     parser.add_argument('--validate', action='store_true', default=False,
                         help="validate stac item json")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
@@ -78,6 +80,8 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
+
+    logger.info("Current version: %s", VERSION)
 
     #### ID rasters
     logger.info('Identifying STAC Items')

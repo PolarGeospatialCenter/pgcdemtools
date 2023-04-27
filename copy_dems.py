@@ -1,7 +1,11 @@
-import os, sys, string, shutil, glob
 import argparse
-from osgeo import gdal,ogr,osr, gdalconst
-from lib import utils
+import os
+import shutil
+import sys
+
+from osgeo import ogr
+
+from lib import utils, VERSION, SHORT_VERSION
 
 
 def main():
@@ -35,7 +39,9 @@ def main():
     parser.add_argument('--include-fltr', action='store_true', default=False,
                         help='ASP: include non-interpolated DEM')
     parser.add_argument('--include-logs', action='store_true', default=False,
-                        help='ASP: include stereo logs')    
+                        help='ASP: include stereo logs')
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
     #### Parse Arguments
     args = parser.parse_args()
@@ -51,7 +57,6 @@ def main():
         srctype = "shp"
     else:
         parser.error("Src is not a valid directory or shapefile: %s" %src)
-
 
     print("Collecting DEMs from source...")
 

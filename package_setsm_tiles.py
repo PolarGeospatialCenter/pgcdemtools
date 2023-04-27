@@ -9,15 +9,19 @@ from datetime import *
 
 from osgeo import osr, ogr, gdal, gdalconst
 
-from lib import utils, dem, taskhandler
+from lib import utils, dem, taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
 
 ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
-
 default_epsg = 4326
+
+submission_script_map = {
+    'pbs': 'pbs_package.sh',
+    'slurm': 'slurm_package.sh'
+}
 
 
 def main():
@@ -44,19 +48,21 @@ def main():
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
-    parser.add_argument("--pbs", action='store_true', default=False,
-                        help="submit tasks to PBS")
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                        help="number of parallel processes to spawn (default 1)")
-    parser.add_argument("--qsubscript",
-                        help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
+    pos_arg_keys = ['src', 'scratch']
+    arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun']
+    utils.add_scheduler_options(parser, submission_script_map)
 
     #### Parse Arguments
     args = parser.parse_args()
+    scriptpath = os.path.abspath(sys.argv[0])
+    src = os.path.abspath(args.src)
+    scratch = os.path.abspath(args.scratch)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
@@ -64,21 +70,8 @@ def main():
     if not os.path.isdir(args.scratch) and not os.path.isfile(args.scratch):
         parser.error("Source directory or file does not exist: %s" %args.scratch)
 
-    scriptpath = os.path.abspath(sys.argv[0])
-    src = os.path.abspath(args.src)
-    scratch = os.path.abspath(args.scratch)
-
     ## Verify qsubscript
-    if args.qsubscript is None:
-        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_package.sh')
-    else:
-        qsubpath = os.path.abspath(args.qsubscript)
-    if not os.path.isfile(qsubpath):
-        parser.error("qsub script path is not valid: %s" %qsubpath)
-
-    ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
 
     # Check raster proxy prefix is well-formed
     if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
@@ -96,8 +89,6 @@ def main():
     logger.addHandler(lsh)
 
     #### Get args ready to pass to task handler
-    pos_arg_keys = ['src','scratch']
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
 
     if args.log:
@@ -113,6 +104,7 @@ def main():
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
 
+    logger.info("Current version: %s", VERSION)
 
     #### ID rasters
     logger.info('Identifying DEMs')
@@ -193,10 +185,14 @@ def main():
 
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+        if args.scheduler:
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
 
         elif args.parallel_processes > 1:
             task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
@@ -384,12 +380,14 @@ def build_archive(raster, scratch, args):
                             if lyr is not None:
 
                                 for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
-                                    if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
-                                        ftype = ogr.OFTDate
+                                    if field_def.ftype == ogr.OFTDateTime:
+                                        ftype = ogr.OFTString
+                                        fwidth = 28
                                     else:
                                         ftype = field_def.ftype
+                                        fwidth = field_def.fwidth
                                     field = ogr.FieldDefn(field_def.fname, ftype)
-                                    field.SetWidth(field_def.fwidth)
+                                    field.SetWidth(fwidth)
                                     field.SetPrecision(field_def.fprecision)
                                     lyr.CreateField(field)
 

@@ -15,6 +15,9 @@ from collections import namedtuple
 
 from osgeo import osr, ogr, gdalconst, gdal
 
+SCHEDULERS = ['pbs', 'slurm']
+SCHEDULER_ARGS = ['qsubscript', 'scheduler', 'parallel_processes', 'slurm', 'pbs', 'tasks_per_job']
+
 gdal.UseExceptions()
 
 
@@ -850,3 +853,56 @@ def getWrappedGeometry(src_geom):
             del ring
 
     return mp_geometry
+
+
+def verify_scheduler_args(parser, args, scriptpath, submission_script_map):
+
+    # For back-compatibility take --pbs and --slurm args and translate them to the --scheduler arg
+    if [args.pbs, args.slurm, args.scheduler is not None].count(True) > 1:
+        parser.error("Command can only include one of the following options: --pbs, --slurm, --scheduler")
+
+    for s in SCHEDULERS:
+        if getattr(args, s):
+            setattr(args, 'scheduler', s)
+            break
+
+    # Warn that back-compatibility will be deprecated
+    if args.pbs or args.slurm:
+        print("WARNING: --pbs and --slurm options will be deprecated.  Use --scheduler [pbs|slurm] syntax instead.")
+
+    qsubpath = None
+    if args.scheduler:
+        if not args.qsubscript:
+            qsubpath = os.path.join(os.path.dirname(scriptpath), submission_script_map[args.scheduler])
+        else:
+            qsubpath = os.path.abspath(args.qsubscript)
+        if not os.path.isfile(qsubpath):
+            parser.error("qsub script path is not valid: %s" % qsubpath)
+
+    ## Verify processing options do not conflict
+    if args.scheduler and args.parallel_processes > 1:
+        parser.error("HPC Options --scheduler and --parallel-processes > 1 are mutually exclusive")
+
+    if hasattr(args, 'tasks_per_job'):
+        if args.tasks_per_job and not args.scheduler:
+            parser.error("jobs-per-task argument requires the scheduler option")
+
+    return qsubpath
+
+
+def add_scheduler_options(parser, submission_script_map, include_tasks_per_job=False):
+    parser.add_argument("--scheduler", choices=SCHEDULERS,
+                        help="submit tasks to the specified scheduler")
+    parser.add_argument("--pbs", action='store_true', default=False,
+                        help="submit tasks to the pbs scheduler (same as `--scheduler pbs`)")
+    parser.add_argument("--slurm", action='store_true', default=False,
+                        help="submit tasks to the slurm scheduler (same as `--scheduler slurm`)")
+    if include_tasks_per_job:
+        parser.add_argument("--tasks-per-job", type=int,
+                            help="number of tasks to bundle into a single job (requires scheduler option)")
+    parser.add_argument("--qsubscript",
+                        help="script to use in scheduler submission "
+                             "({})".format(', '.join([f'{k}: {v}' for k, v in submission_script_map.items()])))
+    parser.add_argument("--parallel-processes", type=int, default=1,
+                        help="number of parallel processes to spawn (default 1)")
+

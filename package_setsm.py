@@ -9,7 +9,7 @@ from datetime import *
 
 from osgeo import gdal, osr, ogr, gdalconst
 
-from lib import utils, dem, taskhandler
+from lib import utils, dem, taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -22,6 +22,11 @@ tgt_srs.ImportFromEPSG(4326)
 AREA_THRESHOLD = 5500000  # Filter threshold in sq meters
 DENSITY_THRESHOLD = 0.05   # Masked matchtag density threshold
 VALID_AREA_THRESHOLD = 16  # Valid area threshold in sqkm
+
+submission_script_map = {
+    'pbs': 'pbs_package.sh',
+    'slurm': 'slurm_package.sh'
+}
 
 
 def main():
@@ -52,18 +57,15 @@ def main():
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
-    parser.add_argument("--tasks-per-job", type=int,
-                        help="number of tasks to bundle into a single job (requires pbs option)")
-    parser.add_argument("--pbs", action='store_true', default=False,
-                        help="submit tasks to PBS")
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                        help="number of parallel processes to spawn (default 1)")
-    parser.add_argument("--qsubscript",
-                        help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
-    pos_arg_keys = ['src','scratch']
-    
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
+    pos_arg_keys = ['src', 'scratch']
+    arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun']
+    utils.add_scheduler_options(parser, submission_script_map, include_tasks_per_job=True)
+
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
@@ -73,23 +75,11 @@ def main():
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
         parser.error("Source directory or file does not exist: %s" %args.src)
-    if not os.path.isdir(args.scratch) and not args.pbs:  #scratch dir may not exist on head node when running jobs via pbs
+    if not os.path.isdir(args.scratch) and not args.scheduler:  #scratch dir may not exist on head node when running jobs via pbs
         parser.error("Scratch directory does not exist: %s" %args.scratch)
     
     ## Verify qsubscript
-    if args.qsubscript is None:
-        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_package.sh')
-    else:
-        qsubpath = os.path.abspath(args.qsubscript)
-    if not os.path.isfile(qsubpath):
-        parser.error("qsub script path is not valid: %s" %qsubpath)
-    
-    if args.tasks_per_job and not args.pbs:
-        parser.error("jobs-per-task argument requires the pbs option")
-    
-    ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
     
     if args.v:
         log_level = logging.DEBUG
@@ -105,9 +95,10 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes', 'tasks_per_job')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
 
     #### ID rasters
@@ -223,13 +214,17 @@ def main():
                 [raster, scratch, args]
             )
             task_queue.append(task)
-       
+
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+        if args.scheduler:
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
             
         elif args.parallel_processes > 1:
             task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
@@ -448,12 +443,17 @@ def build_archive(raster, scratch, args):
                                 if lyr is not None:
                             
                                     for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS_BASIC:
-                                        
-                                        field = ogr.FieldDefn(field_def.fname, field_def.ftype)
-                                        field.SetWidth(field_def.fwidth)
+                                        if field_def.ftype == ogr.OFTDateTime:
+                                            ftype = ogr.OFTString
+                                            fwidth = 28
+                                        else:
+                                            ftype = field_def.ftype
+                                            fwidth = field_def.fwidth
+                                        field = ogr.FieldDefn(field_def.fname, ftype)
+                                        field.SetWidth(fwidth)
                                         field.SetPrecision(field_def.fprecision)
                                         lyr.CreateField(field)
-                                        
+
                                     feat = ogr.Feature(lyr.GetLayerDefn())
                                     valid_record = True
 
