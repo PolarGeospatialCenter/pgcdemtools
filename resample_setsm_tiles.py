@@ -26,7 +26,8 @@ output_settings = {
     'countmt':  ('near', 'nearest', 1, 0),
     'mad':      ('bilinear', 'bilinear', 3, -9999),
     'maxdate':  ('near', 'nearest', 1, 0),
-    'mindate':  ('near', 'nearest', 1, 0)
+    'mindate':  ('near', 'nearest', 1, 0),
+    'datamask': ('near', 'nearest', 1, 0),
 }
 suffixes = sorted(list(output_settings.keys()))
 
