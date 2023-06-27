@@ -391,6 +391,12 @@ def build_mosaic_stac_item(base_url, domain, tile):
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "metadata", "date" ]
             },
+            "datamask": {
+                "title": "Valid data mask",
+                "href": "./" + tile.tileid + "_datamask.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "data-mask" ]
+            },
             "metadata": {
                 "title": "Metadata",
                 "href": "./"+tile.tileid+"_meta.txt",
