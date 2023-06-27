@@ -630,7 +630,6 @@ class SetsmDem(object):
                 self.browse = os.path.join(self.srcdir,self.stripid+"_dem_browse.tif")
             self.density_file = os.path.join(self.srcdir,self.stripid+"_density.txt")
             self.bitmask = os.path.join(self.srcdir, self.stripid + "_bitmask.tif")
-            self.datamask = os.path.join(self.srcdir, self.stripid + "_datamask.tif")
             self.reg_files = [
                 os.path.join(self.srcdir,self.stripid+"_reg.txt"),
                 os.path.join(self.srcdir,self.stripid+"_oibreg.txt"),
@@ -1745,7 +1744,7 @@ class SetsmTile(object):
 
             self.matchtag = os.path.join(self.srcdir,name_base + '_matchtag.tif')
             if not os.path.isfile(self.matchtag):
-                self.matchtag = os.path.join(self.srcdir, name_base + '_countmt.tif')
+                self.matchtag = os.path.join(self.srcdir, name_base + '_count.tif')
             self.err = os.path.join(self.srcdir,name_base + '_err.tif')
             self.day = os.path.join(self.srcdir,name_base + '_day.tif')
             self.ortho = os.path.join(self.srcdir,name_base + '_ortho.tif')
@@ -1755,6 +1754,7 @@ class SetsmTile(object):
             self.mad = os.path.join(self.srcdir,name_base + '_mad.tif')
             self.mindate = os.path.join(self.srcdir,name_base + '_mindate.tif')
             self.maxdate = os.path.join(self.srcdir,name_base + '_maxdate.tif')
+            self.datamask = os.path.join(self.srcdir,name_base + '_datamask.tif')
 
             self.browse = os.path.join(self.srcdir,name_base + '_dem_browse.tif')
             if not os.path.isfile(self.browse):
