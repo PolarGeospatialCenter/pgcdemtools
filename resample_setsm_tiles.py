@@ -23,10 +23,11 @@ output_settings = {
     'dem':      ('bilinear', 'bilinear', 3, -9999),
     'browse':   ('cubic', 'cubic', 2, 0),
     'count':    ('near', 'nearest', 1, 0),
-    'countmt':  ('near', 'nearest', 1, 0),
+    # 'countmt':  ('near', 'nearest', 1, 0),  # Excluded due to a bug
     'mad':      ('bilinear', 'bilinear', 3, -9999),
     'maxdate':  ('near', 'nearest', 1, 0),
-    'mindate':  ('near', 'nearest', 1, 0)
+    'mindate':  ('near', 'nearest', 1, 0),
+    'datamask': ('near', 'nearest', 1, 0),
 }
 suffixes = sorted(list(output_settings.keys()))
 
@@ -259,7 +260,7 @@ def resample_setsm(task_src, args):
             if sptpath != dpath:
                 supertiles[sptpath].append((dpath, release_version))
             else:
-                logger.error("Cannot merge by tile: No subtiles found")
+                logger.error("Cannot merge by tile: No quad tiles found")
 
             for component in components:
                 inputp = os.path.join(ddir, '{}{}_{}{}'.format(dbase, src_res, release_version, component))

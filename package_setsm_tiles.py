@@ -248,6 +248,7 @@ def build_archive(raster, scratch, args):
             os.path.basename(raster.mad),
             os.path.basename(raster.mindate),
             os.path.basename(raster.maxdate),
+            os.path.basename(raster.datamask),
             ]
 
         cog_params = {
