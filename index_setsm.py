@@ -282,7 +282,7 @@ def main():
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
-        elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB"):
+        elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB", "GPKG"):
             dst_ds = dst_dsp
 
         else:
@@ -345,7 +345,7 @@ def main():
                     logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
                     sys.exit(-1)
 
-        elif ogr_driver_str in ('FileGDB', 'OpenFileGDB'):
+        elif ogr_driver_str in ('FileGDB', 'OpenFileGDB', 'GPKG'):
             if os.path.isdir(dst_ds):
                 ds = ogrDriver.Open(dst_ds,1)
                 if ds:
@@ -473,7 +473,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         else:
             ds = ogrDriver.CreateDataSource(dst_ds)
 
-    elif ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
+    elif ogr_driver_str in ['FileGDB', 'OpenFileGDB', 'GPKG']:
         max_fld_width = 1024
         if os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)

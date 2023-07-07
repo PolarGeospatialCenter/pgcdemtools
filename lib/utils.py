@@ -523,13 +523,13 @@ def check_file_inclusion(f, pairname, overlap_prefix, args):
 def get_source_names(src_fp):
     """Get the source footprint name and layer name, if provided"""
 
-    if src_fp.lower().endswith((".shp", ".gdb")):
+    if src_fp.lower().endswith((".shp", ".gdb", ".gpkg")):
         _src_fp = src_fp
         src_lyr = os.path.splitext(os.path.basename(src_fp))[0]
     elif ".gdb" in src_fp.lower() and not src_fp.lower().endswith(".gdb"):
         _src_fp, src_lyr = re.split(r"(?<=\.gdb)/", src_fp, re.I)
     else:
-        msg = "The source {} does not appear to be a shapefile or File GDB -- quitting".format(src_fp)
+        msg = "The source {} does not appear to be a Shapefile, File GDB, or GeoPackage -- quitting".format(src_fp)
         raise RuntimeError(msg)
 
     return _src_fp, src_lyr
@@ -553,12 +553,20 @@ def get_source_names2(src_str):
             src_ds = src_str
             src_lyr = os.path.splitext(os.path.basename(src_str))[0]
 
+    elif ".gpkg" in src_str.lower():
+        driver = ["GPKG"]
+        if not src_str_abs.lower().endswith(".gpkg"):
+            src_ds, src_lyr = re.split(r"(?<=\.gpkg)/", src_str_abs, re.I)
+        else:
+            src_ds = src_str
+            src_lyr = os.path.splitext(os.path.basename(src_str))[0]
+
     elif src_str.lower().startswith("pg:"):
         driver = ["PostgreSQL"]
         pfx, src_ds, src_lyr = src_str.split(":")
 
     else:
-        msg = "The source {} does not appear to be a Shapefile, File GDB, or PostgreSQL connection -- quitting".format(
+        msg = "The source {} does not appear to be a Shapefile, File GDB, GeoPackage, or PostgreSQL connection -- quitting".format(
             src_str)
         raise RuntimeError(msg)
 
