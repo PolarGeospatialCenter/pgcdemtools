@@ -123,8 +123,8 @@ def main():
                         help='include registration info if present (mode=strip and tile only)')
     parser.add_argument('--include-relver', action='store_true', default=False,
                         help='include release version info if present (mode=strip and tile only)')
-    parser.add_argument('--use-release-fields', action='store_true (mode=tile only)', default=False,
-                        help="use field definitions for tile release indices")
+    parser.add_argument('--use-release-fields', action='store_true', default=False,
+                        help="use field definitions for tile release indices (mode=tile only)")
     parser.add_argument('--long-fieldnames', action='store_true', default=False,
                         help="use long format (>10 chars) version of fieldnames")
     parser.add_argument('--lowercase-fieldnames', action='store_true', default=False,
