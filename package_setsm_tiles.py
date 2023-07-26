@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import traceback
 from datetime import *
 
 from osgeo import osr, ogr, gdal, gdalconst
@@ -290,7 +291,21 @@ def build_archive(raster, scratch, args):
                         tif,
                         mrf
                     )
-                    subprocess.call(cmd, shell=True)
+                    rc = subprocess.call(cmd, shell=True)
+                    if rc != 0:
+                        logger.error("Received non-zero return code ({}) from gdal_translate call".format(rc))
+                    if not os.path.isfile(mrf):
+                        logger.error("Raster proxy file was not created")
+                    else:
+                        remove_output = False
+                        if rc != 0:
+                            logger.error("Removing output raster proxy file because non-zero return code was hit: {}".format(mrf))
+                            remove_output = True
+                        elif os.path.getsize(mrf) == 0:
+                            logger.error("Created raster proxy file size is zero, removing: {}".format(mrf))
+                            remove_output = True
+                        if remove_output:
+                            os.remove(mrf)
 
         ## Convert all rasters to COG in place (should no longer be needed)
         if args.convert_to_cog:
@@ -466,46 +481,64 @@ def build_archive(raster, scratch, args):
                                 ds = None
 
                                 if os.path.isfile(index):
-                                    ## Create archive
-                                    if not args.dryrun:
-                                        #archive = tarfile.open(dstfp,"w:")
-                                        archive = tarfile.open(dstfp,"w:gz")
-                                        if not os.path.isfile(dstfp):
-                                            logger.error("Cannot create archive: {}".format(dstfn))
-
-                                    ## Add components
-                                    for component in components:
-                                        logger.debug("Adding {} to {}".format(component,dstfn))
-                                        k+=1
+                                    archive = None
+                                    remove_output = False
+                                    try:
+                                        ## Create archive
                                         if not args.dryrun:
-                                            archive.add(component)
+                                            #archive = tarfile.open(dstfp,"w:")
+                                            archive = tarfile.open(dstfp,"w:gz")
+                                            if not os.path.isfile(dstfp):
+                                                raise RuntimeError("Cannot create archive: {}".format(dstfn))
 
-                                    ## Add optional components
-                                    for component in optional_components:
-                                        if os.path.isfile(component):
+                                        ## Add components
+                                        for component in components:
                                             logger.debug("Adding {} to {}".format(component,dstfn))
                                             k+=1
                                             if not args.dryrun:
                                                 archive.add(component)
 
-                                    ## Add index in subfolder
-                                    os.chdir(scratch)
-                                    for f in glob.glob(index_lyr+".*"):
-                                        arcname = os.path.join("index",f)
-                                        logger.debug("Adding {} to {}".format(f,dstfn))
-                                        k+=1
+                                        ## Add optional components
+                                        for component in optional_components:
+                                            if os.path.isfile(component):
+                                                logger.debug("Adding {} to {}".format(component,dstfn))
+                                                k+=1
+                                                if not args.dryrun:
+                                                    archive.add(component)
+
+                                        ## Add index in subfolder
+                                        os.chdir(scratch)
+                                        for f in glob.glob(index_lyr+".*"):
+                                            arcname = os.path.join("index",f)
+                                            logger.debug("Adding {} to {}".format(f,dstfn))
+                                            k+=1
+                                            if not args.dryrun:
+                                                archive.add(f,arcname=arcname)
+                                            os.remove(f)
+
+                                        logger.info("Added {} items to archive: {}".format(k,dstfn))
+
+                                    except Exception as e:
+                                        traceback.print_exc()
+                                        logger.error("Caught exception during creation of output archive file {}; error message: {}".format(dstfp, e))
                                         if not args.dryrun:
-                                            archive.add(f,arcname=arcname)
-                                        os.remove(f)
+                                            remove_output = True
 
-                                    logger.info("Added {} items to archive: {}".format(k,dstfn))
-
-                                    ## Close archive
-                                    if not args.dryrun:
-                                        try:
-                                            archive.close()
-                                        except Exception as e:
-                                            print(e)
+                                    finally:
+                                        if archive is not None:
+                                            ## Close archive
+                                            try:
+                                                archive.close()
+                                            except Exception as e:
+                                                traceback.print_exc()
+                                                logger.error("Caught exception while trying to close archive file {}; error message: {}".format(dstfp, e))
+                                        if os.path.isfile(dstfp):
+                                            if os.path.getsize(dstfp) == 0:
+                                                logger.error("Output archive file size is zero: {}".format(dstfp))
+                                                remove_output = True
+                                            if remove_output:
+                                                logger.error("Removing output archive file due to error or zero-size: {}".format(dstfp))
+                                                os.remove(dstfp)
 
                             else:
                                 logger.error('Cannot create layer: {}'.format(index_lyr))
