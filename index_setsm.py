@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import datetime
 import json
 import logging
@@ -10,11 +11,6 @@ from osgeo import gdal, osr, ogr
 
 from lib import utils, dem, walk
 from lib import VERSION, SHORT_VERSION
-
-try:
-    import ConfigParser
-except ImportError:
-    import configparser as ConfigParser
 
 logger = utils.get_logger()
 utils.setup_gdal_error_handler()
@@ -245,10 +241,7 @@ def main():
             logger.info("Driver selected: {}".format(ogr_driver_str))
 
         #### Get Config file contents
-        try:
-            config = ConfigParser.ConfigParser()  # ConfigParser() replaces SafeConfigParser() in Python >=3.2
-        except NameError:
-            config = ConfigParser.SafeConfigParser()
+        config = configparser.ConfigParser()
         config.read(args.config)
 
         #### Get output DB connection if specified
