@@ -6,6 +6,9 @@ Version `1.2` released 2023-03-10.
 
 #### [Download Latest](https://github.com/PolarGeospatialCenter/pgcdemtools/releases)
 
+## Config
+Scripts that support writing to an output Postgres database (such as index_setsm) have a `--config` argument path to a config file containing database access information. See the example [config](./config.ini.example) for reference. Alternatively, the information in this config file may be sourced from the Postgres standard pair of [~/.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) and [~/.pg_service.conf](https://www.postgresql.org/docs/current/libpq-pgservice.html) files.
+
 ## Tools
 ### Rename
 rename_setsm_add_version
