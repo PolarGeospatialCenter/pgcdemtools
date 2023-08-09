@@ -6,6 +6,10 @@ Version `1.2` released 2023-03-10.
 
 #### [Download Latest](https://github.com/PolarGeospatialCenter/pgcdemtools/releases)
 
+## Config
+Scripts that support writing to an output Postgres database (such as index_setsm) have a `--config` argument path to a config file containing database access information. See the example [config](./config.ini.example) for reference. Alternatively, the information in this config file may be sourced from the Postgres standard pair of [~/.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) and [~/.pg_service.conf](https://www.postgresql.org/docs/current/libpq-pgservice.html) files.
+> **Note:** The `~/.pg_service.conf` file does not support definition of an active schema in the config service information. When leveraging a service from the `~/.pg_service.conf` file in a script argument for `pgcdemtools` scripts, always indicate the schema name of the target layer. For example, `"PG:service_name:schema_name.layer_name"`. If the schema name is not provided and `~/.pg_service.conf` is used, the default schema name (usually 'public') will be assumed.
+
 ## Tools
 ### Rename
 rename_setsm_add_version

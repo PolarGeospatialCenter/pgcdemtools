@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import datetime
 import json
 import logging
@@ -10,11 +11,6 @@ from osgeo import gdal, osr, ogr
 
 from lib import utils, dem, walk
 from lib import VERSION, SHORT_VERSION
-
-try:
-    import ConfigParser
-except ImportError:
-    import configparser as ConfigParser
 
 logger = utils.get_logger()
 utils.setup_gdal_error_handler()
@@ -110,7 +106,7 @@ def main():
     parser.add_argument('--mode', choices=MODES.keys(), default='scene',
                         help="type of items to index {} default=scene".format(MODES.keys()))
     parser.add_argument('--config', default=os.path.join(SCRIPT_DIR, 'config.ini'),
-                        help="config file (default is config.ini in script dir")
+                        help="config file (default is config.ini in script dir, or fallback to ~/.pg_service.conf)")
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
     parser.add_argument('--dsp-record-mode', choices=DSP_OPTIONS.keys(), default=DEFAULT_DSP_OPTION,
@@ -256,16 +252,17 @@ def main():
             logger.info("Driver selected: {}".format(ogr_driver_str))
 
         #### Get Config file contents
-        try:
-            config = ConfigParser.ConfigParser()  # ConfigParser() replaces SafeConfigParser() in Python >=3.2
-        except NameError:
-            config = ConfigParser.SafeConfigParser()
+        config = configparser.ConfigParser()
         config.read(args.config)
+
+        pg_config_file = os.path.expanduser("~/.pg_service.conf")
+        pg_config = configparser.ConfigParser()
+        pg_config.read(pg_config_file)
 
         #### Get output DB connection if specified
         if ogr_driver_str in ("PostgreSQL"):
-
             section = dst_dsp
+
             if section in config.sections():
                 conn_info = {
                     'host':config.get(section,'host'),
@@ -276,9 +273,14 @@ def main():
                     'pw':config.get(section,'pw'),
                 }
                 dst_ds = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
+                logger.info(f"Derived dst dataset PG connection string from {args.config}: '{dst_ds}'")
+
+            elif section in pg_config.sections():
+                dst_ds = f"PG:service={section}"
+                logger.info(f"Derived dst dataset PG connection string from {pg_config_file}: '{dst_ds}'")
 
             else:
-                logger.error('Config.ini file must contain credentials to connect to {}'.format(section))
+                logger.error(f"--config file or ~/.pg_service.conf must contain credentials to connect to {section}")
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
@@ -300,6 +302,7 @@ def main():
             else:
                 #### Get Danco connection if available
                 section = 'danco'
+                conn_str = None
                 if section in config.sections():
                     danco_conn_info = {
                         'host':config.get(section,'host'),
@@ -309,11 +312,16 @@ def main():
                         'user':config.get(section,'user'),
                         'pw':config.get(section,'pw'),
                     }
-
+                    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**danco_conn_info)
+                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str}'")
+                elif section in pg_config.sections():
+                    conn_str = f"PG:service={section} active_schema=public"
+                    logger.info(f"Derived Danco connection string from {pg_config_file}: '{conn_str}'")
+                if conn_str:
                     logger.info("Fetching region lookup from Danco")
-                    pairs = get_pair_region_dict(danco_conn_info)
+                    pairs = get_pair_region_dict(conn_str)
                 else:
-                    logger.warning('Config file does not contain credentials to connect to Danco. Region cannot be determined.')
+                    logger.warning("--config file or ~/.pg_service.conf does not contain credentials to connect to Danco. Region cannot be determined.")
                     pairs = {}
 
             if len(pairs) == 0:
@@ -1258,13 +1266,12 @@ def write_to_json(json_fd, groups, total, args):
         print('')
 
 
-def get_pair_region_dict(conn_info):
+def get_pair_region_dict(conn_str):
     """Fetches a pairname-region lookup dictionary from Danco's footprint DB
     pairnames_with_earthdem_region table
     """
 
     pairs = {}
-    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
     stereo_ds = ogr.Open(conn_str)
 
     if stereo_ds is None:
