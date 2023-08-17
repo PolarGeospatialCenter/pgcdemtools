@@ -75,7 +75,7 @@ def main():
 
     # Check raster proxy prefix is well-formed
     if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
-        parser.error('--rasterproxy-prefix must start with s3://')
+        parser.error('--rasterproxy-prefix (e.g. s3://pgc-opendata-dems/arcticdem/mosaics/v4.1/2m)')
 
     if args.v:
         log_level = logging.DEBUG
@@ -256,9 +256,8 @@ def build_archive(raster, scratch, args):
             os.path.basename(raster.browse): ('YES', 'CUBIC'),  # browse
         }
 
-        tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
-
         ## create rasterproxy MRF file
+        mrf_tifs = [c for c in components + optional_components if c.endswith('dem.tif') and os.path.isfile(c)]
         if args.rasterproxy_prefix:
             logger.info("Creating raster proxy files")
             rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
@@ -266,7 +265,7 @@ def build_archive(raster, scratch, args):
             bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
             sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
             dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
-            for tif in tifs:
+            for tif in mrf_tifs:
                 suffix = tif[len(raster.tileid):-4]  # eg "_dem"
                 mrf = '{}{}.mrf'.format(raster.tileid, suffix)
                 if not os.path.isfile(mrf):
@@ -293,6 +292,7 @@ def build_archive(raster, scratch, args):
                     subprocess.call(cmd, shell=True)
 
         ## Convert all rasters to COG in place (should no longer be needed)
+        tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
         if args.convert_to_cog:
             cog_sem = raster.tileid + '.cogfin'
             if os.path.isfile(cog_sem) and not args.overwrite:
