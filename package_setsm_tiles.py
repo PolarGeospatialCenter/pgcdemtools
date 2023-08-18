@@ -486,14 +486,13 @@ def build_archive(raster, scratch, args):
                                     try:
                                         ## Create archive
                                         if not args.dryrun:
-                                            #archive = tarfile.open(dstfp,"w:")
                                             archive = tarfile.open(dstfp,"w:gz")
                                             if not os.path.isfile(dstfp):
                                                 raise RuntimeError("Cannot create archive: {}".format(dstfn))
 
                                         ## Add components
                                         for component in components:
-                                            logger.debug("Adding {} to {}".format(component,dstfn))
+                                            logger.debug("Adding {} to {}".format(component, dstfn))
                                             k+=1
                                             if not args.dryrun:
                                                 archive.add(component)
@@ -501,7 +500,7 @@ def build_archive(raster, scratch, args):
                                         ## Add optional components
                                         for component in optional_components:
                                             if os.path.isfile(component):
-                                                logger.debug("Adding {} to {}".format(component,dstfn))
+                                                logger.debug("Adding {} to {}".format(component, dstfn))
                                                 k+=1
                                                 if not args.dryrun:
                                                     archive.add(component)
@@ -509,14 +508,14 @@ def build_archive(raster, scratch, args):
                                         ## Add index in subfolder
                                         os.chdir(scratch)
                                         for f in glob.glob(index_lyr+".*"):
-                                            arcname = os.path.join("index",f)
-                                            logger.debug("Adding {} to {}".format(f,dstfn))
+                                            arcname = os.path.join("index", f)
+                                            logger.debug("Adding {} to {}".format(f, dstfn))
                                             k+=1
                                             if not args.dryrun:
-                                                archive.add(f,arcname=arcname)
+                                                archive.add(f, arcname=arcname)
                                             os.remove(f)
 
-                                        logger.info("Added {} items to archive: {}".format(k,dstfn))
+                                        logger.info("Added {} items to archive: {}".format(k, dstfn))
 
                                     except Exception as e:
                                         traceback.print_exc()
@@ -547,7 +546,8 @@ def build_archive(raster, scratch, args):
                     else:
                         logger.error("Cannot remove existing index: {}".format(index))
                 else:
-                    logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
+                    logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(
+                        raster.srcfp, existing_components, len(components)))
 
 
 if __name__ == '__main__':
