@@ -89,7 +89,7 @@ def main():
 
     # Check raster proxy prefix is well-formed
     if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
-        parser.error('--rasterproxy-prefix must start with s3://')
+        parser.error('--rasterproxy-prefix (e.g. s3://pgc-opendata-dems/arcticdem/strips/s2s041/2m)')
     
     lsh = logging.StreamHandler()
     lsh.setLevel(log_level)
@@ -304,8 +304,6 @@ def build_archive(raster, scratch, args):
 
             optional_components = [os.path.basename(r) for r in raster.reg_files]  # reg
 
-            tifs = [c for c in components if c[0].endswith('.tif')]
-
             #### Build mdf
             if not os.path.isfile(raster.mdf) or args.overwrite:
                 if os.path.isfile(raster.mdf):
@@ -326,6 +324,7 @@ def build_archive(raster, scratch, args):
                     raster.write_readme_file()
 
             ## create rasterproxy MRF file
+            mrf_tifs = [c for c in components if c[0].endswith(('dem.tif', 'bitmask.tif'))]
             if args.rasterproxy_prefix:
                 logger.info("Creating raster proxy files")
                 rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
@@ -333,7 +332,7 @@ def build_archive(raster, scratch, args):
                 bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
                 sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
                 dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
-                for tif, _, _ in tifs:
+                for tif, _, _ in mrf_tifs:
                     suffix = tif[len(raster.stripid):-4]  # eg "_dem"
                     mrf = '{}{}.mrf'.format(raster.stripid, suffix)
                     if not os.path.isfile(mrf):
@@ -376,6 +375,7 @@ def build_archive(raster, scratch, args):
                                 os.remove(mrf)
 
             ## Convert all rasters to COG in place
+            tifs = [c for c in components if c[0].endswith('tif')]
             if not args.skip_cog:
                 cog_sem = raster.stripid + '.cogfin'
                 if os.path.isfile(cog_sem) and not args.overwrite:

@@ -218,189 +218,205 @@ field_attrib_map = {
 }
 
 # common name id, attribute field name, storage type, field width, field precision
-StandardAttribute = namedtuple("StandardAttribute", ("fname", "ftype", "fwidth", "fprecision"))
+StandardAttribute = namedtuple("StandardAttribute", ("fname", "fname_long", "ftype", "fwidth", "fprecision"))
 
 # Attributes
 # TODO change field type for strips
 DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
-    StandardAttribute("DEM_ID", ogr.OFTString, 254, 0),
-    StandardAttribute("STRIPDEMID", ogr.OFTString, 254, 0),
-    StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
-    StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
-    StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
-    StandardAttribute("ACQDATE1", ogr.OFTString, 32, 0),
-    StandardAttribute("ACQDATE2", ogr.OFTString, 32, 0),
-    StandardAttribute("AVGACQTM1", ogr.OFTString, 32, 0),
-    StandardAttribute("AVGACQTM2", ogr.OFTString, 32, 0),
-    StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
-    StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
-    StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
-    StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
-    StandardAttribute("GEOCELL", ogr.OFTString, 10, 0),
-    StandardAttribute("REGION", ogr.OFTString, 64, 0),
+    StandardAttribute("DEM_ID", "", ogr.OFTString, 254, 0),
+    StandardAttribute("STRIPDEMID", "", ogr.OFTString, 254, 0),
+    StandardAttribute("PAIRNAME", "", ogr.OFTString, 64, 0),
+    StandardAttribute("SENSOR1", "", ogr.OFTString, 8, 0),
+    StandardAttribute("SENSOR2", "", ogr.OFTString, 8, 0),
+    StandardAttribute("ACQDATE1", "", ogr.OFTString, 32, 0),
+    StandardAttribute("ACQDATE2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("AVGACQTM1", "", ogr.OFTString, 32, 0),
+    StandardAttribute("AVGACQTM2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID1", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CENT_LAT", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CENT_LON", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("GEOCELL", "", ogr.OFTString, 10, 0),
+    StandardAttribute("REGION", "", ogr.OFTString, 64, 0),
 
     ## Result DEM attributes
-    StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
-    StandardAttribute("PROJ4", ogr.OFTString, 100, 0),
-    StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
-    StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
-    StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
-    # StandardAttribute("CR_DATE", ogr.OFTDateTime, 32, 0),
-    StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
-    StandardAttribute("S2S_VER", ogr.OFTString, 32, 0),
-    StandardAttribute("IS_LSF", ogr.OFTInteger, 8, 8),
-    StandardAttribute("IS_XTRACK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("EDGEMASK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("WATERMASK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("CLOUDMASK", ogr.OFTInteger, 8, 8),
-    StandardAttribute("MASK_DENS", ogr.OFTReal, 0, 0),
-    StandardAttribute("VALID_DENS", ogr.OFTReal, 0, 0),
-    StandardAttribute("VALID_AREA", ogr.OFTReal, 0, 0),
-    StandardAttribute("VALID_PERC", ogr.OFTReal, 0, 0),
-    StandardAttribute("WATER_AREA", ogr.OFTReal, 0, 0),
-    StandardAttribute("WATER_PERC", ogr.OFTReal, 0, 0),
-    StandardAttribute("CLOUD_AREA", ogr.OFTReal, 0, 0),
-    StandardAttribute("CLOUD_PERC", ogr.OFTReal, 0, 0),
-    StandardAttribute("AVGCONVANG", ogr.OFTReal, 0, 0),
-    StandardAttribute("AVG_HT_ACC", ogr.OFTReal, 0, 0),
-    StandardAttribute("AVG_SUNEL1", ogr.OFTReal, 0, 0),
-    StandardAttribute("AVG_SUNEL2", ogr.OFTReal, 0, 0),
-    StandardAttribute("RMSE", ogr.OFTReal, 0, 0),
+    StandardAttribute("EPSG", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("PROJ4", "", ogr.OFTString, 100, 0),
+    StandardAttribute("ND_VALUE", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DEM_RES", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CR_DATE", "", ogr.OFTString, 32, 0),
+    # StandardAttribute("CR_DATE", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("ALGM_VER", "", ogr.OFTString, 32, 0),
+    StandardAttribute("S2S_VER", "", ogr.OFTString, 32, 0),
+    StandardAttribute("IS_LSF", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("IS_XTRACK", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("EDGEMASK", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("WATERMASK", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("CLOUDMASK", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("MASK_DENS", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_DENS", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_AREA", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_PERC", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("WATER_AREA", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("WATER_PERC", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CLOUD_AREA", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CLOUD_PERC", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVGCONVANG", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_HT_ACC", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL1", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL2", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("RMSE", "", ogr.OFTReal, 0, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
-    StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
-    StandardAttribute("DX", ogr.OFTReal, 0, 0),
-    StandardAttribute("DY", ogr.OFTReal, 0, 0),
-    StandardAttribute("DZ", ogr.OFTReal, 0, 0),
-    StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
-    StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
+    StandardAttribute("REG_SRC", "", ogr.OFTString, 20, 0),
+    StandardAttribute("DX", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DY", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DZ", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("NUM_GCPS", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("MEANRESZ", "", ogr.OFTReal, 0, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
-    StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
-    StandardAttribute("INDEX_DATE", ogr.OFTString, 32, 0),
-    # StandardAttribute("INDEX_DATE", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("LOCATION", "", ogr.OFTString, 512, 0),
+    StandardAttribute("FILESZ_DEM", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_MT", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR2", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("INDEX_DATE", "", ogr.OFTString, 32, 0),
+    # StandardAttribute("INDEX_DATE", "", ogr.OFTDateTime, 32, 0),
 ]
 
 DEM_ATTRIBUTE_DEFINITION_RELVER = [
-    StandardAttribute("REL_VER", ogr.OFTString, 32, 0)
+    StandardAttribute("REL_VER", "", ogr.OFTString, 20, 0)
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
-    StandardAttribute("SCENEDEMID", ogr.OFTString, 254, 0),
-    StandardAttribute("STRIPDEMID", ogr.OFTString, 254, 0),
-    StandardAttribute("STATUS", ogr.OFTString, 8, 0),
-    StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
-    StandardAttribute("SENSOR1", ogr.OFTString, 8, 0),
-    StandardAttribute("SENSOR2", ogr.OFTString, 8, 0),
-    StandardAttribute("ACQDATE1", ogr.OFTDateTime, 0, 0),
-    StandardAttribute("ACQDATE2", ogr.OFTDateTime, 0, 0),
-    StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
-    StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
-    StandardAttribute("SCENE1", ogr.OFTString, 100, 0),
-    StandardAttribute("SCENE2", ogr.OFTString, 100, 0),
-    StandardAttribute("GEN_TIME1", ogr.OFTDateTime, 0, 0),
-    StandardAttribute("GEN_TIME2", ogr.OFTDateTime, 0, 0),
-    StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
-    StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
-    StandardAttribute("REGION", ogr.OFTString, 64, 0),
+    StandardAttribute("SCENEDEMID", "", ogr.OFTString, 254, 0),
+    StandardAttribute("STRIPDEMID", "", ogr.OFTString, 254, 0),
+    StandardAttribute("STATUS", "", ogr.OFTString, 8, 0),
+    StandardAttribute("PAIRNAME", "", ogr.OFTString, 64, 0),
+    StandardAttribute("SENSOR1", "", ogr.OFTString, 8, 0),
+    StandardAttribute("SENSOR2", "", ogr.OFTString, 8, 0),
+    StandardAttribute("ACQDATE1", "", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("ACQDATE2", "", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("CATALOGID1", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("SCENE1", "", ogr.OFTString, 100, 0),
+    StandardAttribute("SCENE2", "", ogr.OFTString, 100, 0),
+    StandardAttribute("GEN_TIME1", "", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("GEN_TIME2", "", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("CENT_LAT", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CENT_LON", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("REGION", "", ogr.OFTString, 64, 0),
 
     ## Result DEM attributes
-    StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
-    StandardAttribute("PROJ4", ogr.OFTString, 100, 0),
-    StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
-    StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
-    StandardAttribute("CR_DATE", ogr.OFTDateTime, 0, 0),
-    StandardAttribute("ALGM_VER", ogr.OFTString, 32, 0),
-    StandardAttribute("PROD_VER", ogr.OFTInteger, 8, 8),
-    StandardAttribute("HAS_LSF", ogr.OFSTBoolean, 0, 0),
-    StandardAttribute("HAS_NONLSF", ogr.OFSTBoolean, 0, 0),
-    StandardAttribute("IS_XTRACK", ogr.OFSTBoolean, 0, 0),
-    StandardAttribute("IS_DSP", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("EPSG", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("PROJ4", "", ogr.OFTString, 100, 0),
+    StandardAttribute("ND_VALUE", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DEM_RES", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CR_DATE", "", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("ALGM_VER", "", ogr.OFTString, 32, 0),
+    StandardAttribute("PROD_VER", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("HAS_LSF", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("HAS_NONLSF", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("IS_XTRACK", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("IS_DSP", "", ogr.OFSTBoolean, 0, 0),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_REGISTRATION = []
 
 SCENE_ATTRIBUTE_DEFINITIONS = SCENE_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
-    StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_LSF", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_MT", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_OR", ogr.OFTReal, 0, 0),
-    StandardAttribute("FILESZ_OR2", ogr.OFTReal, 0, 0),
-    StandardAttribute("INDEX_DATE", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("LOCATION", "", ogr.OFTString, 512, 0),
+    StandardAttribute("FILESZ_DEM", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_LSF", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_MT", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILESZ_OR2", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("INDEX_DATE", "", ogr.OFTDateTime, 0, 0),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
 
     ## Overlap attributes
-    StandardAttribute("DEM_ID", ogr.OFTString, 80, 0),
-    StandardAttribute("TILE", ogr.OFTString, 20, 0),
-    StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
-    StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
-    StandardAttribute("CR_DATE", ogr.OFTDateTime, 0, 0),
-    StandardAttribute("DENSITY", ogr.OFTReal, 0, 0),
-    StandardAttribute("NUM_COMP", ogr.OFTInteger, 8, 8),
+    StandardAttribute("DEM_ID", "", ogr.OFTString, 80, 0),
+    StandardAttribute("TILE", "", ogr.OFTString, 20, 0),
+    StandardAttribute("SUPERTILE", "", ogr.OFTString, 50, 0),
+    StandardAttribute("EPSG", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("ND_VALUE", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DEM_RES", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CR_DATE", "", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("DENSITY", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("NUM_COMP", "", ogr.OFTInteger, 8, 8),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS_REGISTRATION = [
-    StandardAttribute("REG_SRC", ogr.OFTString, 20, 0),
-    StandardAttribute("NUM_GCPS", ogr.OFTInteger, 8, 8),
-    StandardAttribute("MEANRESZ", ogr.OFTReal, 0, 0),
+    StandardAttribute("REG_SRC", "", ogr.OFTString, 20, 0),
+    StandardAttribute("NUM_GCPS", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("MEANRESZ", "", ogr.OFTReal, 0, 0),
 ]
 
 TILE_DEM_ATTRIBUTE_DEFINITIONS = TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
-    StandardAttribute("LOCATION", ogr.OFTString, 512, 0),
-    StandardAttribute("FILESZ_DEM", ogr.OFTReal, 0, 0),
-    StandardAttribute("INDEX_DATE", ogr.OFTDateTime, 0, 0),
+    StandardAttribute("LOCATION", "", ogr.OFTString, 512, 0),
+    StandardAttribute("FILESZ_DEM", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("INDEX_DATE", "", ogr.OFTDateTime, 0, 0),
+]
+
+TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE = [
+    StandardAttribute("DEM_ID", "", ogr.OFTString, 100, 0),
+    StandardAttribute("TILE", "", ogr.OFTString, 50, 0),
+    StandardAttribute("SUPERTILE", "", ogr.OFTString, 50, 0),
+    StandardAttribute("GSD", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("EPSG", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("RELEASEVER", "RELEASE_VER", ogr.OFTString, 20, 0),
+    StandardAttribute("CR_DATE", "CREATIONDATE", ogr.OFTDate, 0, 0),
+    StandardAttribute("DATA_PERC", "DATA_PERCENT", ogr.OFTReal, 0, 0),
+    StandardAttribute("NUM_COMP", "NUM_COMPONENTS", ogr.OFTInteger, 8, 8),
+    StandardAttribute("FILEURL", "", ogr.OFTString, 254, 0),
+    StandardAttribute("S3URL", "", ogr.OFTString, 254, 0),
 ]
 
 OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS = [
 
     ## Overlap attributes, written on overlap submission
-    StandardAttribute("OVERLAP", ogr.OFTString, 254, 0),
-    StandardAttribute("PAIRNAME", ogr.OFTString, 64, 0),
-    StandardAttribute("STATUS", ogr.OFTInteger, 2, 0)
+    StandardAttribute("OVERLAP", "", ogr.OFTString, 254, 0),
+    StandardAttribute("PAIRNAME", "", ogr.OFTString, 64, 0),
+    StandardAttribute("STATUS", "", ogr.OFTInteger, 2, 0)
 ]
 
 OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS = [
 
-    StandardAttribute("MODE", ogr.OFTString, 16, 0),
-    StandardAttribute("CATALOGID1", ogr.OFTString, 32, 0),
-    StandardAttribute("CATALOGID2", ogr.OFTString, 32, 0),
-    StandardAttribute("CENT_LAT", ogr.OFTReal, 0, 0),
-    StandardAttribute("CENT_LON", ogr.OFTReal, 0, 0),
-    StandardAttribute("EPSG", ogr.OFTInteger, 8, 8),
-    StandardAttribute("EXT_AREA", ogr.OFTReal, 0, 0),
+    StandardAttribute("MODE", "", ogr.OFTString, 16, 0),
+    StandardAttribute("CATALOGID1", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CENT_LAT", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("CENT_LON", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("EPSG", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("EXT_AREA", "", ogr.OFTReal, 0, 0),
 
     ## Result DEM attributes, written after process finishes
-    StandardAttribute("ND_AREA", ogr.OFTReal, 0, 0),
-    StandardAttribute("ND_PERC", ogr.OFTReal, 0, 0),
-    StandardAttribute("ND_VALUE", ogr.OFTReal, 0, 0),
-    StandardAttribute("DEM_RES", ogr.OFTReal, 0, 0),
-    StandardAttribute("PC_RES", ogr.OFTReal, 0, 0),
+    StandardAttribute("ND_AREA", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("ND_PERC", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("ND_VALUE", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DEM_RES", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("PC_RES", "", ogr.OFTReal, 0, 0),
 
     ## Process atributes, written after process finishes
-    StandardAttribute("ASPVERSION", ogr.OFTString, 64, 0),
-    StandardAttribute("ASPBUILDID", ogr.OFTString, 16, 0),
-    StandardAttribute("C_SEEDMODE", ogr.OFTInteger, 8, 0),
-    StandardAttribute("C_TIMEOUT", ogr.OFTInteger, 8, 0),
-    StandardAttribute("REFN_MTHD", ogr.OFTInteger, 8, 0),
-    StandardAttribute("ALIGN_MTHD", ogr.OFTString, 64, 0),
-    StandardAttribute("HOST", ogr.OFTString, 32, 0),
-    StandardAttribute("SEED_DEM", ogr.OFTString, 512, 0),
-    StandardAttribute("CR_DATE", ogr.OFTString, 32, 0),
-    StandardAttribute("RUNTIME", ogr.OFTReal, 0, 0),
-    StandardAttribute("DEM_NAME", ogr.OFTString, 254, 0)
+    StandardAttribute("ASPVERSION", "", ogr.OFTString, 64, 0),
+    StandardAttribute("ASPBUILDID", "", ogr.OFTString, 16, 0),
+    StandardAttribute("C_SEEDMODE", "", ogr.OFTInteger, 8, 0),
+    StandardAttribute("C_TIMEOUT", "", ogr.OFTInteger, 8, 0),
+    StandardAttribute("REFN_MTHD", "", ogr.OFTInteger, 8, 0),
+    StandardAttribute("ALIGN_MTHD", "", ogr.OFTString, 64, 0),
+    StandardAttribute("HOST", "", ogr.OFTString, 32, 0),
+    StandardAttribute("SEED_DEM", "", ogr.OFTString, 512, 0),
+    StandardAttribute("CR_DATE", "", ogr.OFTString, 32, 0),
+    StandardAttribute("RUNTIME", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("DEM_NAME", "", ogr.OFTString, 254, 0)
 ]
 
 OVERLAP_FILE_ATTRIBUTE_DEFINITIONS = OVERLAP_FILE_BASIC_ATTRIBUTE_DEFINITIONS + OVERLAP_FILE_ADDITIONAL_ATTRIBUTE_DEFINITIONS
@@ -507,13 +523,13 @@ def check_file_inclusion(f, pairname, overlap_prefix, args):
 def get_source_names(src_fp):
     """Get the source footprint name and layer name, if provided"""
 
-    if src_fp.lower().endswith((".shp", ".gdb")):
+    if src_fp.lower().endswith((".shp", ".gdb", ".gpkg")):
         _src_fp = src_fp
         src_lyr = os.path.splitext(os.path.basename(src_fp))[0]
     elif ".gdb" in src_fp.lower() and not src_fp.lower().endswith(".gdb"):
         _src_fp, src_lyr = re.split(r"(?<=\.gdb)/", src_fp, re.I)
     else:
-        msg = "The source {} does not appear to be a shapefile or File GDB -- quitting".format(src_fp)
+        msg = "The source {} does not appear to be a Shapefile, File GDB, or GeoPackage -- quitting".format(src_fp)
         raise RuntimeError(msg)
 
     return _src_fp, src_lyr
@@ -537,12 +553,20 @@ def get_source_names2(src_str):
             src_ds = src_str
             src_lyr = os.path.splitext(os.path.basename(src_str))[0]
 
+    elif ".gpkg" in src_str.lower():
+        driver = ["GPKG"]
+        if not src_str_abs.lower().endswith(".gpkg"):
+            src_ds, src_lyr = re.split(r"(?<=\.gpkg)/", src_str_abs, re.I)
+        else:
+            src_ds = src_str
+            src_lyr = os.path.splitext(os.path.basename(src_str))[0]
+
     elif src_str.lower().startswith("pg:"):
         driver = ["PostgreSQL"]
         pfx, src_ds, src_lyr = src_str.split(":")
 
     else:
-        msg = "The source {} does not appear to be a Shapefile, File GDB, or PostgreSQL connection -- quitting".format(
+        msg = "The source {} does not appear to be a Shapefile, File GDB, GeoPackage, or PostgreSQL connection -- quitting".format(
             src_str)
         raise RuntimeError(msg)
 

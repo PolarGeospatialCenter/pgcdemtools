@@ -1,4 +1,5 @@
 import argparse
+import configparser
 import datetime
 import json
 import logging
@@ -10,11 +11,6 @@ from osgeo import gdal, osr, ogr
 
 from lib import utils, dem, walk
 from lib import VERSION, SHORT_VERSION
-
-try:
-    import ConfigParser
-except ImportError:
-    import configparser as ConfigParser
 
 logger = utils.get_logger()
 utils.setup_gdal_error_handler()
@@ -61,6 +57,7 @@ recordid_map = {
     'scene': '{SCENEDEMID}|{STRIPDEMID}|{IS_DSP}|{LOCATION}|{INDEX_DATE}',
     'strip': '{DEM_ID}|{STRIPDEMID}|{LOCATION}|{INDEX_DATE}',
     'tile':  '{DEM_ID}|{TILE}|{LOCATION}|{INDEX_DATE}',
+    'tile_release': '{DEM_ID}|{TILE}|{FILEURL}|{CR_DATE}',
 }
 
 BP_PATH_PREFIX = 'https://blackpearl-data2.pgc.umn.edu'
@@ -109,7 +106,7 @@ def main():
     parser.add_argument('--mode', choices=MODES.keys(), default='scene',
                         help="type of items to index {} default=scene".format(MODES.keys()))
     parser.add_argument('--config', default=os.path.join(SCRIPT_DIR, 'config.ini'),
-                        help="config file (default is config.ini in script dir")
+                        help="config file (default is config.ini in script dir, or fallback to ~/.pg_service.conf)")
     parser.add_argument('--epsg', type=int, default=4326,
                         help="egsg code for output index projection (default wgs85 geographic epsg:4326)")
     parser.add_argument('--dsp-record-mode', choices=DSP_OPTIONS.keys(), default=DEFAULT_DSP_OPTION,
@@ -122,6 +119,12 @@ def main():
                         help='include registration info if present (mode=strip and tile only)')
     parser.add_argument('--include-relver', action='store_true', default=False,
                         help='include release version info if present (mode=strip and tile only)')
+    parser.add_argument('--use-release-fields', action='store_true', default=False,
+                        help="use field definitions for tile release indices (mode=tile only)")
+    parser.add_argument('--long-fieldnames', action='store_true', default=False,
+                        help="use long format (>10 chars) version of fieldnames")
+    parser.add_argument('--lowercase-fieldnames', action='store_true', default=False,
+                        help="make fieldnames lowercase when writing to new destination index")
     parser.add_argument('--search-masked', action='store_true', default=False,
                         help='search for masked and unmasked DEMs (mode=strip only)')
     parser.add_argument('--read-json', action='store_true', default=False,
@@ -151,6 +154,10 @@ def main():
     parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
                         help='print version and exit')
+    parser.add_argument('--release-fileurl', type=str, default="https://data.pgc.umn.edu/elev/dem/setsm/<project>/mosaic/v<rel_ver>/<resolution>/<supertile>/<dem_id>.tar.gz",
+                        help="template for release field 'fileurl' (--use-release-fields only)")
+    parser.add_argument('--release-s3url', type=str, default="https://polargeospatialcenter.github.io/stac-browser/#/external/pgc-opendata-dems.s3.us-west-2.amazonaws.com/<project>/mosaics/v<rel_ver>/<resolution>/<supertile>/<dem_id>.json",
+                        help="template for release field 's3url' (--use-release-fields only)")
     #### Parse Arguments
     args = parser.parse_args()
 
@@ -245,16 +252,17 @@ def main():
             logger.info("Driver selected: {}".format(ogr_driver_str))
 
         #### Get Config file contents
-        try:
-            config = ConfigParser.ConfigParser()  # ConfigParser() replaces SafeConfigParser() in Python >=3.2
-        except NameError:
-            config = ConfigParser.SafeConfigParser()
+        config = configparser.ConfigParser()
         config.read(args.config)
+
+        pg_config_file = os.path.expanduser("~/.pg_service.conf")
+        pg_config = configparser.ConfigParser()
+        pg_config.read(pg_config_file)
 
         #### Get output DB connection if specified
         if ogr_driver_str in ("PostgreSQL"):
-
             section = dst_dsp
+
             if section in config.sections():
                 conn_info = {
                     'host':config.get(section,'host'),
@@ -265,13 +273,18 @@ def main():
                     'pw':config.get(section,'pw'),
                 }
                 dst_ds = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
+                logger.info(f"Derived dst dataset PG connection string from {args.config}: '{dst_ds}'")
+
+            elif section in pg_config.sections():
+                dst_ds = f"PG:service={section}"
+                logger.info(f"Derived dst dataset PG connection string from {pg_config_file}: '{dst_ds}'")
 
             else:
-                logger.error('Config.ini file must contain credentials to connect to {}'.format(section))
+                logger.error(f"--config file or ~/.pg_service.conf must contain credentials to connect to {section}")
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
-        elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB"):
+        elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB", "GPKG"):
             dst_ds = dst_dsp
 
         else:
@@ -289,6 +302,7 @@ def main():
             else:
                 #### Get Danco connection if available
                 section = 'danco'
+                conn_str = None
                 if section in config.sections():
                     danco_conn_info = {
                         'host':config.get(section,'host'),
@@ -298,11 +312,16 @@ def main():
                         'user':config.get(section,'user'),
                         'pw':config.get(section,'pw'),
                     }
-
+                    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**danco_conn_info)
+                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str}'")
+                elif section in pg_config.sections():
+                    conn_str = f"PG:service={section} active_schema=public"
+                    logger.info(f"Derived Danco connection string from {pg_config_file}: '{conn_str}'")
+                if conn_str:
                     logger.info("Fetching region lookup from Danco")
-                    pairs = get_pair_region_dict(danco_conn_info)
+                    pairs = get_pair_region_dict(conn_str)
                 else:
-                    logger.warning('Config file does not contain credentials to connect to Danco. Region cannot be determined.')
+                    logger.warning("--config file or ~/.pg_service.conf does not contain credentials to connect to Danco. Region cannot be determined.")
                     pairs = {}
 
             if len(pairs) == 0:
@@ -334,7 +353,7 @@ def main():
                     logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
                     sys.exit(-1)
 
-        elif ogr_driver_str in ('FileGDB', 'OpenFileGDB'):
+        elif ogr_driver_str in ('FileGDB', 'OpenFileGDB', 'GPKG'):
             if os.path.isdir(dst_ds):
                 ds = ogrDriver.Open(dst_ds,1)
                 if ds:
@@ -375,10 +394,13 @@ def main():
 
     #### ID records
     dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
+    if args.mode == 'tile' and args.use_release_fields:
+        fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
     if args.mode == 'strip' and args.search_masked:
         suffix = mask_strip_suffixes + tuple([suffix])
     fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base
-    fld_defs = fld_defs + utils.DEM_ATTRIBUTE_DEFINITION_RELVER if args.include_relver else fld_defs
+    if args.include_relver and not (args.mode == 'tile' and args.use_release_fields):
+        fld_defs = fld_defs + utils.DEM_ATTRIBUTE_DEFINITION_RELVER
     src_fps = []
     records = []
     logger.info('Source: {}'.format(src))
@@ -459,7 +481,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         else:
             ds = ogrDriver.CreateDataSource(dst_ds)
 
-    elif ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
+    elif ogr_driver_str in ['FileGDB', 'OpenFileGDB', 'GPKG']:
         max_fld_width = 1024
         if os.path.isdir(dst_ds):
             ds = ogrDriver.Open(dst_ds,1)
@@ -489,6 +511,10 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             fld_def_location_fwidth_gdb = min(f.fwidth, 1024)
             break
 
+    fld_def_short_to_long_dict = {
+        field_def.fname: (field_def.fname_long if field_def.fname_long else field_def.fname) for field_def in fld_defs
+    }
+
     if ds is not None:
 
         ## Create table if it does not exist
@@ -504,6 +530,9 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             layer = ds.CreateLayer(dst_lyr, tgt_srs, ogr.wkbMultiPolygon)
             if layer:
                 for field_def in fld_defs:
+                    fname = fld_def_short_to_long_dict[field_def.fname] if args.long_fieldnames else field_def.fname
+                    if args.lowercase_fieldnames:
+                        fname = fname.lower()
                     fstype = None
                     if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
                         ftype = ogr.OFTString
@@ -517,7 +546,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                     else:
                         ftype = field_def.ftype
                         fwidth = field_def.fwidth
-                    field = ogr.FieldDefn(field_def.fname, ftype)
+                    field = ogr.FieldDefn(fname, ftype)
                     if fstype:
                         field.SetSubType(fstype)
                     field.SetWidth(min(max_fld_width, fwidth))
@@ -540,10 +569,11 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         if layer:
             # Get field widths
             lyr_def = layer.GetLayerDefn()
-            fwidths = {lyr_def.GetFieldDefn(i).GetName().upper():
+            fwidths = {lyr_def.GetFieldDefn(i).GetName():
                            (lyr_def.GetFieldDefn(i).GetWidth(), lyr_def.GetFieldDefn(i).GetType())
                             for i in range(lyr_def.GetFieldCount())
                        }
+            fnameupper_fnamelayer_dict = {k.upper(): k for k, v in fwidths.items()}
 
             logger.info("Appending records...")
             #### loop through records and add features
@@ -857,13 +887,15 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         if args.mode == 'tile':
                             attrib_map = {
                                 'DEM_ID': record.tileid,
-                                'TILE': record.supertile_id_no_res,
+                                'TILE': record.tile_id_no_res,
+                                'SUPERTILE': record.supertile_id_no_res,
                                 'NUM_COMP': record.num_components,
                                 'FILESZ_DEM': record.filesz_dem,
+                                'EPSG': record.epsg,
                             }
 
                             ## Optional attributes
-                            if record.release_version and 'REL_VER' in fld_list:
+                            if record.release_version and ('REL_VER' in fld_list or 'RELEASEVER' in fld_list):
                                 attrib_map['REL_VER'] = record.release_version
                                 version = record.release_version
                             else:
@@ -960,10 +992,53 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         mp_geom = ogr.ForceToMultiPolygon(temp_geom)
                                         feat_geom = mp_geom
 
+                        ## Fields for tile DEM
+                        if args.mode == 'tile' and args.use_release_fields:
+                            tile_to_general_attrib_name = {
+                                'GSD': 'DEM_RES',
+                                'RELEASEVER': 'REL_VER',
+                                'DATA_PERC': 'DENSITY',
+                            }
+                            remove_attrib_names = sorted(list(set.difference(
+                                set([attr.fname for attr in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS]),
+                                set([attr.fname for attr in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE]),
+                            )))
+
+                            for tname, gname in tile_to_general_attrib_name.items():
+                                if gname in attrib_map:
+                                    attrib_map[tname] = attrib_map[gname]
+                                    del attrib_map[gname]
+                            for fname in remove_attrib_names:
+                                if fname in attrib_map:
+                                    del attrib_map[fname]
+
+                            if args.release_fileurl:
+                                filurl = args.release_fileurl
+                                pretty_project = PROJECTS[args.project]
+                                pretty_res = '{}m'.format(str(int(attrib_map['GSD'])))
+                                filurl = filurl.replace('<project>', pretty_project)
+                                filurl = filurl.replace('<rel_ver>', record.release_version)
+                                filurl = filurl.replace('<resolution>', pretty_res)
+                                filurl = filurl.replace('<supertile>', record.supertile_id_no_res)
+                                filurl = filurl.replace('<dem_id>', record.tileid)
+                                attrib_map['FILEURL'] = filurl
+
+                            if args.release_s3url:
+                                s3url = args.release_s3url
+                                pretty_res = '{}m'.format(str(int(attrib_map['GSD'])))
+                                s3url = s3url.replace('<project>', args.project)
+                                s3url = s3url.replace('<rel_ver>', record.release_version)
+                                s3url = s3url.replace('<resolution>', pretty_res)
+                                s3url = s3url.replace('<supertile>', record.supertile_id_no_res)
+                                s3url = s3url.replace('<dem_id>', record.tileid)
+                                attrib_map['S3URL'] = s3url
+
                         ## Write feature
                         if valid_record:
                             for fld, val in attrib_map.items():
-                                if fld in fwidths:
+                                fld_schema = fld_def_short_to_long_dict[fld] if args.long_fieldnames else fld
+                                if fld_schema.upper() in fnameupper_fnamelayer_dict:
+                                    fld = fnameupper_fnamelayer_dict[fld_schema.upper()]
                                     fwidth, ftype = fwidths[fld]
                                     # Check if attribute length is too long for the field width. Note that the varchar
                                     # type in postgres returns a width of 0 if no max width is specified in the table
@@ -980,7 +1055,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                                     fld_def_location_fwidth_gdb
                                                 ))
                                 else:
-                                    logger.error("Field {} is not in target table. Feature skipped".format(fld))
+                                    logger.error("Field {} is not in target table. Feature skipped".format(fld_schema))
                                     valid_record = False
 
                                 if sys.version_info[0] < 3:  # force unicode to str for a bug in Python2 GDAL's SetField.
@@ -1000,7 +1075,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             else:
                                 if not args.dryrun:
                                     # Store record identifiers for later checking
-                                    recordids.append(recordid_map[args.mode].format(**attrib_map))
+                                    recordid_mode = 'tile_release' if args.mode == 'tile' and args.use_release_fields else args.mode
+                                    recordids.append(recordid_map[recordid_mode].format(**attrib_map))
 
                                     # Append record
                                     if ogr_driver_str in ('PostgreSQL'):
@@ -1190,13 +1266,12 @@ def write_to_json(json_fd, groups, total, args):
         print('')
 
 
-def get_pair_region_dict(conn_info):
+def get_pair_region_dict(conn_str):
     """Fetches a pairname-region lookup dictionary from Danco's footprint DB
     pairnames_with_earthdem_region table
     """
 
     pairs = {}
-    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
     stereo_ds = ogr.Open(conn_str)
 
     if stereo_ds is None:
