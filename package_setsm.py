@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import tarfile
+import traceback
 from datetime import *
 
 from osgeo import gdal, osr, ogr, gdalconst
@@ -355,7 +356,23 @@ def build_archive(raster, scratch, args):
                             tif,
                             mrf
                         )
-                        subprocess.call(cmd, shell=True)
+                        rc = subprocess.call(cmd, shell=True)
+                        if rc != 0:
+                            logger.error("Received non-zero return code ({}) from gdal_translate call".format(rc))
+                        if not os.path.isfile(mrf):
+                            logger.error("Raster proxy file was not created")
+                        else:
+                            remove_output = False
+                            if rc != 0:
+                                logger.error(
+                                    "Removing output raster proxy file because non-zero return code was hit: {}".format(
+                                        mrf))
+                                remove_output = True
+                            elif os.path.getsize(mrf) == 0:
+                                logger.error("Created raster proxy file size is zero, removing: {}".format(mrf))
+                                remove_output = True
+                            if remove_output:
+                                os.remove(mrf)
 
             ## Convert all rasters to COG in place
             tifs = [c for c in components if c[0].endswith('tif')]
@@ -552,51 +569,69 @@ def build_archive(raster, scratch, args):
                                     lyr = None
 
                                     if os.path.isfile(index):
-                                        ## Create archive
-                                        if not args.dryrun:
-                                            archive = tarfile.open(dstfp,"w:gz")
-                                            if not os.path.isfile(dstfp):
-                                                logger.error("Cannot create archive: {}".format(dstfn))
-                                    
-                                        ## Add components
-                                        for component, _, _ in components:
-                                            logger.debug("Adding {} to {}".format(component,dstfn))
-                                            k+=1
-                                            if "dem_smooth.tif" in component:
-                                                arcn = component.replace("dem_smooth.tif","dem.tif")
-                                            else:
-                                                arcn = component
+                                        archive = None
+                                        remove_output = False
+                                        try:
+                                            ## Create archive
                                             if not args.dryrun:
-                                                archive.add(component,arcname=arcn)
-    
-                                        ## Add optional components
-                                        for component in optional_components:
-                                            if os.path.isfile(component):
-                                                logger.debug("Adding {} to {}".format(component,dstfn))
+                                                archive = tarfile.open(dstfp,"w:gz")
+                                                if not os.path.isfile(dstfp):
+                                                    raise RuntimeError("Cannot create archive: {}".format(dstfn))
+                                    
+                                            ## Add components
+                                            for component, _, _ in components:
+                                                logger.debug("Adding {} to {}".format(component, dstfn))
+                                                k+=1
+                                                if "dem_smooth.tif" in component:
+                                                    arcn = component.replace("dem_smooth.tif","dem.tif")
+                                                else:
+                                                    arcn = component
+                                                if not args.dryrun:
+                                                    archive.add(component, arcname=arcn)
+
+                                            ## Add optional components
+                                            for component in optional_components:
+                                                if os.path.isfile(component):
+                                                    logger.debug("Adding {} to {}".format(component, dstfn))
+                                                    k+=1
+                                                    if not args.dryrun:
+                                                        archive.add(component)
+
+                                            ## Add index in subfolder
+                                            os.chdir(scratch)
+                                            for f in glob.glob(index_lyr+".*"):
+                                                arcn = os.path.join("index",f)
+                                                logger.debug("Adding {} to {}".format(f, dstfn))
                                                 k+=1
                                                 if not args.dryrun:
-                                                    archive.add(component)
-                                                
-                                        ## Add index in subfolder
-                                        os.chdir(scratch)
-                                        for f in glob.glob(index_lyr+".*"):
-                                            arcn = os.path.join("index",f)
-                                            logger.debug("Adding {} to {}".format(f,dstfn))
-                                            k+=1
+                                                    archive.add(f, arcname=arcn)
+                                                os.remove(f)
+                                        
+                                            logger.info("Added {} items to archive: {}".format(k, dstfn))
+
+                                        except Exception as e:
+                                            traceback.print_exc()
+                                            logger.error("Caught exception during creation of output archive file {}; error message: {}".format(
+                                                    dstfp, e))
                                             if not args.dryrun:
-                                                archive.add(f,arcname=arcn)
-                                            os.remove(f)
-                                        
-                                        logger.info("Added {} items to archive: {}".format(k,dstfn))
-                                        
-                                        ## Close archive and compress with gz
-                                        if not args.dryrun:
+                                                remove_output = True
+
+                                        if archive is not None:
+                                            ## Close archive
                                             try:
                                                 archive.close()
                                             except Exception as e:
-                                                print(e)
-                                                        
-                                                        
+                                                traceback.print_exc()
+                                                logger.error("Caught exception while trying to close archive file {}; error message: {}".format(
+                                                        dstfp, e))
+                                        if os.path.isfile(dstfp):
+                                            if os.path.getsize(dstfp) == 0:
+                                                logger.error("Output archive file size is zero: {}".format(dstfp))
+                                                remove_output = True
+                                            if remove_output:
+                                                logger.error("Removing output archive file due to error or zero-size: {}".format(dstfp))
+                                                os.remove(dstfp)
+
                                 else:
                                     logger.error('Cannot create layer: {}'.format(index_lyr))    
                             else:
@@ -604,7 +639,8 @@ def build_archive(raster, scratch, args):
                         else:
                             logger.error("Cannot remove existing index: {}".format(index))       
                     else:
-                        logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
+                        logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(
+                            raster.srcfp, existing_components, len(components)))
 
 
 if __name__ == '__main__':
