@@ -495,11 +495,11 @@ def build_archive(raster, scratch, args):
                                         'DEM_RES': (raster.xres + raster.yres) / 2.0,
                                         'ALGM_VER': raster.algm_version,
                                         'S2S_VER': raster.s2s_version,
-                                        'IS_LSF': int(raster.is_lsf),
-                                        'IS_XTRACK': int(raster.is_xtrack),
-                                        'EDGEMASK': int(raster.mask_tuple[0]),
-                                        'WATERMASK': int(raster.mask_tuple[1]),
-                                        'CLOUDMASK': int(raster.mask_tuple[2]),
+                                        'IS_LSF': raster.is_lsf,
+                                        'IS_XTRACK': raster.is_xtrack,
+                                        'EDGEMASK': raster.mask_tuple[0],
+                                        'WATERMASK': raster.mask_tuple[1],
+                                        'CLOUDMASK': raster.mask_tuple[2],
                                         'RMSE': raster.rmse
                                     }
                                     

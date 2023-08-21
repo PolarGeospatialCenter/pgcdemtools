@@ -597,6 +597,8 @@ class SetsmDem(object):
                 self.rmse = -9999
             self._set_density_and_stats_attribs()
             self._set_group_attribs_from_scenes()
+            self.is_xtrack = bool(self.is_xtrack)
+            self.is_lsf = bool(self.is_lsf)
 
         else:
             self.srcfp = filepath
@@ -670,7 +672,7 @@ class SetsmDem(object):
                             self.release_version = groups[k]
                             break
 
-                    self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                    self.is_xtrack = True if xtrack_sensor_pattern.match(self.sensor1) else False
                     self.is_dsp = False # Todo modify when dsp strips are a thing
                     self.rmse = -9999 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
