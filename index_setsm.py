@@ -559,8 +559,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         ftype = ogr.OFTInteger
                         fstype = field_def.ftype
                         fwidth = field_def.fwidth
-                    # elif field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
-                    #         ftype = ogr.OFTString
                     else:
                         ftype = field_def.ftype
                         fwidth = field_def.fwidth

@@ -35,17 +35,26 @@ def main():
     #### Positional Arguments
     parser.add_argument('src', help="source directory or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
+    parser.add_argument('project', choices=utils.PROJECTS.keys(), help='project name')
 
     #### Optionsl Arguments
     parser.add_argument('--epsg', type=int, default=default_epsg,
                         help="egsg code for output index projection (default epsg:{})".format(default_epsg))
     parser.add_argument('--skip-archive', action='store_true', default=False,
-                        help="build mdf and readme files and convert rasters to COG, do not archive")
-    parser.add_argument('--rasterproxy-prefix',
-                        help="build rasterProxy .mrf files using this s3 bucket and path prefix\
-                             for the source data path with geocell folder and dem tif appended (must start with s3://)")
+                        help="build mdf and readme files and convert rasters to COG, do not build archive")
+    parser.add_argument('--build-rasterproxies', action='store_true', default=False,
+                        help='build rasterproxy .mrf files')
     parser.add_argument('--convert-to-cog', action='store_true', default=False,
                         help="convert dem files to COG before building the archive")
+    parser.add_argument('--rasterproxy-prefix',
+                        default="s3://pgc-opendata-dems/<project>/<type>/<version>/<resolution>/<group>/<dem_id>",
+                        help="template for rasterproxy .mrf file s3 path")
+    parser.add_argument('--release-fileurl', type=str,
+                        default="https://data.pgc.umn.edu/elev/dem/setsm/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.tar.gz",
+                        help="template for release field 'fileurl'")
+    parser.add_argument('--release-s3url', type=str,
+                        default="https://polargeospatialcenter.github.io/stac-browser/#/external/pgc-opendata-dems.s3.us-west-2.amazonaws.com/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.json",
+                        help="template for release field 's3url'")
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -261,6 +270,13 @@ def build_archive(raster, scratch, args):
         mrf_tifs = [c for c in components + optional_components if c.endswith('dem.tif') and os.path.isfile(c)]
         if args.rasterproxy_prefix:
             logger.info("Creating raster proxy files")
+            s3url = args.rasterproxy_prefix
+            s3url = s3url.replace('<project>', args.project)
+            s3url = s3url.replace('<type>', 'mosaics')
+            s3url = s3url.replace('<version>', f'v{raster.release_version}')
+            s3url = s3url.replace('<resolution>', raster.res_str)
+            s3url = s3url.replace('<group>', raster.supertile_id_no_res)
+            s3url = s3url.replace('<dem_id>', raster.id)
             rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
             bucket = rasterproxy_prefix_parts[2]
             bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
@@ -270,18 +286,8 @@ def build_archive(raster, scratch, args):
                 suffix = tif[len(raster.tileid):-4]  # eg "_dem"
                 mrf = '{}{}.mrf'.format(raster.tileid, suffix)
                 if not os.path.isfile(mrf):
-                    sourcepath = '{}/{}/{}{}.tif'.format(
-                        sourceprefix,
-                        raster.supertile_id_no_res,
-                        raster.tileid,
-                        suffix
-                    )
-                    datapath = '{}/{}/{}{}.mrfcache'.format(
-                        dataprefix,
-                        raster.supertile_id_no_res,
-                        raster.tileid,
-                        suffix
-                    )
+                    sourcepath = f'{sourceprefix}{suffix}.tif'
+                    datapath = f'{dataprefix}{suffix}.mrfcache'
                     static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
                     cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
                         static_args,
@@ -391,18 +397,26 @@ def build_archive(raster, scratch, args):
                             tgt_srs = osr.SpatialReference()
                             tgt_srs.ImportFromEPSG(args.epsg)
 
-                            lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbPolygon)
+                            lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbMultiPolygon)
 
                             if lyr is not None:
 
-                                for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
+                                for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE:
+                                    fname = field_def.fname.lower()
+                                    fstype = None
                                     if field_def.ftype == ogr.OFTDateTime:
                                         ftype = ogr.OFTString
                                         fwidth = 28
+                                    elif field_def.ftype == ogr.OFSTBoolean:
+                                        ftype = ogr.OFTInteger
+                                        fstype = field_def.ftype
+                                        fwidth = field_def.fwidth
                                     else:
                                         ftype = field_def.ftype
                                         fwidth = field_def.fwidth
-                                    field = ogr.FieldDefn(field_def.fname, ftype)
+                                    field = ogr.FieldDefn(fname, ftype)
+                                    if fstype:
+                                        field.SetSubType(fstype)
                                     field.SetWidth(fwidth)
                                     field.SetPrecision(field_def.fprecision)
                                     lyr.CreateField(field)
@@ -413,19 +427,37 @@ def build_archive(raster, scratch, args):
                                 ## Set fields
                                 attrib_map = {
                                     "DEM_ID": raster.tileid,
-                                    "TILE": raster.supertile_id_no_res,
-                                    "ND_VALUE": raster.ndv,
-                                    "DEM_RES" : (raster.xres + raster.yres) / 2.0,
-                                    "DENSITY": raster.density,
-                                    "NUM_COMP": raster.num_components
+                                    "TILE": raster.tile_id_no_res,
+                                    "SUPERTILE": raster.supertile_id_no_res,
+                                    "GSD": (raster.xres + raster.yres) / 2.0,
+                                    'EPSG': raster.epsg,
+                                    "RELEASEVER": raster.release_version,
+                                    "DATA_PERC": raster.density,
+                                    "NUM_COMP": raster.num_components,
                                 }
-
-                                if raster.release_version:
-                                    attrib_map["REL_VER"] = raster.release_version
 
                                 #### Set fields if populated (will not be populated if metadata file is not found)
                                 if raster.creation_date:
                                     attrib_map["CR_DATE"] = raster.creation_date.strftime("%Y-%m-%d")
+
+                                filurl = args.release_fileurl
+                                pretty_project = utils.PROJECTS[args.project]
+                                filurl = filurl.replace('<project>', pretty_project)
+                                filurl = filurl.replace('<type>', 'strips')
+                                filurl = filurl.replace('<version>', f'v{raster.release_version}')
+                                filurl = filurl.replace('<resolution>', raster.res_str)
+                                filurl = filurl.replace('<group>', raster.geocell)
+                                filurl = filurl.replace('<dem_id>', raster.id)
+                                attrib_map['FILEURL'] = filurl
+
+                                s3url = args.release_s3url
+                                s3url = s3url.replace('<project>', args.project)
+                                s3url = s3url.replace('<type>', 'strips')
+                                s3url = s3url.replace('<version>', raster.release_version)
+                                s3url = s3url.replace('<resolution>', raster.res_str)
+                                s3url = s3url.replace('<group>', raster.supertile_id_no_res)
+                                s3url = s3url.replace('<dem_id>', raster.id)
+                                attrib_map['S3URL'] = s3url
 
                                 ## transform and write geom
                                 src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())

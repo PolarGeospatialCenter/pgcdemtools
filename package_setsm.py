@@ -40,21 +40,28 @@ def main():
     #### Positional Arguments
     parser.add_argument('src', help="source directory, text file of file paths, or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
-    
+    parser.add_argument('project', choices=utils.PROJECTS.keys(), help='project name')
+
     #### Optional Arguments
     parser.add_argument('--skip-cog', action='store_true', default=False,
                         help="skip COG conversion and build archive with existing tiffs")
     parser.add_argument('--skip-archive', action='store_true', default=False,
                         help="build mdf and readme files and convert rasters to COG, do not archive")
-    parser.add_argument('--rasterproxy-prefix',
-                        help="build rasterProxy .mrf files using this s3 bucket and path prefix\
-                         for the source data path with geocell folder and dem tif appended (must start with s3://)")
+    parser.add_argument('--build-rasterproxies', action='store_true', default=False,
+                        help='build rasterproxy .mrf files')
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
     parser.add_argument('--force-filter-dems', action='store_true', default=False,
                         help="remove already-packaged DEMs with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
+    parser.add_argument('--rasterproxy-prefix',
+                        default="s3://pgc-opendata-dems/<project>/<type>/<version>/<resolution>/<group>/<dem_id>",
+                        help="template for rasterproxy .mrf file s3 path")
+    parser.add_argument('--release-fileurl', type=str, default="https://data.pgc.umn.edu/elev/dem/setsm/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.tar.gz",
+                        help="template for release field 'fileurl'")
+    parser.add_argument('--release-s3url', type=str, default="https://polargeospatialcenter.github.io/stac-browser/#/external/pgc-opendata-dems.s3.us-west-2.amazonaws.com/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.json",
+                        help="template for release field 's3url'")
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
@@ -88,8 +95,8 @@ def main():
         log_level = logging.INFO
 
     # Check raster proxy prefix is well-formed
-    if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
-        parser.error('--rasterproxy-prefix (e.g. s3://pgc-opendata-dems/arcticdem/strips/s2s041/2m)')
+    if args.build_rasterproxies and not args.rasterproxy_prefix.startswith('s3://'):
+        parser.error('--rasterproxy-prefix must start with s3:// (e.g. s3://pgc-opendata-dems/arcticdem/strips/s2s041/2m)')
     
     lsh = logging.StreamHandler()
     lsh.setLevel(log_level)
@@ -327,7 +334,14 @@ def build_archive(raster, scratch, args):
             mrf_tifs = [c for c in components if c[0].endswith(('dem.tif', 'bitmask.tif'))]
             if args.rasterproxy_prefix:
                 logger.info("Creating raster proxy files")
-                rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+                s3url = args.rasterproxy_prefix
+                s3url = s3url.replace('<project>', args.project)
+                s3url = s3url.replace('<type>', 'strips')
+                s3url = s3url.replace('<version>', raster.release_version)
+                s3url = s3url.replace('<resolution>', raster.res_str)
+                s3url = s3url.replace('<group>', raster.geocell)
+                s3url = s3url.replace('<dem_id>', raster.id)
+                rasterproxy_prefix_parts = s3url.split('/')
                 bucket = rasterproxy_prefix_parts[2]
                 bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
                 sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
@@ -336,18 +350,8 @@ def build_archive(raster, scratch, args):
                     suffix = tif[len(raster.stripid):-4]  # eg "_dem"
                     mrf = '{}{}.mrf'.format(raster.stripid, suffix)
                     if not os.path.isfile(mrf):
-                        sourcepath = '{}/{}/{}{}.tif'.format(
-                            sourceprefix,
-                            raster.geocell,
-                            raster.stripid,
-                            suffix
-                        )
-                        datapath = '{}/{}/{}{}.mrfcache'.format(
-                            dataprefix,
-                            raster.geocell,
-                            raster.stripid,
-                            suffix
-                        )
+                        sourcepath = f'{sourceprefix}{suffix}.tif'
+                        datapath = f'{dataprefix}{suffix}.mrfcache'
                         static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
                         cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
                             static_args,
@@ -455,18 +459,26 @@ def build_archive(raster, scratch, args):
                             ds = ogrDriver.CreateDataSource(index)
                             if ds is not None:
                             
-                                lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbPolygon)
+                                lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbMultiPolygon)
                     
                                 if lyr is not None:
                             
-                                    for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS_BASIC:
+                                    for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE:
+                                        fname = field_def.fname.lower()
+                                        fstype = None
                                         if field_def.ftype == ogr.OFTDateTime:
                                             ftype = ogr.OFTString
                                             fwidth = 28
+                                        elif field_def.ftype == ogr.OFSTBoolean:
+                                            ftype = ogr.OFTInteger
+                                            fstype = field_def.ftype
+                                            fwidth = field_def.fwidth
                                         else:
                                             ftype = field_def.ftype
                                             fwidth = field_def.fwidth
-                                        field = ogr.FieldDefn(field_def.fname, ftype)
+                                        field = ogr.FieldDefn(fname, ftype)
+                                        if fstype:
+                                            field.SetSubType(fstype)
                                         field.SetWidth(fwidth)
                                         field.SetPrecision(field_def.fprecision)
                                         lyr.CreateField(field)
@@ -477,29 +489,21 @@ def build_archive(raster, scratch, args):
                                     ## Set fields
                                     attrib_map = {
                                         'DEM_ID': raster.stripid,
-                                        'STRIPDEMID': raster.stripdemid,
                                         'PAIRNAME': raster.pairname,
+                                        'STRIPDEMID': raster.stripdemid,
                                         'SENSOR1': raster.sensor1,
                                         'SENSOR2': raster.sensor2,
-                                        'ACQDATE1': raster.acqdate1.strftime('%Y-%m-%d'),
-                                        'ACQDATE2': raster.acqdate2.strftime('%Y-%m-%d'),
-                                        'AVGACQTM1': raster.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S"),
-                                        'AVGACQTM2': raster.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S"),
                                         'CATALOGID1': raster.catid1,
                                         'CATALOGID2': raster.catid2,
-                                        'GEOCELL': raster.geocell,
-
-                                        'PROJ4': raster.proj4,
+                                        'ACQDATE1': raster.avg_acqtime1.strftime("%Y-%m-%d %H:%M:%S"),
+                                        'ACQDATE2': raster.avg_acqtime2.strftime("%Y-%m-%d %H:%M:%S"),
+                                        'GSD': (raster.xres + raster.yres) / 2.0,
                                         'EPSG': raster.epsg,
-                                        'ND_VALUE': raster.ndv,
-                                        'DEM_RES': (raster.xres + raster.yres) / 2.0,
-                                        'ALGM_VER': raster.algm_version,
+                                        'SETSM_VER': raster.algm_version,
                                         'S2S_VER': raster.s2s_version,
+                                        'GEOCELL': raster.geocell,
                                         'IS_LSF': raster.is_lsf,
                                         'IS_XTRACK': raster.is_xtrack,
-                                        'EDGEMASK': raster.mask_tuple[0],
-                                        'WATERMASK': raster.mask_tuple[1],
-                                        'CLOUDMASK': raster.mask_tuple[2],
                                         'RMSE': raster.rmse
                                     }
                                     
@@ -509,7 +513,27 @@ def build_archive(raster, scratch, args):
 
                                     for f, a in utils.field_attrib_map.items():
                                         val = getattr(raster, a)
-                                        attrib_map[f] = round(val, 6) if val is not None else -9999
+                                        if not f in ['MASK_DENS']:
+                                            attrib_map[f] = round(val, 6) if val is not None else -9999
+
+                                    filurl = args.release_fileurl
+                                    pretty_project = utils.PROJECTS[args.project]
+                                    filurl = filurl.replace('<project>', pretty_project)
+                                    filurl = filurl.replace('<type>', 'strips')
+                                    filurl = filurl.replace('<version>', raster.release_version)
+                                    filurl = filurl.replace('<resolution>', raster.res_str)
+                                    filurl = filurl.replace('<group>', raster.geocell)
+                                    filurl = filurl.replace('<dem_id>', raster.id)
+                                    attrib_map['FILEURL'] = filurl
+
+                                    s3url = args.release_s3url
+                                    s3url = s3url.replace('<project>', args.project)
+                                    s3url = s3url.replace('<type>', 'strips')
+                                    s3url = s3url.replace('<version>', raster.release_version)
+                                    s3url = s3url.replace('<resolution>', raster.res_str)
+                                    s3url = s3url.replace('<group>', raster.geocell)
+                                    s3url = s3url.replace('<dem_id>', raster.id)
+                                    attrib_map['S3URL'] = s3url
                             
                                     ## transform and write geom
                                     src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
@@ -527,11 +551,6 @@ def build_archive(raster, scratch, args):
                                             logger.error('Geom transformation failed, feature skipped: {} {}'.format(e, raster.sceneid))
                                             valid_record = False
                                         else:
-
-                                            ## Get centroid coordinates
-                                            centroid = temp_geom.Centroid()
-                                            attrib_map['CENT_LAT'] = centroid.GetY()
-                                            attrib_map['CENT_LON'] = centroid.GetX()
 
                                             ## If srs is geographic and geom crosses 180, split geom into 2 parts
                                             if tgt_srs.IsGeographic:
