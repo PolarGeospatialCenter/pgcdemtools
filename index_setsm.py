@@ -303,8 +303,12 @@ def main():
 
             else:
                 #### Get Danco connection if available
-                section = 'danco'
+                section_depr = 'danco'
+                section = 'pgc_danco_footprint'
                 conn_str = None
+                if section not in config.sections() and section_depr in config.sections():
+                    logger.warning(f"Config section name '{section_depr}' is deprecated and should be changed to '{section}'")
+                    section = section_depr
                 if section in config.sections():
                     danco_conn_info = {
                         'host':config.get(section,'host'),
