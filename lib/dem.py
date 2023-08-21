@@ -710,7 +710,7 @@ class SetsmDem(object):
             ctf = osr.CoordinateTransformation(srs, srs_wgs84)
             geom.Transform(ctf)
 
-        return geom;
+        return geom
 
     def get_geocell(self):
         if not self.geocell:
