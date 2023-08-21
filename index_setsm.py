@@ -527,7 +527,13 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         if not layer:
             logger.info("Creating table...")
 
-            layer = ds.CreateLayer(dst_lyr, tgt_srs, ogr.wkbMultiPolygon)
+            # FileGDB will throw a warning when inserting datetimes without this
+            if ogr_driver_str in ['FileGDB', 'OpenFileGDB']:
+                co = ['TIME_IN_UTC=NO']
+            else:
+                co = []
+
+            layer = ds.CreateLayer(dst_lyr, tgt_srs, ogr.wkbMultiPolygon, options=co)
             if layer:
                 for field_def in fld_defs:
                     fname = fld_def_short_to_long_dict[field_def.fname] if args.long_fieldnames else field_def.fname
@@ -1102,19 +1108,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             else:
                                                 raise
                                         layer.CommitTransaction()
-                                    elif ogr_driver_str in ['OpenFileGDB', 'FileGDB']:
-                                        utils.GDAL_ERROR_HANDLER.reset_error_state()
-                                        try:
-                                            # Writing a date to a datetime field in GDB (date fields are not allowed)
-                                            # results in an error "Attempt at writing a datetime with a unknown time
-                                            # zone or local time in a layer that expects dates to be convertible to
-                                            # UTC. It will be written as if it was expressed in UTC." This happens
-                                            # even if the datetime string is expressed in proper ISO UTC syntax.
-                                            # Therefore, we have to refrain from catching warnings when writing to GDB.
-                                            with utils.GdalAllowWarnings():
-                                                layer.CreateFeature(feat)
-                                        except Exception as e:
-                                            raise
 
                                     else:
                                         layer.CreateFeature(feat)
