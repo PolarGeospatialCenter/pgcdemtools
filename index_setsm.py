@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import pickle
+import re
 import sys
 
 from osgeo import gdal, osr, ogr
@@ -273,7 +274,8 @@ def main():
                     'pw':config.get(section,'pw'),
                 }
                 dst_ds = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
-                logger.info(f"Derived dst dataset PG connection string from {args.config}: '{dst_ds}'")
+                conn_str_redacted = re.sub(r"password=\S+", "password=PASS", dst_ds)
+                logger.info(f"Derived dst dataset PG connection string from {args.config}: '{conn_str_redacted}'")
 
             elif section in pg_config.sections():
                 dst_ds = f"PG:service={section}"
@@ -313,7 +315,8 @@ def main():
                         'pw':config.get(section,'pw'),
                     }
                     conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**danco_conn_info)
-                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str}'")
+                    conn_str_redacted = re.sub(r"password=\S+", "password=PASS", conn_str)
+                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str_redacted}'")
                 elif section in pg_config.sections():
                     conn_str = f"PG:service={section} active_schema=public"
                     logger.info(f"Derived Danco connection string from {pg_config_file}: '{conn_str}'")
