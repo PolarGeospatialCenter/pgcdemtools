@@ -282,7 +282,7 @@ def main():
                 logger.info(f"Derived dst dataset PG connection string from {pg_config_file}: '{dst_ds}'")
 
             else:
-                logger.error(f"--config file or ~/.pg_service.conf must contain credentials to connect to {section}")
+                logger.error(f"--config file or ~/.pg_service.conf must contain credentials for service name '{section}'")
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
@@ -328,7 +328,7 @@ def main():
                     logger.info("Fetching region lookup from Danco")
                     pairs = get_pair_region_dict(conn_str)
                 else:
-                    logger.warning("--config file or ~/.pg_service.conf does not contain credentials to connect to Danco. Region cannot be determined.")
+                    logger.warning(f"--config file or ~/.pg_service.conf do not contain credentials for service name '{section}'. Region cannot be determined.")
                     pairs = {}
 
             if len(pairs) == 0:
