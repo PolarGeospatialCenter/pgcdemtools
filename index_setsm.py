@@ -56,6 +56,7 @@ id_flds = ['SCENEDEMID', 'STRIPDEMID', 'DEM_ID', 'TILE', 'LOCATION', 'INDEX_DATE
 recordid_map = {
     'scene': '{SCENEDEMID}|{STRIPDEMID}|{IS_DSP}|{LOCATION}|{INDEX_DATE}',
     'strip': '{DEM_ID}|{STRIPDEMID}|{LOCATION}|{INDEX_DATE}',
+    'strip_release': '{DEM_ID}|{STRIPDEMID}|{FILEURL}|{CR_DATE}',
     'tile':  '{DEM_ID}|{TILE}|{LOCATION}|{INDEX_DATE}',
     'tile_release': '{DEM_ID}|{TILE}|{FILEURL}|{CR_DATE}',
 }
@@ -76,6 +77,11 @@ DSP_OPTIONS = {
     'dsp': 'record using current downsample product DEM res',
     'orig': 'record using original pre-DSP DEM res',
     'both': 'write a record for each'
+}
+
+dem_type_folder_lookup = {
+    'strip': 'strips',
+    'tile': 'mosaics',
 }
 
 DEFAULT_DSP_OPTION = 'dsp'
@@ -147,15 +153,15 @@ def main():
     parser.add_argument("--write-pickle", help="store region lookup in a pickle file. skipped if --write-json is used")
     parser.add_argument("--read-pickle", help='read region lookup from a pickle file. skipped if --write-json is used')
     parser.add_argument("--custom-paths", choices=custom_path_prefixes.keys(), help='Use custom path schema')
-    parser.add_argument('--project', choices=PROJECTS.keys(), help='project name (required when writing tiles)')
+    parser.add_argument('--project', choices=utils.PROJECTS.keys(), help='project name (required when writing tiles)')
     parser.add_argument('--debug', action='store_true', default=False, help='print DEBUG level logger messages to terminal')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
     parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
                         help='print version and exit')
-    parser.add_argument('--release-fileurl', type=str, default="https://data.pgc.umn.edu/elev/dem/setsm/<project>/mosaic/v<rel_ver>/<resolution>/<supertile>/<dem_id>.tar.gz",
+    parser.add_argument('--release-fileurl', type=str, default="https://data.pgc.umn.edu/elev/dem/setsm/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.tar.gz",
                         help="template for release field 'fileurl' (--use-release-fields only)")
-    parser.add_argument('--release-s3url', type=str, default="https://polargeospatialcenter.github.io/stac-browser/#/external/pgc-opendata-dems.s3.us-west-2.amazonaws.com/<project>/mosaics/v<rel_ver>/<resolution>/<supertile>/<dem_id>.json",
+    parser.add_argument('--release-s3url', type=str, default="https://polargeospatialcenter.github.io/stac-browser/#/external/pgc-opendata-dems.s3.us-west-2.amazonaws.com/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.json",
                         help="template for release field 's3url' (--use-release-fields only)")
     #### Parse Arguments
     args = parser.parse_args()
@@ -188,6 +194,12 @@ def main():
     ## Check project
     if args.mode == 'tile' and not args.project:
         parser.error("--project option is required if when mode=tile")
+
+    if args.mode == 'strip' and args.use_release_fields and not args.project:
+        parser.error("--project option is required if when mode=strip wit--use-release-fields")
+
+    if args.mode == 'scene' and args.use_release_fields:
+        parser.error("--use-release-fields option is not applicable to mode=scene")
 
     ## Todo add Bp region lookup via API instead of Danco?
     if args.skip_region_lookup and (args.custom_paths == 'PGC' or args.custom_paths == 'BP'):
@@ -395,6 +407,8 @@ def main():
     dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
     if args.mode == 'tile' and args.use_release_fields:
         fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+    if args.mode == 'strip' and args.use_release_fields:
+        fld_defs_base = utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE
     if args.mode == 'strip' and args.search_masked:
         suffix = mask_strip_suffixes + tuple([suffix])
     # fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base - DEPRECATED
@@ -639,7 +653,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             for k in record.filesz_attrib_map:
                                 attrib_map[k.upper()] = getattr(record,'{}{}'.format(attr_pfx,k))
 
-                            # TODO revisit after  all incorrect 50cminfo.txt files are ingested
+                            # TODO revisit after all incorrect 50cminfo.txt files are ingested
                             # Overwrite original res dsp filesz values will Null
                             if dsp_mode == 'orig':
                                 for k in record.filesz_attrib_map:
@@ -719,7 +733,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         valid_record = False
 
                                     else:
-                                        pretty_project = PROJECTS[region.split('_')[0]]
+                                        pretty_project = utils.PROJECTS[region.split('_')[0]]
 
                                         custom_path = '/'.join([
                                             path_prefix,
@@ -854,7 +868,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         valid_record = False
 
                                     else:
-                                        pretty_project = PROJECTS[region.split('_')[0]]
+                                        pretty_project = utils.PROJECTS[region.split('_')[0]]
 
                                         custom_path = '/'.join([
                                             path_prefix,
@@ -996,46 +1010,63 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         mp_geom = ogr.ForceToMultiPolygon(temp_geom)
                                         feat_geom = mp_geom
 
-                        ## Fields for tile DEM
-                        if args.mode == 'tile' and args.use_release_fields:
-                            tile_to_general_attrib_name = {
-                                'GSD': 'DEM_RES',
-                                'RELEASEVER': 'REL_VER',
-                                'DATA_PERC': 'DENSITY',
-                            }
-                            remove_attrib_names = sorted(list(set.difference(
-                                set([attr.fname for attr in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS]),
-                                set([attr.fname for attr in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE]),
-                            )))
+                            ## Convert fields for tile and strip DEM to release format
+                            if args.use_release_fields:
+                                tile_to_general_attrib_name = {
+                                    'GSD': 'DEM_RES',
+                                    'RELEASEVER': 'REL_VER',
+                                    'DATA_PERC': 'DENSITY',
+                                    'ACQDATE1': 'AVGACQTM1',
+                                    'ACQDATE2': 'AVGACQTM2',
+                                }
 
-                            for tname, gname in tile_to_general_attrib_name.items():
-                                if gname in attrib_map:
-                                    attrib_map[tname] = attrib_map[gname]
-                                    del attrib_map[gname]
-                            for fname in remove_attrib_names:
-                                if fname in attrib_map:
-                                    del attrib_map[fname]
+                                if args.mode == 'tile':
+                                    fdefs1 = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS
+                                    fdefs2 = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+                                    version = f'v{record.release_version}'
+                                    group = record.supertile_id_no_res
+                                elif args.mode == 'strip':
+                                    fdefs1 = utils.DEM_ATTRIBUTE_DEFINITIONS
+                                    fdefs2 = utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+                                    version = record.release_version
+                                    group = record.geocell
+                                else:
+                                    msg = '--use-release-fields used with an incompatible mode'
+                                    raise RuntimeError(msg)
 
-                            if args.release_fileurl:
-                                filurl = args.release_fileurl
-                                pretty_project = PROJECTS[args.project]
-                                pretty_res = '{}m'.format(str(int(attrib_map['GSD'])))
-                                filurl = filurl.replace('<project>', pretty_project)
-                                filurl = filurl.replace('<rel_ver>', record.release_version)
-                                filurl = filurl.replace('<resolution>', pretty_res)
-                                filurl = filurl.replace('<supertile>', record.supertile_id_no_res)
-                                filurl = filurl.replace('<dem_id>', record.tileid)
-                                attrib_map['FILEURL'] = filurl
+                                remove_attrib_names = sorted(list(set.difference(
+                                    set([attr.fname for attr in fdefs1]),
+                                    set([attr.fname for attr in fdefs2]),
+                                )))
 
-                            if args.release_s3url:
-                                s3url = args.release_s3url
-                                pretty_res = '{}m'.format(str(int(attrib_map['GSD'])))
-                                s3url = s3url.replace('<project>', args.project)
-                                s3url = s3url.replace('<rel_ver>', record.release_version)
-                                s3url = s3url.replace('<resolution>', pretty_res)
-                                s3url = s3url.replace('<supertile>', record.supertile_id_no_res)
-                                s3url = s3url.replace('<dem_id>', record.tileid)
-                                attrib_map['S3URL'] = s3url
+                                for tname, gname in tile_to_general_attrib_name.items():
+                                    if gname in attrib_map:
+                                        attrib_map[tname] = attrib_map[gname]
+                                        del attrib_map[gname]
+                                for fname in remove_attrib_names:
+                                    if fname in attrib_map:
+                                        del attrib_map[fname]
+
+                                if args.release_fileurl:
+                                    filurl = args.release_fileurl
+                                    pretty_project = utils.PROJECTS[args.project]
+                                    filurl = filurl.replace('<project>', pretty_project)
+                                    filurl = filurl.replace('<type>', dem_type_folder_lookup[args.mode])
+                                    filurl = filurl.replace('<version>', version)
+                                    filurl = filurl.replace('<resolution>', record.res_str)
+                                    filurl = filurl.replace('<group>', group)
+                                    filurl = filurl.replace('<dem_id>', record.id)
+                                    attrib_map['FILEURL'] = filurl
+
+                                if args.release_s3url:
+                                    s3url = args.release_s3url
+                                    s3url = s3url.replace('<project>', args.project)
+                                    s3url = s3url.replace('<type>', dem_type_folder_lookup[args.mode])
+                                    s3url = s3url.replace('<version>', version)
+                                    s3url = s3url.replace('<resolution>', record.res_str)
+                                    s3url = s3url.replace('<group>', group)
+                                    s3url = s3url.replace('<dem_id>', record.id)
+                                    attrib_map['S3URL'] = s3url
 
                         ## Write feature
                         if valid_record:
@@ -1079,7 +1110,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                             else:
                                 if not args.dryrun:
                                     # Store record identifiers for later checking
-                                    recordid_mode = 'tile_release' if args.mode == 'tile' and args.use_release_fields else args.mode
+                                    recordid_mode = args.mode + '_release' if args.use_release_fields else args.mode
                                     recordids.append(recordid_map[recordid_mode].format(**attrib_map))
 
                                     # Append record

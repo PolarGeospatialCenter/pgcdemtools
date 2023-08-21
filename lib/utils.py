@@ -152,6 +152,11 @@ class GdalAllowWarnings(GdalHandleWarnings):
 # at the top of only the scripts in which you want to handle warnings.
 setup_gdal_error_handler(catch_warnings=True, print_uncaught_warnings=True)
 
+PROJECTS = {
+    'arcticdem': 'ArcticDEM',
+    'rema': 'REMA',
+    'earthdem': 'EarthDEM',
+}
 
 # Copy DEM global vars
 deliv_suffixes = (
