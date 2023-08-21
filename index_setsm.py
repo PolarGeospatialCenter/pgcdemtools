@@ -115,10 +115,9 @@ def main():
                         ))
     parser.add_argument('--status', help='custom value for status field')
     parser.add_argument('--status-dsp-record-mode-orig', help='custom value for status field when dsp-record-mode is set to "orig"')
-    parser.add_argument('--include-registration', action='store_true', default=False,
-                        help='include registration info if present (mode=strip and tile only)')
-    parser.add_argument('--include-relver', action='store_true', default=False,
-                        help='include release version info if present (mode=strip and tile only)')
+    # DEPRECATED
+    # parser.add_argument('--include-registration', action='store_true', default=False,
+    #                     help='include registration info if present (mode=strip and tile only)')
     parser.add_argument('--use-release-fields', action='store_true', default=False,
                         help="use field definitions for tile release indices (mode=tile only)")
     parser.add_argument('--long-fieldnames', action='store_true', default=False,
@@ -398,9 +397,8 @@ def main():
         fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
     if args.mode == 'strip' and args.search_masked:
         suffix = mask_strip_suffixes + tuple([suffix])
-    fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base
-    if args.include_relver and not (args.mode == 'tile' and args.use_release_fields):
-        fld_defs = fld_defs + utils.DEM_ATTRIBUTE_DEFINITION_RELVER
+    # fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base - DEPRECATED
+    fld_defs = fld_defs_base
     src_fps = []
     records = []
     logger.info('Source: {}'.format(src))
@@ -807,17 +805,17 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 val = getattr(record, a)
                                 attrib_map[f] = round(val, 6) if val is not None else -9999
 
-                            ## If registration info exists
-                            if args.include_registration:
-                                if len(record.reginfo_list) > 0:
-                                    for reginfo in record.reginfo_list:
-                                        if reginfo.name == 'ICESat':
-                                            attrib_map["DX"] = reginfo.dx
-                                            attrib_map["DY"] = reginfo.dy
-                                            attrib_map["DZ"] = reginfo.dz
-                                            attrib_map["REG_SRC"] = 'ICESat'
-                                            attrib_map["NUM_GCPS"] = reginfo.num_gcps
-                                            attrib_map["MEANRESZ"] = reginfo.mean_resid_z
+                            ## If registration info exists - DEPRECATED
+                            # if args.include_registration:
+                            #     if len(record.reginfo_list) > 0:
+                            #         for reginfo in record.reginfo_list:
+                            #             if reginfo.name == 'ICESat':
+                            #                 attrib_map["DX"] = reginfo.dx
+                            #                 attrib_map["DY"] = reginfo.dy
+                            #                 attrib_map["DZ"] = reginfo.dz
+                            #                 attrib_map["REG_SRC"] = 'ICESat'
+                            #                 attrib_map["NUM_GCPS"] = reginfo.num_gcps
+                            #                 attrib_map["MEANRESZ"] = reginfo.mean_resid_z
 
                             ## Set path folders for use if path_prefix specified
                             if path_prefix:

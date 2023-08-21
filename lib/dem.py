@@ -1772,7 +1772,7 @@ class SetsmTile(object):
             if match:
                 groups = match.groupdict()
                 self.tilename = groups['tile']
-                self.res = groups['res']
+                self.res_str = groups['res']
                 # In case release version is in the file name and not the meta.txt
                 self.release_version = groups['relversion'].strip('v') if groups['relversion'] else None
                 self.subtile = groups['subtile']
@@ -1795,10 +1795,10 @@ class SetsmTile(object):
                     self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
 
                 if self.scheme:
-                    self.supertile_id = '_'.join([self.scheme,self.tilename,self.res])
+                    self.supertile_id = '_'.join([self.scheme,self.tilename,self.res_str])
                     self.supertile_id_no_res = '_'.join([self.scheme,self.tilename])
                 else:
-                    self.supertile_id = '_'.join([self.tilename,self.res])
+                    self.supertile_id = '_'.join([self.tilename,self.res_str])
                     self.supertile_id_no_res = self.tilename
                 self.tile_id_no_res = '_'.join([self.supertile_id_no_res, self.subtile]) if self.subtile else self.supertile_id_no_res
                 self.density = None
