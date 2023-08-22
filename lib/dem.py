@@ -18,6 +18,7 @@ import numpy
 from osgeo import gdal, osr, ogr
 
 from lib import utils
+from lib.numpy_read_50cm_scene_rasters import gdalReadAsArraySetsmSceneBand
 
 logger = utils.get_logger()
 utils.setup_gdal_error_handler()
@@ -2169,7 +2170,7 @@ def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
     res_y = gtf[5]
     size_x = ds.RasterXSize
     size_y = ds.RasterYSize
-    data = utils.gdalReadAsArraySetsmSceneBand(b)
+    data = gdalReadAsArraySetsmSceneBand(b)
     err = gdal.GetLastErrorNo()
     if err != 0:
         raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), raster_fp))
@@ -2177,7 +2178,7 @@ def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
         if bitmask_fp:
             ds2 = gdal.Open(bitmask_fp)
             b2 = ds2.GetRasterBand(1)
-            bm_data = utils.gdalReadAsArraySetsmSceneBand(b2)
+            bm_data = gdalReadAsArraySetsmSceneBand(b2)
             err = gdal.GetLastErrorNo()
             if err != 0:
                 raise RuntimeError("Bitmask dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), bitmask_fp))
