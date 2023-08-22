@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import pickle
+import re
 import sys
 
 from osgeo import gdal, osr, ogr
@@ -284,14 +285,15 @@ def main():
                     'pw':config.get(section,'pw'),
                 }
                 dst_ds = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**conn_info)
-                logger.info(f"Derived dst dataset PG connection string from {args.config}: '{dst_ds}'")
+                conn_str_redacted = re.sub(r"password=\S+", "password=PASS", dst_ds)
+                logger.info(f"Derived dst dataset PG connection string from {args.config}: '{conn_str_redacted}'")
 
             elif section in pg_config.sections():
                 dst_ds = f"PG:service={section}"
                 logger.info(f"Derived dst dataset PG connection string from {pg_config_file}: '{dst_ds}'")
 
             else:
-                logger.error(f"--config file or ~/.pg_service.conf must contain credentials to connect to {section}")
+                logger.error(f"--config file or ~/.pg_service.conf must contain credentials for service name '{section}'")
                 sys.exit(-1)
 
         #### Set dataset path is SHP or GDB
@@ -312,8 +314,12 @@ def main():
 
             else:
                 #### Get Danco connection if available
-                section = 'danco'
+                section_depr = 'danco'
+                section = 'pgc_danco_footprint'
                 conn_str = None
+                if section not in config.sections() and section_depr in config.sections():
+                    logger.warning(f"Config section name '{section_depr}' is deprecated and should be changed to '{section}'")
+                    section = section_depr
                 if section in config.sections():
                     danco_conn_info = {
                         'host':config.get(section,'host'),
@@ -324,7 +330,8 @@ def main():
                         'pw':config.get(section,'pw'),
                     }
                     conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**danco_conn_info)
-                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str}'")
+                    conn_str_redacted = re.sub(r"password=\S+", "password=PASS", conn_str)
+                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str_redacted}'")
                 elif section in pg_config.sections():
                     conn_str = f"PG:service={section} active_schema=public"
                     logger.info(f"Derived Danco connection string from {pg_config_file}: '{conn_str}'")
@@ -332,7 +339,7 @@ def main():
                     logger.info("Fetching region lookup from Danco")
                     pairs = get_pair_region_dict(conn_str)
                 else:
-                    logger.warning("--config file or ~/.pg_service.conf does not contain credentials to connect to Danco. Region cannot be determined.")
+                    logger.warning(f"--config file or ~/.pg_service.conf do not contain credentials for service name '{section}'. Region cannot be determined.")
                     pairs = {}
 
             if len(pairs) == 0:
