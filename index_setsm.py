@@ -926,12 +926,12 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                             attrib_map['DENSITY'] = record.density if record.density is not None else -9999
 
-                            if args.include_registration:
-                                if record.reg_src:
-                                    attrib_map["REG_SRC"] = record.reg_src
-                                    attrib_map["NUM_GCPS"] = record.num_gcps
-                                if record.mean_resid_z:
-                                    attrib_map["MEANRESZ"] = record.mean_resid_z
+                            # if args.include_registration: --DEPRECATED
+                            #     if record.reg_src:
+                            #         attrib_map["REG_SRC"] = record.reg_src
+                            #         attrib_map["NUM_GCPS"] = record.num_gcps
+                            #     if record.mean_resid_z:
+                            #         attrib_map["MEANRESZ"] = record.mean_resid_z
 
                             ## Set path folders for use if db_path_prefix specified
                             if path_prefix:
