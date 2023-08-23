@@ -35,7 +35,8 @@ def main():
     #### Positional Arguments
     parser.add_argument('src', help="source directory or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
-    parser.add_argument('project', choices=utils.PROJECTS.keys(), help='project name')
+    parser.add_argument('--project', required=True, choices=utils.PROJECTS.keys(),
+                        help='project name')
 
     #### Optionsl Arguments
     parser.add_argument('--epsg', type=int, default=default_epsg,
