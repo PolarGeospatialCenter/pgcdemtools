@@ -271,14 +271,14 @@ def build_archive(raster, scratch, args):
         mrf_tifs = [c for c in components + optional_components if c.endswith('dem.tif') and os.path.isfile(c)]
         if args.rasterproxy_prefix:
             logger.info("Creating raster proxy files")
-            s3url = args.rasterproxy_prefix
-            s3url = s3url.replace('<project>', args.project)
-            s3url = s3url.replace('<type>', 'mosaics')
-            s3url = s3url.replace('<version>', f'v{raster.release_version}')
-            s3url = s3url.replace('<resolution>', raster.res_str)
-            s3url = s3url.replace('<group>', raster.supertile_id_no_res)
-            s3url = s3url.replace('<dem_id>', raster.id)
-            rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+            rp = args.rasterproxy_prefix
+            rp = rp.replace('<project>', args.project)
+            rp = rp.replace('<type>', 'mosaics')
+            rp = rp.replace('<version>', f'v{raster.release_version}')
+            rp = rp.replace('<resolution>', raster.res_str)
+            rp = rp.replace('<group>', raster.supertile_id_no_res)
+            rp = rp.replace('<dem_id>', raster.id)
+            rasterproxy_prefix_parts = rp.split('/')
             bucket = rasterproxy_prefix_parts[2]
             bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
             sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
@@ -402,7 +402,7 @@ def build_archive(raster, scratch, args):
 
                             if lyr is not None:
 
-                                for field_def in utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE:
+                                for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE:
                                     fname = field_def.fname.lower()
                                     fstype = None
                                     if field_def.ftype == ogr.OFTDateTime:
@@ -447,7 +447,7 @@ def build_archive(raster, scratch, args):
                                 filurl = filurl.replace('<type>', 'strips')
                                 filurl = filurl.replace('<version>', f'v{raster.release_version}')
                                 filurl = filurl.replace('<resolution>', raster.res_str)
-                                filurl = filurl.replace('<group>', raster.geocell)
+                                filurl = filurl.replace('<group>', raster.supertile_id_no_res)
                                 filurl = filurl.replace('<dem_id>', raster.id)
                                 attrib_map['FILEURL'] = filurl
 

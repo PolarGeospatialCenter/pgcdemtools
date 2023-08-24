@@ -1774,6 +1774,7 @@ class SetsmTile(object):
                 groups = match.groupdict()
                 self.tilename = groups['tile']
                 self.res_str = groups['res']
+                self.res = groups['res']
                 # In case release version is in the file name and not the meta.txt
                 self.release_version = groups['relversion'].strip('v') if groups['relversion'] else None
                 self.subtile = groups['subtile']
@@ -2079,6 +2080,7 @@ class SetsmTile(object):
         'proj4',
         'regmetapath',
         'res',
+        'res_str',
         'srcdir',
         'srcfn',
         'srcfp',
