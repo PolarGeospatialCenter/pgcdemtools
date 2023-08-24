@@ -636,7 +636,8 @@ class TestIndexerStrips(unittest.TestCase):
              'WARNING- Strip DEM avg acquisition times not found'), # test rebuild from mdf
             (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'), # test index of masked strips
             (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
-            (self.striprenamed_dir, self.test_str, '--overwrite --include-relver', self.strip_renamed_count, 'Done')
+            (self.striprenamed_dir, self.test_str, '--overwrite --project arcticdem --use-release-fields --lowercase-fieldnames',
+             self.strip_renamed_count, 'Done')
         )
 
         strip_masks = {
@@ -668,24 +669,23 @@ class TestIndexerStrips(unittest.TestCase):
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt, result_cnt)
+            location_field = 'FILEURL' if '--use-release-fields' in options else 'LOCATION'
             for feat in layer:
-                srcfp = feat.GetField('LOCATION')
+                srcfp = feat.GetField(location_field)
                 srcdir, srcfn = os.path.split(srcfp)
                 srcfn_minus_prefix = '_'.join(srcfn.split('_')[2:]) if srcfn.startswith('SETSM_s2s') else srcfn
-                stripdemid = feat.GetField('STRIPDEMID')
-                folder_stripdemid = os.path.basename(srcdir).replace('_lsf','')
-                if len(folder_stripdemid.split('_')) > 5:
-                    self.assertEqual(folder_stripdemid,stripdemid)
                 dem_suffix = srcfn[srcfn.find('_dem'):]
-                masks = strip_masks[dem_suffix]
-                self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
-                self.assertEqual(feat.GetField('WATERMASK'), masks[1])
-                self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
-                is_xtrack = 0 if srcfn_minus_prefix.startswith(('WV', 'GE', 'QB')) else 1
+                if not '--use-release-fields' in options:
+                    stripdemid = feat.GetField('STRIPDEMID')
+                    folder_stripdemid = os.path.basename(srcdir).replace('_lsf', '')
+                    if len(folder_stripdemid.split('_')) > 5:
+                        self.assertEqual(folder_stripdemid, stripdemid)
+                    masks = strip_masks[dem_suffix]
+                    self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
+                    self.assertEqual(feat.GetField('WATERMASK'), masks[1])
+                    self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
+                is_xtrack = False if srcfn_minus_prefix.startswith(('WV', 'GE', 'QB')) else True
                 self.assertEqual(feat.GetField('IS_XTRACK'), is_xtrack)
-                if 'include-relver' in options:
-                    s2sver = feat.GetField('REL_VER')
-                    self.assertEqual(s2sver, 's2s041')
             ds, layer = None, None
 
             ## Test if stdout has proper error
@@ -879,6 +879,7 @@ class TestIndexerTiles(unittest.TestCase):
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (so, se) = p.communicate()
+        # print(cmd)
         # print(se)
         # print(so)
 
@@ -900,6 +901,7 @@ class TestIndexerTiles(unittest.TestCase):
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (so, se) = p.communicate()
+        # print(cmd)
         # print(se)
         # print(so)
 
