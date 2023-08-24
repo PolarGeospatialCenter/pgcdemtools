@@ -41,12 +41,12 @@ def main():
     #### Optionsl Arguments
     parser.add_argument('--epsg', type=int, default=default_epsg,
                         help="egsg code for output index projection (default epsg:{})".format(default_epsg))
+    parser.add_argument('--skip-cog', action='store_true', default=False,
+                        help="skip converting dem files to COG before building the archive")
     parser.add_argument('--skip-archive', action='store_true', default=False,
                         help="build mdf and readme files and convert rasters to COG, do not build archive")
     parser.add_argument('--build-rasterproxies', action='store_true', default=False,
                         help='build rasterproxy .mrf files')
-    parser.add_argument('--convert-to-cog', action='store_true', default=False,
-                        help="convert dem files to COG before building the archive")
     parser.add_argument('--rasterproxy-prefix',
                         default="s3://pgc-opendata-dems/<project>/<type>/<version>/<resolution>/<group>/<dem_id>",
                         help="template for rasterproxy .mrf file s3 path")
@@ -166,7 +166,7 @@ def main():
                 expected_outputs = [
                     #raster.readme
                 ]
-                if args.convert_to_cog:
+                if not args.skip_cog:
                     expected_outputs.append(cog_sem)
                 if not args.skip_archive:
                     expected_outputs.append(raster.archive)
@@ -263,8 +263,14 @@ def build_archive(raster, scratch, args):
             ]
 
         cog_params = {
+            # ( path, lzw predictor, resample strategy)
             os.path.basename(raster.srcfp): ('YES', 'BILINEAR'),  # dem
             os.path.basename(raster.browse): ('YES', 'CUBIC'),  # browse
+            os.path.basename(raster.count): ('NO', 'NEAREST'),
+            os.path.basename(raster.mad): ('YES', 'BILINEAR'),
+            os.path.basename(raster.mindate): ('NO', 'NEAREST'),
+            os.path.basename(raster.maxdate): ('NO', 'NEAREST'),
+            os.path.basename(raster.datamask): ('NO', 'NEAREST'),
         }
 
         ## create rasterproxy MRF file
@@ -315,7 +321,7 @@ def build_archive(raster, scratch, args):
 
         ## Convert all rasters to COG in place (should no longer be needed)
         tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
-        if args.convert_to_cog:
+        if not args.skip_cog:
             cog_sem = raster.tileid + '.cogfin'
             if os.path.isfile(cog_sem) and not args.overwrite:
                 logger.info('COG conversion already complete')

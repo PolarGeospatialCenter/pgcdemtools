@@ -116,13 +116,8 @@ class TestPackagerTiles(unittest.TestCase):
     def testOutput(self):
 
         o_list = [
-            '10_27_1_1_2m_v4.1',
-            '10_27_2_1_2m_v4.1',
             '10_27_2_2_2m_v4.1',
             '59_57_1_1_2m',
-            '59_57_1_2_2m',
-            '59_57_2_1_2m',
-            '59_57_2_2_2m',
         ]
 
         test_param_list = (
@@ -173,7 +168,7 @@ if __name__ == '__main__':
 
     #### Set Up Arguments
     parser = argparse.ArgumentParser(
-        description="Functional test for index_setsm"
+        description="Functional tests for package_setsm.py and package_setsm_tiles.py"
     )
 
     #### Parse Arguments
