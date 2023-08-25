@@ -175,8 +175,10 @@ class SetsmScene(object):
                     setattr(self, p, None)
 
             # Note: this approach will not work for DSP dems being used as proxies for 50cm
-            self.has_lsf = self.filesz_lsf > 0
-            self.has_nonlsf = self.filesz_dem > 0
+            if not hasattr(self,'has_lsf'):
+                self.has_lsf = self.filesz_lsf > 0
+            if not hasattr(self, 'has_nonlsf'):
+                self.has_nonlsf = self.filesz_dem > 0
             self.is_xtrack = bool(self.is_xtrack)
 
         else:
@@ -2119,6 +2121,7 @@ class SetsmTile(object):
         self.pairname_ids = pairname_ids
         self.acqdate_min = acqdate_min
         self.acqdate_max = acqdate_max
+
 
 class RegInfo(object):
 
