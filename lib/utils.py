@@ -152,6 +152,11 @@ class GdalAllowWarnings(GdalHandleWarnings):
 # at the top of only the scripts in which you want to handle warnings.
 setup_gdal_error_handler(catch_warnings=True, print_uncaught_warnings=True)
 
+PROJECTS = {
+    'arcticdem': 'ArcticDEM',
+    'rema': 'REMA',
+    'earthdem': 'EarthDEM',
+}
 
 # Copy DEM global vars
 deliv_suffixes = (
@@ -230,10 +235,10 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("PAIRNAME", "", ogr.OFTString, 64, 0),
     StandardAttribute("SENSOR1", "", ogr.OFTString, 8, 0),
     StandardAttribute("SENSOR2", "", ogr.OFTString, 8, 0),
-    StandardAttribute("ACQDATE1", "", ogr.OFTString, 32, 0),
-    StandardAttribute("ACQDATE2", "", ogr.OFTString, 32, 0),
-    StandardAttribute("AVGACQTM1", "", ogr.OFTString, 32, 0),
-    StandardAttribute("AVGACQTM2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("ACQDATE1", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("ACQDATE2", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("AVGACQTM1", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("AVGACQTM2", "", ogr.OFTDateTime, 32, 0),
     StandardAttribute("CATALOGID1", "", ogr.OFTString, 32, 0),
     StandardAttribute("CATALOGID2", "", ogr.OFTString, 32, 0),
     StandardAttribute("CENT_LAT", "", ogr.OFTReal, 0, 0),
@@ -246,15 +251,14 @@ DEM_ATTRIBUTE_DEFINITIONS_BASIC = [
     StandardAttribute("PROJ4", "", ogr.OFTString, 100, 0),
     StandardAttribute("ND_VALUE", "", ogr.OFTReal, 0, 0),
     StandardAttribute("DEM_RES", "", ogr.OFTReal, 0, 0),
-    StandardAttribute("CR_DATE", "", ogr.OFTString, 32, 0),
-    # StandardAttribute("CR_DATE", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("CR_DATE", "", ogr.OFTDateTime, 32, 0),
     StandardAttribute("ALGM_VER", "", ogr.OFTString, 32, 0),
     StandardAttribute("S2S_VER", "", ogr.OFTString, 32, 0),
-    StandardAttribute("IS_LSF", "", ogr.OFTInteger, 8, 8),
-    StandardAttribute("IS_XTRACK", "", ogr.OFTInteger, 8, 8),
-    StandardAttribute("EDGEMASK", "", ogr.OFTInteger, 8, 8),
-    StandardAttribute("WATERMASK", "", ogr.OFTInteger, 8, 8),
-    StandardAttribute("CLOUDMASK", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("IS_LSF", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("IS_XTRACK", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("EDGEMASK", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("WATERMASK", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("CLOUDMASK", "", ogr.OFSTBoolean, 0, 0),
     StandardAttribute("MASK_DENS", "", ogr.OFTReal, 0, 0),
     StandardAttribute("VALID_DENS", "", ogr.OFTReal, 0, 0),
     StandardAttribute("VALID_AREA", "", ogr.OFTReal, 0, 0),
@@ -285,12 +289,41 @@ DEM_ATTRIBUTE_DEFINITIONS = DEM_ATTRIBUTE_DEFINITIONS_BASIC + [
     StandardAttribute("FILESZ_MT", "", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR", "", ogr.OFTReal, 0, 0),
     StandardAttribute("FILESZ_OR2", "", ogr.OFTReal, 0, 0),
-    StandardAttribute("INDEX_DATE", "", ogr.OFTString, 32, 0),
-    # StandardAttribute("INDEX_DATE", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("INDEX_DATE", "", ogr.OFTDateTime, 32, 0),
 ]
 
-DEM_ATTRIBUTE_DEFINITION_RELVER = [
-    StandardAttribute("REL_VER", "", ogr.OFTString, 20, 0)
+DEM_ATTRIBUTE_DEFINITIONS_RELEASE = [
+    StandardAttribute("DEM_ID", "", ogr.OFTString, 254, 0),
+    StandardAttribute("PAIRNAME", "", ogr.OFTString, 64, 0),
+    StandardAttribute("STRIPDEMID", "", ogr.OFTString, 254, 0),
+    StandardAttribute("SENSOR1", "", ogr.OFTString, 8, 0),
+    StandardAttribute("SENSOR2", "", ogr.OFTString, 8, 0),
+    StandardAttribute("CATALOGID1", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CATALOGID2", "", ogr.OFTString, 32, 0),
+    StandardAttribute("ACQDATE1", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("ACQDATE2", "", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("GSD", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("EPSG", "", ogr.OFTInteger, 8, 8),
+    StandardAttribute("SETSM_VER", "", ogr.OFTString, 32, 0),
+    StandardAttribute("S2S_VER", "", ogr.OFTString, 32, 0),
+    StandardAttribute("CR_DATE", "CREATIONDATE", ogr.OFTDateTime, 32, 0),
+    StandardAttribute("GEOCELL", "", ogr.OFTString, 10, 0),
+    StandardAttribute("IS_LSF", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("IS_XTRACK", "", ogr.OFSTBoolean, 0, 0),
+    StandardAttribute("VALID_DENS", "VALID_AREA_MATCHTAG_DENSITY", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_AREA", "VALID_AREA_SQKM", ogr.OFTReal, 0, 0),
+    StandardAttribute("VALID_PERC", "VALID_AREA_PERCENT", ogr.OFTReal, 0, 0),
+    StandardAttribute("WATER_AREA", "WATER_AREA_SQKM", ogr.OFTReal, 0, 0),
+    StandardAttribute("WATER_PERC", "WATER_AREA_PERCENT", ogr.OFTReal, 0, 0),
+    StandardAttribute("CLOUD_AREA", "CLOUD_AREA_SQKM", ogr.OFTReal, 0, 0),
+    StandardAttribute("CLOUD_PERC", "CLOUD_AREA_PERCENT", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVGCONVANG", "AVG_CONVERGENCE_ANGLE", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_HT_ACC", "AVG_EXPECTED_HEIGHT_ACCURACY", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL1", "AVG_SUN_ELEV1", ogr.OFTReal, 0, 0),
+    StandardAttribute("AVG_SUNEL2", "AVG_SUN_ELEV2", ogr.OFTReal, 0, 0),
+    StandardAttribute("RMSE", "", ogr.OFTReal, 0, 0),
+    StandardAttribute("FILEURL", "", ogr.OFTString, 254, 0),
+    StandardAttribute("S3URL", "", ogr.OFTString, 254, 0),
 ]
 
 SCENE_ATTRIBUTE_DEFINITIONS_BASIC = [

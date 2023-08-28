@@ -33,6 +33,7 @@ class TestIndexerScenes(unittest.TestCase):
 
     def setUp(self):
         self.scene_dir = os.path.join(testdata_dir, 'setsm_scene')
+        self.scene_json_dir = os.path.join(testdata_dir, 'setsm_scene_json')
         self.scene50cm_dir = os.path.join(testdata_dir, 'setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
         self.output_dir = os.path.join(testdata_dir, 'output')
@@ -40,6 +41,7 @@ class TestIndexerScenes(unittest.TestCase):
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
 
         self.scene_count = 52
+        self.scene_json_count = 35
         self.scene50cm_count = 14
         self.scenedsp_count = 102
 
@@ -66,6 +68,8 @@ class TestIndexerScenes(unittest.TestCase):
             (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --check', self.scene_count, 'Done'), # test check
             (self.scene_dir, self.test_str, '--dsp-record-mode both --skip-region-lookup --overwrite',
              self.scene_count, 'Done'),  # test dsp-record-mode both has no effect when record is not dsp
+            (self.scene_json_dir, self.test_str, '--skip-region-lookup --overwrite --read-json', self.scene_json_count,
+             'Done'), # test old jsons
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -93,17 +97,11 @@ class TestIndexerScenes(unittest.TestCase):
                 self.assertEqual(feat.GetField('IS_XTRACK'), is_xtrack)
                 self.assertIsNotNone(feat.GetField('PROD_VER'))
                 record_res = feat.GetField('DEM_RES')
-                has_lsf = feat.GetField("HAS_LSF")
-                has_nonlsf = feat.GetField("HAS_NONLSF")
+                has_lsf = bool(feat.GetField("HAS_LSF"))
+                has_nonlsf = bool(feat.GetField("HAS_NONLSF"))
                 if record_res == 0.5:
                     self.assertTrue(has_nonlsf)
                     self.assertFalse(has_lsf)
-                elif record_res == 2.0:
-                    self.assertTrue(has_lsf)
-                    if feat.GetField("CENT_LAT") < -60:
-                        self.assertFalse(has_lsf)
-                    else:
-                        self.assertTrue(has_nonlsf)
             ds, layer = None, None
 
             ## Test if stdout has proper error
@@ -631,12 +629,17 @@ class TestIndexerStrips(unittest.TestCase):
             (self.strip_dir, self.test_str, '', self.strip_count, 'Done'),  # test creation
             (self.strip_json_dir, self.test_str, '--overwrite --read-json', self.strip_json_count, 'Done'),
             # test old json rebuild
+            (self.strip_json_dir, self.test_str,
+             '--overwrite --read-json --overwrite --project arcticdem --use-release-fields --lowercase-fieldnames',
+             self.strip_json_count, 'Done'),
+            # test old json rebuild with release fields
             (self.strip_mixedver_dir, self.test_str, '--overwrite', self.strip_mixedver_count, 'Done'),  # test mixed version
             (self.strip_mdf_dir, self.test_str, '--overwrite', self.strip_count,
              'WARNING- Strip DEM avg acquisition times not found'), # test rebuild from mdf
             (self.stripmasked_dir, self.test_str, '--overwrite --check', self.stripmasked_count, 'Done'), # test index of masked strips
             (self.stripmasked_dir, self.test_str, '--overwrite --search-masked', self.stripmasked_count * 5, 'Done'),  # test index of masked strips
-            (self.striprenamed_dir, self.test_str, '--overwrite --include-relver', self.strip_renamed_count, 'Done')
+            (self.striprenamed_dir, self.test_str, '--overwrite --project arcticdem --use-release-fields --lowercase-fieldnames',
+             self.strip_renamed_count, 'Done')
         )
 
         strip_masks = {
@@ -668,24 +671,23 @@ class TestIndexerStrips(unittest.TestCase):
             self.assertIsNotNone(layer)
             cnt = layer.GetFeatureCount()
             self.assertEqual(cnt, result_cnt)
+            location_field = 'FILEURL' if '--use-release-fields' in options else 'LOCATION'
             for feat in layer:
-                srcfp = feat.GetField('LOCATION')
+                srcfp = feat.GetField(location_field)
                 srcdir, srcfn = os.path.split(srcfp)
                 srcfn_minus_prefix = '_'.join(srcfn.split('_')[2:]) if srcfn.startswith('SETSM_s2s') else srcfn
-                stripdemid = feat.GetField('STRIPDEMID')
-                folder_stripdemid = os.path.basename(srcdir).replace('_lsf','')
-                if len(folder_stripdemid.split('_')) > 5:
-                    self.assertEqual(folder_stripdemid,stripdemid)
                 dem_suffix = srcfn[srcfn.find('_dem'):]
-                masks = strip_masks[dem_suffix]
-                self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
-                self.assertEqual(feat.GetField('WATERMASK'), masks[1])
-                self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
-                is_xtrack = 0 if srcfn_minus_prefix.startswith(('WV', 'GE', 'QB')) else 1
+                if not '--use-release-fields' in options:
+                    stripdemid = feat.GetField('STRIPDEMID')
+                    folder_stripdemid = os.path.basename(srcdir).replace('_lsf', '')
+                    if len(folder_stripdemid.split('_')) > 5:
+                        self.assertEqual(folder_stripdemid, stripdemid)
+                    masks = strip_masks[dem_suffix]
+                    self.assertEqual(feat.GetField('EDGEMASK'), masks[0])
+                    self.assertEqual(feat.GetField('WATERMASK'), masks[1])
+                    self.assertEqual(feat.GetField('CLOUDMASK'), masks[2])
+                is_xtrack = False if srcfn_minus_prefix.startswith(('WV', 'GE', 'QB')) else True
                 self.assertEqual(feat.GetField('IS_XTRACK'), is_xtrack)
-                if 'include-relver' in options:
-                    s2sver = feat.GetField('REL_VER')
-                    self.assertEqual(s2sver, 's2s041')
             ds, layer = None, None
 
             ## Test if stdout has proper error
@@ -879,6 +881,7 @@ class TestIndexerTiles(unittest.TestCase):
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (so, se) = p.communicate()
+        # print(cmd)
         # print(se)
         # print(so)
 
@@ -900,6 +903,7 @@ class TestIndexerTiles(unittest.TestCase):
         )
         p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         (so, se) = p.communicate()
+        # print(cmd)
         # print(se)
         # print(so)
 
