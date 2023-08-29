@@ -3,12 +3,12 @@
 import argparse
 import datetime
 import json
-import os, sys, string, shutil, glob, re, logging, tarfile, zipfile
+import logging
+import os
 import pathlib
+import sys
 
-from osgeo import gdal, osr, ogr, gdalconst
-
-from lib import utils, dem, taskhandler
+from lib import utils, dem, VERSION, SHORT_VERSION
 
 DOMAIN_TITLES = {
     "arcticdem": "ArcticDEM",
@@ -42,6 +42,9 @@ def main():
     parser.add_argument('--stac-base-dir', help="base directory to write stac JSON files, otherwise write next to images")
     parser.add_argument('--stac-base-url', help="STAC Catalog Base URL", default="https://pgc-opendata-dems.s3.us-west-2.amazonaws.com")
     parser.add_argument('--domain', help="PGC Domain (arcticdem,earthdem,rema)", required=True, choices=DOMAIN_TITLES.keys())
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
     #### Parse Arguments
     scriptpath = os.path.abspath(sys.argv[0])
     args = parser.parse_args()
@@ -68,6 +71,8 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lsh.setFormatter(formatter)
     logger.addHandler(lsh)
+
+    logger.info("Current version: %s", VERSION)
 
     #### ID rasters
     logger.info('Identifying DEMs')
@@ -385,6 +390,12 @@ def build_mosaic_stac_item(base_url, domain, tile):
                 "href": "./"+tile.tileid+"_mindate.tif",
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "metadata", "date" ]
+            },
+            "datamask": {
+                "title": "Valid data mask",
+                "href": "./" + tile.tileid + "_datamask.tif",
+                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                "roles": [ "metadata", "data-mask" ]
             },
             "metadata": {
                 "title": "Metadata",

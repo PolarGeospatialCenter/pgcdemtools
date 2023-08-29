@@ -5,19 +5,24 @@ import os
 import subprocess
 import sys
 import tarfile
+import traceback
 from datetime import *
 
 from osgeo import osr, ogr, gdal, gdalconst
 
-from lib import utils, dem, taskhandler
+from lib import utils, dem, taskhandler, VERSION, SHORT_VERSION
 
 #### Create Logger
 logger = logging.getLogger("logger")
 logger.setLevel(logging.DEBUG)
 
 ogrDriver = ogr.GetDriverByName("ESRI Shapefile")
-
 default_epsg = 4326
+
+submission_script_map = {
+    'pbs': 'pbs_package.sh',
+    'slurm': 'slurm_package.sh'
+}
 
 
 def main():
@@ -30,33 +35,45 @@ def main():
     #### Positional Arguments
     parser.add_argument('src', help="source directory or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
+    parser.add_argument('--project', required=True, choices=utils.PROJECTS.keys(),
+                        help='project name')
 
     #### Optionsl Arguments
     parser.add_argument('--epsg', type=int, default=default_epsg,
                         help="egsg code for output index projection (default epsg:{})".format(default_epsg))
+    parser.add_argument('--skip-cog', action='store_true', default=False,
+                        help="skip converting dem files to COG before building the archive")
     parser.add_argument('--skip-archive', action='store_true', default=False,
-                        help="build mdf and readme files and convert rasters to COG, do not archive")
+                        help="build mdf and readme files and convert rasters to COG, do not build archive")
+    parser.add_argument('--build-rasterproxies', action='store_true', default=False,
+                        help='build rasterproxy .mrf files')
     parser.add_argument('--rasterproxy-prefix',
-                        help="build rasterProxy .mrf files using this s3 bucket and path prefix\
-                             for the source data path with geocell folder and dem tif appended (must start with s3://)")
-    parser.add_argument('--convert-to-cog', action='store_true', default=False,
-                        help="convert dem files to COG before building the archive")
+                        default="s3://pgc-opendata-dems/<project>/<type>/<version>/<resolution>/<group>/<dem_id>",
+                        help="template for rasterproxy .mrf file s3 path")
+    parser.add_argument('--release-fileurl', type=str,
+                        default="https://data.pgc.umn.edu/elev/dem/setsm/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.tar.gz",
+                        help="template for release field 'fileurl'")
+    parser.add_argument('--release-s3url', type=str,
+                        default="https://polargeospatialcenter.github.io/stac-browser/#/external/pgc-opendata-dems.s3.us-west-2.amazonaws.com/<project>/<type>/<version>/<resolution>/<group>/<dem_id>.json",
+                        help="template for release field 's3url'")
     parser.add_argument('-v', action='store_true', default=False, help="verbose output")
     parser.add_argument('--overwrite', action='store_true', default=False,
                         help="overwrite existing index")
-    parser.add_argument("--pbs", action='store_true', default=False,
-                        help="submit tasks to PBS")
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                        help="number of parallel processes to spawn (default 1)")
-    parser.add_argument("--qsubscript",
-                        help="qsub script to use in PBS submission (default is qsub_package.sh in script root folder)")
     parser.add_argument('--log', help="directory for log output")
     parser.add_argument('--dryrun', action='store_true', default=False,
                         help="print actions without executing")
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
 
+    pos_arg_keys = ['src', 'scratch']
+    arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun']
+    utils.add_scheduler_options(parser, submission_script_map)
 
     #### Parse Arguments
     args = parser.parse_args()
+    scriptpath = os.path.abspath(sys.argv[0])
+    src = os.path.abspath(args.src)
+    scratch = os.path.abspath(args.scratch)
 
     #### Verify Arguments
     if not os.path.isdir(args.src) and not os.path.isfile(args.src):
@@ -64,25 +81,12 @@ def main():
     if not os.path.isdir(args.scratch) and not os.path.isfile(args.scratch):
         parser.error("Source directory or file does not exist: %s" %args.scratch)
 
-    scriptpath = os.path.abspath(sys.argv[0])
-    src = os.path.abspath(args.src)
-    scratch = os.path.abspath(args.scratch)
-
     ## Verify qsubscript
-    if args.qsubscript is None:
-        qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_package.sh')
-    else:
-        qsubpath = os.path.abspath(args.qsubscript)
-    if not os.path.isfile(qsubpath):
-        parser.error("qsub script path is not valid: %s" %qsubpath)
-
-    ## Verify processing options do not conflict
-    if args.pbs and args.parallel_processes > 1:
-        parser.error("Options --pbs and --parallel-processes > 1 are mutually exclusive")
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
 
     # Check raster proxy prefix is well-formed
     if args.rasterproxy_prefix and not args.rasterproxy_prefix.startswith('s3://'):
-        parser.error('--rasterproxy-prefix must start with s3://')
+        parser.error('--rasterproxy-prefix (e.g. s3://pgc-opendata-dems/arcticdem/mosaics/v4.1/2m)')
 
     if args.v:
         log_level = logging.DEBUG
@@ -96,8 +100,6 @@ def main():
     logger.addHandler(lsh)
 
     #### Get args ready to pass to task handler
-    pos_arg_keys = ['src','scratch']
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
 
     if args.log:
@@ -113,6 +115,7 @@ def main():
         lfh.setFormatter(formatter)
         logger.addHandler(lfh)
 
+    logger.info("Current version: %s", VERSION)
 
     #### ID rasters
     logger.info('Identifying DEMs')
@@ -163,7 +166,7 @@ def main():
                 expected_outputs = [
                     #raster.readme
                 ]
-                if args.convert_to_cog:
+                if not args.skip_cog:
                     expected_outputs.append(cog_sem)
                 if not args.skip_archive:
                     expected_outputs.append(raster.archive)
@@ -193,10 +196,14 @@ def main():
 
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
-            task_handler = taskhandler.PBSTaskHandler(qsubpath)
-            if not args.dryrun:
-                task_handler.run_tasks(task_queue)
+        if args.scheduler:
+            try:
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
+            except RuntimeError as e:
+                logger.error(e)
+            else:
+                if not args.dryrun:
+                    task_handler.run_tasks(task_queue)
 
         elif args.parallel_processes > 1:
             task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)
@@ -252,39 +259,42 @@ def build_archive(raster, scratch, args):
             os.path.basename(raster.mad),
             os.path.basename(raster.mindate),
             os.path.basename(raster.maxdate),
+            os.path.basename(raster.datamask),
             ]
 
         cog_params = {
+            # ( path, lzw predictor, resample strategy)
             os.path.basename(raster.srcfp): ('YES', 'BILINEAR'),  # dem
             os.path.basename(raster.browse): ('YES', 'CUBIC'),  # browse
+            os.path.basename(raster.count): ('NO', 'NEAREST'),
+            os.path.basename(raster.mad): ('YES', 'BILINEAR'),
+            os.path.basename(raster.mindate): ('NO', 'NEAREST'),
+            os.path.basename(raster.maxdate): ('NO', 'NEAREST'),
+            os.path.basename(raster.datamask): ('NO', 'NEAREST'),
         }
 
-        tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
-
         ## create rasterproxy MRF file
+        mrf_tifs = [c for c in components + optional_components if c.endswith('dem.tif') and os.path.isfile(c)]
         if args.rasterproxy_prefix:
             logger.info("Creating raster proxy files")
-            rasterproxy_prefix_parts = args.rasterproxy_prefix.split('/')
+            rp = args.rasterproxy_prefix
+            rp = rp.replace('<project>', args.project)
+            rp = rp.replace('<type>', 'mosaics')
+            rp = rp.replace('<version>', f'v{raster.release_version}')
+            rp = rp.replace('<resolution>', raster.res_str)
+            rp = rp.replace('<group>', raster.supertile_id_no_res)
+            rp = rp.replace('<dem_id>', raster.id)
+            rasterproxy_prefix_parts = rp.split('/')
             bucket = rasterproxy_prefix_parts[2]
             bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
             sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
             dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
-            for tif in tifs:
+            for tif in mrf_tifs:
                 suffix = tif[len(raster.tileid):-4]  # eg "_dem"
                 mrf = '{}{}.mrf'.format(raster.tileid, suffix)
                 if not os.path.isfile(mrf):
-                    sourcepath = '{}/{}/{}{}.tif'.format(
-                        sourceprefix,
-                        raster.supertile_id_no_res,
-                        raster.tileid,
-                        suffix
-                    )
-                    datapath = '{}/{}/{}{}.mrfcache'.format(
-                        dataprefix,
-                        raster.supertile_id_no_res,
-                        raster.tileid,
-                        suffix
-                    )
+                    sourcepath = f'{sourceprefix}{suffix}.tif'
+                    datapath = f'{dataprefix}{suffix}.mrfcache'
                     static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
                     cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
                         static_args,
@@ -293,10 +303,25 @@ def build_archive(raster, scratch, args):
                         tif,
                         mrf
                     )
-                    subprocess.call(cmd, shell=True)
+                    rc = subprocess.call(cmd, shell=True)
+                    if rc != 0:
+                        logger.error("Received non-zero return code ({}) from gdal_translate call".format(rc))
+                    if not os.path.isfile(mrf):
+                        logger.error("Raster proxy file was not created")
+                    else:
+                        remove_output = False
+                        if rc != 0:
+                            logger.error("Removing output raster proxy file because non-zero return code was hit: {}".format(mrf))
+                            remove_output = True
+                        elif os.path.getsize(mrf) == 0:
+                            logger.error("Created raster proxy file size is zero, removing: {}".format(mrf))
+                            remove_output = True
+                        if remove_output:
+                            os.remove(mrf)
 
         ## Convert all rasters to COG in place (should no longer be needed)
-        if args.convert_to_cog:
+        tifs = [c for c in components + optional_components if c.endswith('.tif') and os.path.isfile(c)]
+        if not args.skip_cog:
             cog_sem = raster.tileid + '.cogfin'
             if os.path.isfile(cog_sem) and not args.overwrite:
                 logger.info('COG conversion already complete')
@@ -379,17 +404,27 @@ def build_archive(raster, scratch, args):
                             tgt_srs = osr.SpatialReference()
                             tgt_srs.ImportFromEPSG(args.epsg)
 
-                            lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbPolygon)
+                            lyr = ds.CreateLayer(index_lyr, tgt_srs, ogr.wkbMultiPolygon)
 
                             if lyr is not None:
 
-                                for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_BASIC + utils.DEM_ATTRIBUTE_DEFINITION_RELVER:
-                                    if field_def.ftype == ogr.OFTDateTime and ogr_driver_str in ['ESRI Shapefile']:
-                                        ftype = ogr.OFTDate
+                                for field_def in utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE:
+                                    fname = field_def.fname.lower()
+                                    fstype = None
+                                    if field_def.ftype == ogr.OFTDateTime:
+                                        ftype = ogr.OFTString
+                                        fwidth = 28
+                                    elif field_def.ftype == ogr.OFSTBoolean:
+                                        ftype = ogr.OFTInteger
+                                        fstype = field_def.ftype
+                                        fwidth = field_def.fwidth
                                     else:
                                         ftype = field_def.ftype
-                                    field = ogr.FieldDefn(field_def.fname, ftype)
-                                    field.SetWidth(field_def.fwidth)
+                                        fwidth = field_def.fwidth
+                                    field = ogr.FieldDefn(fname, ftype)
+                                    if fstype:
+                                        field.SetSubType(fstype)
+                                    field.SetWidth(fwidth)
                                     field.SetPrecision(field_def.fprecision)
                                     lyr.CreateField(field)
 
@@ -399,19 +434,37 @@ def build_archive(raster, scratch, args):
                                 ## Set fields
                                 attrib_map = {
                                     "DEM_ID": raster.tileid,
-                                    "TILE": raster.supertile_id_no_res,
-                                    "ND_VALUE": raster.ndv,
-                                    "DEM_RES" : (raster.xres + raster.yres) / 2.0,
-                                    "DENSITY": raster.density,
-                                    "NUM_COMP": raster.num_components
+                                    "TILE": raster.tile_id_no_res,
+                                    "SUPERTILE": raster.supertile_id_no_res,
+                                    "GSD": (raster.xres + raster.yres) / 2.0,
+                                    'EPSG': raster.epsg,
+                                    "RELEASEVER": raster.release_version,
+                                    "DATA_PERC": raster.density,
+                                    "NUM_COMP": raster.num_components,
                                 }
-
-                                if raster.release_version:
-                                    attrib_map["REL_VER"] = raster.release_version
 
                                 #### Set fields if populated (will not be populated if metadata file is not found)
                                 if raster.creation_date:
                                     attrib_map["CR_DATE"] = raster.creation_date.strftime("%Y-%m-%d")
+
+                                filurl = args.release_fileurl
+                                pretty_project = utils.PROJECTS[args.project]
+                                filurl = filurl.replace('<project>', pretty_project)
+                                filurl = filurl.replace('<type>', 'strips')
+                                filurl = filurl.replace('<version>', f'v{raster.release_version}')
+                                filurl = filurl.replace('<resolution>', raster.res_str)
+                                filurl = filurl.replace('<group>', raster.supertile_id_no_res)
+                                filurl = filurl.replace('<dem_id>', raster.id)
+                                attrib_map['FILEURL'] = filurl
+
+                                s3url = args.release_s3url
+                                s3url = s3url.replace('<project>', args.project)
+                                s3url = s3url.replace('<type>', 'strips')
+                                s3url = s3url.replace('<version>', raster.release_version)
+                                s3url = s3url.replace('<resolution>', raster.res_str)
+                                s3url = s3url.replace('<group>', raster.supertile_id_no_res)
+                                s3url = s3url.replace('<dem_id>', raster.id)
+                                attrib_map['S3URL'] = s3url
 
                                 ## transform and write geom
                                 src_srs = utils.osr_srs_preserve_axis_order(osr.SpatialReference())
@@ -467,46 +520,63 @@ def build_archive(raster, scratch, args):
                                 ds = None
 
                                 if os.path.isfile(index):
-                                    ## Create archive
-                                    if not args.dryrun:
-                                        #archive = tarfile.open(dstfp,"w:")
-                                        archive = tarfile.open(dstfp,"w:gz")
-                                        if not os.path.isfile(dstfp):
-                                            logger.error("Cannot create archive: {}".format(dstfn))
-
-                                    ## Add components
-                                    for component in components:
-                                        logger.debug("Adding {} to {}".format(component,dstfn))
-                                        k+=1
+                                    archive = None
+                                    remove_output = False
+                                    try:
+                                        ## Create archive
                                         if not args.dryrun:
-                                            archive.add(component)
+                                            archive = tarfile.open(dstfp,"w:gz")
+                                            if not os.path.isfile(dstfp):
+                                                raise RuntimeError("Cannot create archive: {}".format(dstfn))
 
-                                    ## Add optional components
-                                    for component in optional_components:
-                                        if os.path.isfile(component):
-                                            logger.debug("Adding {} to {}".format(component,dstfn))
+                                        ## Add components
+                                        for component in components:
+                                            logger.debug("Adding {} to {}".format(component, dstfn))
                                             k+=1
                                             if not args.dryrun:
                                                 archive.add(component)
 
-                                    ## Add index in subfolder
-                                    os.chdir(scratch)
-                                    for f in glob.glob(index_lyr+".*"):
-                                        arcname = os.path.join("index",f)
-                                        logger.debug("Adding {} to {}".format(f,dstfn))
-                                        k+=1
+                                        ## Add optional components
+                                        for component in optional_components:
+                                            if os.path.isfile(component):
+                                                logger.debug("Adding {} to {}".format(component, dstfn))
+                                                k+=1
+                                                if not args.dryrun:
+                                                    archive.add(component)
+
+                                        ## Add index in subfolder
+                                        os.chdir(scratch)
+                                        for f in glob.glob(index_lyr+".*"):
+                                            arcname = os.path.join("index", f)
+                                            logger.debug("Adding {} to {}".format(f, dstfn))
+                                            k+=1
+                                            if not args.dryrun:
+                                                archive.add(f, arcname=arcname)
+                                            os.remove(f)
+
+                                        logger.info("Added {} items to archive: {}".format(k, dstfn))
+
+                                    except Exception as e:
+                                        traceback.print_exc()
+                                        logger.error("Caught exception during creation of output archive file {}; error message: {}".format(dstfp, e))
                                         if not args.dryrun:
-                                            archive.add(f,arcname=arcname)
-                                        os.remove(f)
+                                            remove_output = True
 
-                                    logger.info("Added {} items to archive: {}".format(k,dstfn))
-
-                                    ## Close archive
-                                    if not args.dryrun:
-                                        try:
-                                            archive.close()
-                                        except Exception as e:
-                                            print(e)
+                                    finally:
+                                        if archive is not None:
+                                            ## Close archive
+                                            try:
+                                                archive.close()
+                                            except Exception as e:
+                                                traceback.print_exc()
+                                                logger.error("Caught exception while trying to close archive file {}; error message: {}".format(dstfp, e))
+                                        if os.path.isfile(dstfp):
+                                            if os.path.getsize(dstfp) == 0:
+                                                logger.error("Output archive file size is zero: {}".format(dstfp))
+                                                remove_output = True
+                                            if remove_output:
+                                                logger.error("Removing output archive file due to error or zero-size: {}".format(dstfp))
+                                                os.remove(dstfp)
 
                             else:
                                 logger.error('Cannot create layer: {}'.format(index_lyr))
@@ -515,7 +585,8 @@ def build_archive(raster, scratch, args):
                     else:
                         logger.error("Cannot remove existing index: {}".format(index))
                 else:
-                    logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(raster.srcfp,existing_components,len(components)))
+                    logger.error("Not enough existing components to make a valid archive: {} ({} found, {} required)".format(
+                        raster.srcfp, existing_components, len(components)))
 
 
 if __name__ == '__main__':

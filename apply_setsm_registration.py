@@ -1,6 +1,12 @@
-import os, string, sys, re, glob, argparse, subprocess, logging
-from osgeo import gdal, gdalconst, ogr, osr
-from lib import dem, utils, taskhandler
+import argparse
+import logging
+import os
+import re
+import subprocess
+import sys
+
+from osgeo import gdal, gdalconst, ogr
+from lib import taskhandler, VERSION, SHORT_VERSION, utils
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -12,52 +18,40 @@ default_format = 'JPEG'
 suffixes = ('ortho', 'matchtag', 'dem')
 formats = ('JPEG', 'GTiff')
 
+submission_script_map = {
+    'pbs': 'pbs_resample.sh',
+    'slurm': 'slurm_resample.sh'
+}
+
+
 def main():
     parser = argparse.ArgumentParser()
     
     #### Set Up Options
     parser.add_argument("src", help="source directory or image")
-    parser.add_argument("--dstdir", help="dstination directory")
+    parser.add_argument("--dstdir", help="destination directory")
     parser.add_argument("-o", "--overwrite", action="store_true", default=False,
-                help="overwrite existing files if present")
-    parser.add_argument("--pbs", action='store_true', default=False,
-                help="submit tasks to PBS")
-    parser.add_argument("--slurm", action='store_true', default=False,
-                help="submit tasks to SLURM")
-    parser.add_argument("--parallel-processes", type=int, default=1,
-                help="number of parallel processes to spawn (default 1)")
-    parser.add_argument("--qsubscript",
-                help="qsub script to use in scheduler submission (PBS default is qsub_resample.sh, SLURM default is slurm_resample.sh)")
+                        help="overwrite existing files if present")
     parser.add_argument("--dryrun", action="store_true", default=False,
-                help="print actions without executing")
+                        help="print actions without executing")
+    parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
+                        help='print version and exit')
+
     pos_arg_keys = ['src']
-    
+    arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun']
+    utils.add_scheduler_options(parser, submission_script_map)
+
     #### Parse Arguments
     args = parser.parse_args()
     scriptpath = os.path.abspath(sys.argv[0])
     src = os.path.abspath(args.src)
-    
+
     #### Validate Required Arguments
     if not os.path.isdir(src) and not os.path.isfile(src):
-        parser.error('src must be avalid directory or file')
+        parser.error('src must be a valid directory or file')
         
     ## Verify qsubscript
-    if args.pbs or args.slurm:
-        if args.qsubscript is None:
-            if args.pbs:
-                qsubpath = os.path.join(os.path.dirname(scriptpath),'qsub_resample.sh')
-            if args.slurm:
-                qsubpath = os.path.join(os.path.dirname(scriptpath),'slurm_resample.sh')
-        else:
-            qsubpath = os.path.abspath(args.qsubscript)
-        if not os.path.isfile(qsubpath):
-            parser.error("qsub script path is not valid: %s" %qsubpath)
-    
-    ## Verify processing options do not conflict
-    if args.pbs and args.slurm:
-        parser.error("Options --pbs and --slurm are mutually exclusive")
-    if (args.pbs or args.slurm) and args.parallel_processes > 1:
-        parser.error("HPC Options (--pbs or --slurm) and --parallel-processes > 1 are mutually exclusive")
+    qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
     
     #### Set up console logging handler
     lso = logging.StreamHandler()
@@ -65,9 +59,10 @@ def main():
     formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
     lso.setFormatter(formatter)
     logger.addHandler(lso)
-    
+
+    logger.info("Current version: %s", VERSION)
+
     #### Get args ready to pass to task handler
-    arg_keys_to_remove = ('qsubscript', 'dryrun', 'pbs', 'slurm', 'parallel_processes')
     arg_str_base = taskhandler.convert_optional_args_to_string(args, pos_arg_keys, arg_keys_to_remove)
         
     task_queue = []
@@ -125,24 +120,15 @@ def main():
     logger.info('Number of incomplete tasks: {}'.format(i))
     if len(task_queue) > 0:
         logger.info("Submitting Tasks")
-        if args.pbs:
+        if args.scheduler:
             try:
-                task_handler = taskhandler.PBSTaskHandler(qsubpath)
+                task_handler = taskhandler.get_scheduler_taskhandler(args.scheduler, qsubpath)
             except RuntimeError as e:
                 logger.error(e)
             else:
                 if not args.dryrun:
                     task_handler.run_tasks(task_queue)
-        
-        elif args.slurm:
-            try:
-                task_handler = taskhandler.SLURMTaskHandler(qsubpath)
-            except RuntimeError as e:
-                logger.error(e)
-            else:
-                if not args.dryrun:
-                    task_handler.run_tasks(task_queue)
-            
+
         elif args.parallel_processes > 1:
             try:
                 task_handler = taskhandler.ParallelTaskHandler(args.parallel_processes)

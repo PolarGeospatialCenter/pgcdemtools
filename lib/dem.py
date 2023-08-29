@@ -18,6 +18,7 @@ import numpy
 from osgeo import gdal, osr, ogr
 
 from lib import utils
+from lib.numpy_read_50cm_scene_rasters import gdalReadAsArraySetsmSceneBand
 
 logger = utils.get_logger()
 utils.setup_gdal_error_handler()
@@ -174,8 +175,10 @@ class SetsmScene(object):
                     setattr(self, p, None)
 
             # Note: this approach will not work for DSP dems being used as proxies for 50cm
-            self.has_lsf = self.filesz_lsf > 0
-            self.has_nonlsf = self.filesz_dem > 0
+            if not hasattr(self,'has_lsf'):
+                self.has_lsf = self.filesz_lsf > 0
+            if not hasattr(self, 'has_nonlsf'):
+                self.has_nonlsf = self.filesz_dem > 0
             self.is_xtrack = bool(self.is_xtrack)
 
         else:
@@ -206,11 +209,41 @@ class SetsmScene(object):
             # set shared attributes
             self.id = self.sceneid
 
-            if not os.path.isfile(self.ortho) \
-            or not os.path.isfile(self.matchtag) \
-            or not os.path.isfile(self.metapath) \
-            or not (os.path.isfile(self.dem) or os.path.isfile(self.lsf_dem)):
+            dem_files = [
+                self.lsf_dem,
+                self.dem,
+                self.dem_edge_masked,
+            ]
+            req_files = [
+                self.ortho,
+                self.matchtag,
+                self.metapath,
+            ]
+            opt_files = [
+                self.ortho2,
+                self.dspinfo,
+            ]
+
+            dem_exists = False
+            for f in dem_files:
+                if os.path.isfile(f):
+                    dem_exists = True
+                    if os.path.getsize(f) == 0:
+                        raise RuntimeError("DEM file is empty: {}".format(f))
+            if not dem_exists:
                 raise RuntimeError("DEM is part of an incomplete set: {}".format(self.sceneid))
+
+            for f in req_files:
+                if os.path.isfile(f):
+                    if os.path.getsize(f) == 0:
+                        raise RuntimeError("DEM file is empty: {}".format(f))
+                else:
+                    raise RuntimeError("DEM is part of an incomplete set: {}".format(self.sceneid))
+
+            for f in opt_files:
+                if os.path.isfile(f):
+                    if os.path.getsize(f) == 0:
+                        raise RuntimeError("DEM file is empty: {}".format(f))
 
             #### parse name
             match = setsm_scene_pattern.match(self.srcfn)
@@ -567,6 +600,8 @@ class SetsmDem(object):
                 self.rmse = -9999
             self._set_density_and_stats_attribs()
             self._set_group_attribs_from_scenes()
+            self.is_xtrack = bool(self.is_xtrack)
+            self.is_lsf = bool(self.is_lsf)
 
         else:
             self.srcfp = filepath
@@ -640,7 +675,7 @@ class SetsmDem(object):
                             self.release_version = groups[k]
                             break
 
-                    self.is_xtrack = 1 if xtrack_sensor_pattern.match(self.sensor1) else 0
+                    self.is_xtrack = True if xtrack_sensor_pattern.match(self.sensor1) else False
                     self.is_dsp = False # Todo modify when dsp strips are a thing
                     self.rmse = -9999 # if present, the metadata file value will overwrite this
                     self.min_elev_value = None
@@ -678,7 +713,7 @@ class SetsmDem(object):
             ctf = osr.CoordinateTransformation(srs, srs_wgs84)
             geom.Transform(ctf)
 
-        return geom;
+        return geom
 
     def get_geocell(self):
         if not self.geocell:
@@ -1714,7 +1749,7 @@ class SetsmTile(object):
 
             self.matchtag = os.path.join(self.srcdir,name_base + '_matchtag.tif')
             if not os.path.isfile(self.matchtag):
-                self.matchtag = os.path.join(self.srcdir, name_base + '_countmt.tif')
+                self.matchtag = os.path.join(self.srcdir, name_base + '_count.tif')
             self.err = os.path.join(self.srcdir,name_base + '_err.tif')
             self.day = os.path.join(self.srcdir,name_base + '_day.tif')
             self.ortho = os.path.join(self.srcdir,name_base + '_ortho.tif')
@@ -1724,6 +1759,7 @@ class SetsmTile(object):
             self.mad = os.path.join(self.srcdir,name_base + '_mad.tif')
             self.mindate = os.path.join(self.srcdir,name_base + '_mindate.tif')
             self.maxdate = os.path.join(self.srcdir,name_base + '_maxdate.tif')
+            self.datamask = os.path.join(self.srcdir,name_base + '_datamask.tif')
 
             self.browse = os.path.join(self.srcdir,name_base + '_dem_browse.tif')
             if not os.path.isfile(self.browse):
@@ -1739,6 +1775,7 @@ class SetsmTile(object):
             if match:
                 groups = match.groupdict()
                 self.tilename = groups['tile']
+                self.res_str = groups['res']
                 self.res = groups['res']
                 # In case release version is in the file name and not the meta.txt
                 self.release_version = groups['relversion'].strip('v') if groups['relversion'] else None
@@ -1762,10 +1799,10 @@ class SetsmTile(object):
                     self.regmetapath = os.path.join(self.srcdir, self.tileid + '_reg.txt')
 
                 if self.scheme:
-                    self.supertile_id = '_'.join([self.scheme,self.tilename,self.res])
+                    self.supertile_id = '_'.join([self.scheme,self.tilename,self.res_str])
                     self.supertile_id_no_res = '_'.join([self.scheme,self.tilename])
                 else:
-                    self.supertile_id = '_'.join([self.tilename,self.res])
+                    self.supertile_id = '_'.join([self.tilename,self.res_str])
                     self.supertile_id_no_res = self.tilename
                 self.tile_id_no_res = '_'.join([self.supertile_id_no_res, self.subtile]) if self.subtile else self.supertile_id_no_res
                 self.density = None
@@ -2045,6 +2082,7 @@ class SetsmTile(object):
         'proj4',
         'regmetapath',
         'res',
+        'res_str',
         'srcdir',
         'srcfn',
         'srcfp',
@@ -2083,6 +2121,7 @@ class SetsmTile(object):
         self.pairname_ids = pairname_ids
         self.acqdate_min = acqdate_min
         self.acqdate_max = acqdate_max
+
 
 class RegInfo(object):
 
@@ -2138,7 +2177,7 @@ def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
     res_y = gtf[5]
     size_x = ds.RasterXSize
     size_y = ds.RasterYSize
-    data = utils.gdalReadAsArraySetsmSceneBand(b)
+    data = gdalReadAsArraySetsmSceneBand(b)
     err = gdal.GetLastErrorNo()
     if err != 0:
         raise RuntimeError("Matchtag dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), raster_fp))
@@ -2146,7 +2185,7 @@ def get_raster_density(raster_fp, geom_area=None, bitmask_fp=None):
         if bitmask_fp:
             ds2 = gdal.Open(bitmask_fp)
             b2 = ds2.GetRasterBand(1)
-            bm_data = utils.gdalReadAsArraySetsmSceneBand(b2)
+            bm_data = gdalReadAsArraySetsmSceneBand(b2)
             err = gdal.GetLastErrorNo()
             if err != 0:
                 raise RuntimeError("Bitmask dataset read error: {}, {}".format(gdal.GetLastErrorMsg(), bitmask_fp))

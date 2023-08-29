@@ -6,6 +6,10 @@ Version `1.2` released 2023-03-10.
 
 #### [Download Latest](https://github.com/PolarGeospatialCenter/pgcdemtools/releases)
 
+## Config
+Scripts that support writing to an output Postgres database (such as index_setsm) have a `--config` argument path to a config file containing database access information. See the example [config](./config.ini.example) for reference. Alternatively, the information in this config file may be sourced from the Postgres standard pair of [~/.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) and [~/.pg_service.conf](https://www.postgresql.org/docs/current/libpq-pgservice.html) files.
+> **Note:** The `~/.pg_service.conf` file does not support definition of an active schema in the config service information. When leveraging a service from the `~/.pg_service.conf` file in a script argument for `pgcdemtools` scripts, always indicate the schema name of the target layer. For example, `"PG:service_name:schema_name.layer_name"`. If the schema name is not provided and `~/.pg_service.conf` is used, the default schema name (usually 'public') will be assumed.
+
 ## Tools
 ### Rename
 rename_setsm_add_version
@@ -63,7 +67,7 @@ find "${DEM_DIR} \
 ```
 
 ## Usage notes
-Some of the tools are designed to be run either in a serial, parallel, or with a PBS scheduler.  If a PBS scheduler is present, the --pbs option can often be used to submit the jobs to PBS.  The qsub* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
+Some of the tools are designed to be run either in a serial, parallel, or with a PBS or SLURM scheduler.  If a scheduler is present, the --scheduler option can be used to submit the jobs to PBS or SLURM.  The pbs_* and slurm_* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
 
 ## Contact
 Claire Porter
