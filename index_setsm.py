@@ -481,16 +481,21 @@ def main():
         #### Write index
         if args.write_json:
             write_to_json(dst, groups, total, args)
-        else:
+        elif not args.dryrun:
             write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
                                                 pairs, total, path_prefix, fld_defs, args)
             if write_result:
                 sys.exit(0)
             else:
                 sys.exit(-1)
+        else:
+            logger.info("Exiting dryrun")
+            sys.exit(0)
 
 
 def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, path_prefix, fld_defs, args):
+
+    ds = None
 
     ## Create dataset if it does not exist
     if ogr_driver_str == 'ESRI Shapefile':
@@ -534,7 +539,10 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
         field_def.fname: (field_def.fname_long if field_def.fname_long else field_def.fname) for field_def in fld_defs
     }
 
-    if ds is not None:
+    if ds is None:
+        logger.info("Cannot open dataset: {}".format(dst_ds))
+        sys.exit(-1)
+    else:
 
         ## Create table if it does not exist
         layer = ds.GetLayerByName(dst_lyr)
@@ -1185,10 +1193,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             sys.exit(-1)
 
         ds = None
-
-    else:
-        logger.info("Cannot open dataset: {}".format(dst_ds))
-        sys.exit(-1)
 
     if args.dryrun:
         logger.info("Done (dryrun)")
