@@ -166,7 +166,7 @@ class SetsmScene(object):
                 'image_1': 'scene1',
                 'image_2': 'scene2',
                 'image_1_gen_time': 'gentime1',
-                'image_2_gem_time': 'gentime2',
+                'image_2_gen_time': 'gentime2',
             }
             if 'prod_version' not in md:
                 self.prod_version = 1
