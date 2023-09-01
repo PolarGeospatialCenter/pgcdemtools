@@ -299,6 +299,8 @@ def main():
         #### Set dataset path is SHP or GDB
         elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB", "GPKG"):
             dst_ds = dst_dsp
+            if not os.path.isdir(os.path.dirname(dst_dsp)):
+                parser.error('--dst must be within an existing directory')
 
         else:
             logger.error("Format {} is not supported".format(ogr_driver_str))
