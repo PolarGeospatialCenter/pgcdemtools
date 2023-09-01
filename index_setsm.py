@@ -1031,6 +1031,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     'DATA_PERC': 'DENSITY',
                                     'ACQDATE1': 'AVGACQTM1',
                                     'ACQDATE2': 'AVGACQTM2',
+                                    'SETSM_VER': 'ALGM_VER',
                                 }
 
                                 if args.mode == 'tile':
