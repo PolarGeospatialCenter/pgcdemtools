@@ -60,10 +60,10 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (?P<catid1>[A-Z0-9]{16})_
                                     (?P<catid2>[A-Z0-9]{16})
                                     )_
-                                    (?P<tile1>R\d+C\d+)?-?
-                                    (?P<order1>\d{12}_\d{2}_P\d{3})_
-                                    (?P<tile2>R\d+C\d+)?-?
-                                    (?P<order2>\d{12}_\d{2}_P\d{3})_
+                                    (?P<tile1>R\d+C\d+)?-?           # belongs to lexically lowest catid
+                                    (?P<order1>\d{12}_\d{2}_P\d{3})_ # belongs to lexically lowest catid
+                                    (?P<tile2>R\d+C\d+)?-?           # belongs to lexically highest catid
+                                    (?P<order2>\d{12}_\d{2}_P\d{3})_ # belongs to lexically highest catid
                                     (?P<res>[0128])
                                     (-(?P<subtile>\d{2}))?
                                     _meta\.txt\Z""", re.I | re.X)
