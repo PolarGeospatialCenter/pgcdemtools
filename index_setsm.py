@@ -197,7 +197,7 @@ def main():
         parser.error("--project option is required if when mode=tile")
 
     if args.mode == 'strip' and args.use_release_fields and not args.project:
-        parser.error("--project option is required if when mode=strip wit--use-release-fields")
+        parser.error("--project option is required when mode=strip using --use-release-fields")
 
     if args.mode == 'scene' and args.use_release_fields:
         parser.error("--use-release-fields option is not applicable to mode=scene")
