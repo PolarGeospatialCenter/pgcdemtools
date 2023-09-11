@@ -600,10 +600,12 @@ class TestIndexerStrips(unittest.TestCase):
         self.strip_json_dir = os.path.join(testdata_dir, 'setsm_strip_json')
         self.strip_mixedver_dir = os.path.join(testdata_dir, 'setsm_strip_mixedver')
         self.strip_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_mdf')
+        self.strip_txt_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_txt_mdf')
         self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
         self.striprenamed_dir = os.path.join(testdata_dir, 'setsm_strip_renamed')
         self.output_dir = os.path.join(testdata_dir, 'output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
+        self.test_str2 = os.path.join(self.output_dir, 'test2.shp')
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
 
         self.strip_count = 6
@@ -695,6 +697,62 @@ class TestIndexerStrips(unittest.TestCase):
                 self.assertIn(msg, so.decode())
             except AssertionError as e:
                 self.assertIn(msg, se.decode())
+
+    # @unittest.skip("test")
+    def testStripFromTxtAndMdf(self):
+
+        ## Test fields and values are identical (except location) when index is build from txt or
+        ##   mdf, both with and without if --release-fields option
+        opt_sets = [
+            '',
+            '--use-release-fields --lowercase-fieldnames --project rema --overwrite',
+        ]
+        for opts in opt_sets:
+            test_param_list = (
+                # input, output
+                (os.path.join(self.strip_txt_mdf_dir, 'txt'), self.test_str),
+                (os.path.join(self.strip_txt_mdf_dir, 'mdf'), self.test_str2),
+            )
+            for i, o in test_param_list:
+                cmd = 'python {}/index_setsm.py --np --mode strip {} {} --skip-region-lookup {}'.format(
+                    root_dir,
+                    i,
+                    o,
+                    opts
+                )
+                p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                (so, se) = p.communicate()
+                # print(cmd)
+                # print(se)
+                # print(so)
+
+            # Open each fc and compare field names and values
+            self.assertTrue(os.path.isfile(self.test_str))
+            ds1 = ogr.Open(self.test_str, 0)
+            lyr1 = ds1.GetLayer()
+            self.assertTrue(os.path.isfile(self.test_str2))
+            ds2 = ogr.Open(self.test_str2, 0)
+            lyr2 = ds2.GetLayer()
+            for lyr in (lyr1, lyr2):
+                self.assertIsNotNone(lyr)
+                self.assertEqual(lyr.GetFeatureCount(),1)
+
+            ldefn = lyr1.GetLayerDefn()
+            flds = [ldefn.GetFieldDefn(n).name for n in range(ldefn.GetFieldCount())]
+            vals = dict()
+            i=0
+            for feat in lyr1:
+                i+=1
+                vals[i] = [feat.GetField(j) for j in flds if j.lower() != 'location']
+
+            ldefn2 = lyr1.GetLayerDefn()
+            flds2 = [ldefn2.GetFieldDefn(n).name for n in range(ldefn2.GetFieldCount())]
+            self.assertEqual(flds, flds2)
+            i=0
+            for feat in lyr2:
+                i+=1
+                vals2 = [feat.GetField(j) for j in flds if j.lower() != 'location']
+                self.assertEqual(vals[1],vals2)
 
     # @unittest.skip("test")
     def testStripJson(self):

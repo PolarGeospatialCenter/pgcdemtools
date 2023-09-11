@@ -860,7 +860,6 @@ class SetsmDem(object):
 
         ## If metafile exists
         if self.metapath:
-            ## TODO make an attribute of the metad dict without the scenes
             metad = self._parse_metadata_file()
 
             self.scenes = metad['scene_list']
@@ -981,7 +980,6 @@ class SetsmDem(object):
 
         ## If mdf exists without metafile
         elif os.path.isfile(self.mdf):
-            ## TODO make an attribute of the metad dict without the scenes
             metad = self._read_mdf_file()
 
             ## populate attribs
@@ -1069,6 +1067,30 @@ class SetsmDem(object):
                 pass
             else:
                 self.reginfo_list.append(RegInfo(dx, dy, dz, num_gcps, mean_resid_z, None, name))
+
+            ## rebuild scene dem alignment dictionary
+            alignment_keys = [
+                'rmse',
+                'dz',
+                'dx',
+                'dy',
+                'dz_err',
+                'dx_err',
+                'dy_err',
+            ]
+
+            self.alignment_dct = dict()
+            scene_num = 1
+            while scene_num:
+                skey = f'COMPONENT_{scene_num}_sceneDemId'
+                if skey in metad:
+                    akeys = [f'COMPONENT_{scene_num}_MOSAIC_ALIGNMENT_{ak}' for ak in alignment_keys]
+                    self.alignment_dct[metad[skey]] = [metad[akey] for akey in akeys if akey in metad]
+                    scene_num += 1
+                else:
+                    scene_num = None
+
+            self._set_rmse_attrib()
 
         else:
             raise RuntimeError("Neither meta.txt nor mdf.txt file exists for DEM: {}".format(self.srcfp))
