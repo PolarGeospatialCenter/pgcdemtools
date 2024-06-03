@@ -22,8 +22,8 @@ components = (
 )
 
 submission_script_map = {
-    'pbs': 'pbs_divide.sh',
-    'slurm': 'slurm_divide.sh'
+    'pbs': 'pbs_resample.sh',
+    'slurm': 'slurm_resample.sh'
 }
 
 

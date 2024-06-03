@@ -1,12 +1,18 @@
 #!/bin/bash
 
-# number of nodes
+## number of nodes
 #SBATCH -N 1
-
-# number of cpus per task
-#SBATCH -c 8
-
-# job log path
+## number of cpus per task
+#SBATCH -c 1
+## walltime
+#SBATCH --time 10:00:00
+## memory per job
+#SBATCH --mem 4gb
+## licenses (per filesystem limit)
+#SBATCH --licenses vida:200
+## gres (per node bandwidth limit)
+#SBATCH --gres bandwidth:1000
+## job log path
 #SBATCH -o %x.%j.out
 
 echo ________________________________________
