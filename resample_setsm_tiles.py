@@ -370,7 +370,7 @@ def merge_rasters(inputps, output, component, args):
                 '-co compress=lzw -co predictor={}'.format(predictor)
 
     cos = cos_cog if args.output_cogs else cos_gtiff
-    cmd = 'gdalwarp -q -ovr NONE {} "{}" "{}"'.format(
+    cmd = 'gdalwarp -wo NUM_THREADS=ALL_CPUS -q -ovr NONE {} "{}" "{}"'.format(
         cos, vrt, output
     )
 
@@ -409,7 +409,7 @@ def process_raster(inputp, output, component, args):
                         '-co compress=lzw -co predictor={}'.format(predictor)
 
             cos = cos_cog if args.output_cogs else cos_gtiff
-            cmd = 'gdalwarp -q -ovr NONE {5} -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
+            cmd = 'gdalwarp -wo NUM_THREADS=ALL_CPUS -q -ovr NONE {5} -tap -r {3} -te {4} -tr {0} {0}  "{1}" "{2}"'.format(
                 args.tgt_resolution, inputp, output, resampling_method, co_extent, cos
             )
             logger.debug(cmd)
@@ -430,7 +430,7 @@ def process_raster(inputp, output, component, args):
 
                 if args.output_cogs:
                     # Convert gdal_calc.py GTiff output to COG format
-                    cmd = 'gdalwarp -q -ovr NONE -overwrite {2} "{0}" "{1}"'.format(
+                    cmd = 'gdalwarp -wo NUM_THREADS=ALL_CPUS -q -ovr NONE -overwrite {2} "{0}" "{1}"'.format(
                         output_tmp, output, cos_cog
                     )
                     logger.debug(cmd)
