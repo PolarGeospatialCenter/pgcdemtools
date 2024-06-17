@@ -638,6 +638,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         ## Set attributes
                         ## Fields for scene DEM
                         if args.mode == 'scene':
+                            logger.debug(f"Processing scene: {record.sceneid} - mode {dsp_mode}")
 
                             attrib_map = {
                                 'SCENEDEMID': record.dsp_sceneid if (dsp_mode == 'orig') else record.sceneid,
@@ -782,6 +783,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Fields for strip DEM
                         if args.mode == 'strip':
+                            logger.debug(f"Processing strip: {record.stripid}")
                             attrib_map = {
                                 'DEM_ID': record.stripid,
                                 'STRIPDEMID': record.stripdemid,
@@ -918,6 +920,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Fields for tile DEM
                         if args.mode == 'tile':
+                            logger.debug(f"Processing tile: {record.tileid}")
                             attrib_map = {
                                 'DEM_ID': record.tileid,
                                 'TILE': record.tile_id_no_res,
