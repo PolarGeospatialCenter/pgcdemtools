@@ -174,12 +174,11 @@ class SetsmScene(object):
                 if p not in md:
                     setattr(self, p, None)
 
-            # Note: this approach will not work for DSP dems being used as proxies for 50cm
+            # Note: this approach will not work for DSP dems
             if not hasattr(self,'has_lsf'):
                 self.has_lsf = self.filesz_lsf > 0
             if not hasattr(self, 'has_nonlsf'):
                 self.has_nonlsf = self.filesz_dem > 0
-            self.is_xtrack = bool(self.is_xtrack)
 
         else:
             self.srcfp = metapath
@@ -514,6 +513,24 @@ class SetsmScene(object):
         ## Loop over dict, adding attributes to scene object
         for k in md:
             setattr(self, k, md[k])
+
+        ## Repair key attributes if missing
+        if not hasattr(self, 'stripdemid') and hasattr(self, 'stripid'):
+            self.stripdemid = self.stripid
+        ## All these attributes were added together in Nov 2020
+        if not hasattr(self, 'is_xtrack'):
+            self.is_xtrack = True if xtrack_sensor_pattern.match(self.sensor1) else False
+        if not hasattr(self, 'is_dsp'):
+            self.is_dsp = False
+            self.ortho2 = os.path.join(self.srcdir, self.sceneid + "_ortho2.tif")
+            self.filesz_or2 = 0
+            self.filesz_attrib_map = {
+                'filesz_dem': self.dem,
+                'filesz_lsf': self.lsf_dem,
+                'filesz_mt': self.matchtag,
+                'filesz_or': self.ortho,
+                'filesz_or2': self.ortho2,
+            }
 
         ## Verify presence of key attributes
         for k in self.key_attribs:

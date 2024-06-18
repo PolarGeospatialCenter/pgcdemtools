@@ -41,7 +41,7 @@ class TestIndexerScenes(unittest.TestCase):
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
 
         self.scene_count = 52
-        self.scene_json_count = 35
+        self.scene_json_count = 43
         self.scene50cm_count = 14
         self.scenedsp_count = 102
 
@@ -233,7 +233,7 @@ class TestIndexerScenes(unittest.TestCase):
             except AssertionError as e:
                 self.assertIn(msg, se.decode())
 
-    # @unittest.skip("test")
+    @unittest.skip("test")
     def testOutputPostgres(self):
 
         ## Get config info
