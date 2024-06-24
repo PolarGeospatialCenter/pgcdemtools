@@ -241,6 +241,7 @@ def main():
             logger.warning('--epsg and --dsp-original-res will be ignored with the --write-json option')
 
     logger.info("Current repo version: %s", VERSION)
+    rc = 0
 
     if args.write_json:
         logger.info("Forcing indexer to use absolute paths for writing JSONs")
@@ -294,7 +295,7 @@ def main():
 
             else:
                 logger.error(f"--config file or ~/.pg_service.conf must contain credentials for service name '{section}'")
-                sys.exit(-1)
+                rc = -1
 
         #### Set dataset path is SHP or GDB
         elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB", "GPKG"):
@@ -304,7 +305,7 @@ def main():
 
         else:
             logger.error("Format {} is not supported".format(ogr_driver_str))
-            sys.exit(-1)
+            rc = -1
 
         ## Get pairname-region dict
         if args.skip_region_lookup or args.mode == 'tile':
@@ -371,7 +372,7 @@ def main():
                         ogrDriver.DeleteDataSource(dst_ds)
                 elif not args.append:
                     logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
-                    sys.exit(-1)
+                    rc = -1
 
         elif ogr_driver_str in ('FileGDB', 'OpenFileGDB', 'GPKG'):
             if os.path.isdir(dst_ds):
@@ -387,7 +388,7 @@ def main():
                                 break
                             elif not args.append:
                                 logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
-                                sys.exit(-1)
+                                rc = -1
                     ds = None
 
         ## Postgres check - do not overwrite
@@ -404,12 +405,12 @@ def main():
                             break
                         elif not args.append:
                             logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit(-1)
+                            rc = -1
                 ds = None
 
         else:
             logger.error("Format {} not handled in dst table existence check".format(ogr_driver_str))
-            sys.exit(-1)
+            rc = -1
 
 
     #### ID records
@@ -484,20 +485,18 @@ def main():
         if args.write_json:
             write_to_json(dst, groups, total, args)
         elif not args.dryrun:
-            write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
+            rc = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
                                                 pairs, total, path_prefix, fld_defs, args)
-            if write_result:
-                sys.exit(0)
-            else:
-                sys.exit(-1)
         else:
             logger.info("Exiting dryrun")
-            sys.exit(0)
+
+    sys.exit(rc)
 
 
 def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, path_prefix, fld_defs, args):
 
     ds = None
+    rc = 0
 
     ## Create dataset if it does not exist
     if ogr_driver_str == 'ESRI Shapefile':
@@ -543,7 +542,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     if ds is None:
         logger.info("Cannot open dataset: {}".format(dst_ds))
-        sys.exit(-1)
+        rc = -1
     else:
 
         ## Create table if it does not exist
@@ -1028,6 +1027,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         mp_geom = ogr.ForceToMultiPolygon(temp_geom)
                                         feat_geom = mp_geom
 
+                            del src_srs  # clean up memory
+
                             ## Convert fields for tile and strip DEM to release format
                             if args.use_release_fields:
                                 tile_to_general_attrib_name = {
@@ -1170,7 +1171,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
             if len(recordids) == 0 and not args.dryrun:
                 logger.error("No valid records found")
-                sys.exit(-1)
+                rc = -1
 
             # Check contents of layer for all records
             if args.check and not args.dryrun:
@@ -1191,20 +1192,21 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                     logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
 
                 if err_cnt > 0:
-                    sys.exit(-1)
+                    rc = -1
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
-            ds = None
-            sys.exit(-1)
+            rc = -1
 
         ds = None
+        del tgt_srs  # clean up memory
 
     if args.dryrun:
         logger.info("Done (dryrun)")
     else:
         logger.info("Done")
-    sys.exit(0)
+
+    return rc
 
 
 def convert_value(fld, val):
