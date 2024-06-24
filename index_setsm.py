@@ -412,83 +412,83 @@ def main():
             logger.error("Format {} not handled in dst table existence check".format(ogr_driver_str))
             rc = -1
 
+    if rc == 0:
+        #### ID records
+        dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
+        if args.mode == 'tile' and args.use_release_fields:
+            fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+        if args.mode == 'strip' and args.use_release_fields:
+            fld_defs_base = utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+        if args.mode == 'strip' and args.search_masked:
+            suffix = mask_strip_suffixes + tuple([suffix])
+        # fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base - DEPRECATED
+        fld_defs = fld_defs_base
+        src_fps = []
+        records = []
+        logger.info('Source: {}'.format(src))
+        logger.info('Identifying DEMs')
 
-    #### ID records
-    dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
-    if args.mode == 'tile' and args.use_release_fields:
-        fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
-    if args.mode == 'strip' and args.use_release_fields:
-        fld_defs_base = utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE
-    if args.mode == 'strip' and args.search_masked:
-        suffix = mask_strip_suffixes + tuple([suffix])
-    # fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base - DEPRECATED
-    fld_defs = fld_defs_base
-    src_fps = []
-    records = []
-    logger.info('Source: {}'.format(src))
-    logger.info('Identifying DEMs')
-
-    if os.path.isfile(src):
-        logger.info(src)
-        src_fps.append(src)
-    else:
-        for root, dirs, files in walk.walk(src, maxdepth=args.maxdepth):
-            for f in files:
-                if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
-                    logger.debug(os.path.join(root,f))
-                    src_fps.append(os.path.join(root,f))
-
-    total = len(src_fps)
-    i=0
-    for src_fp in src_fps:
-        i+=1
-        if not args.np:
-            utils.progress(i, total, "DEMs identified")
-        if args.read_json:
-            temp_records = read_json(os.path.join(src_fp),args.mode)
-            records.extend(temp_records)
+        if os.path.isfile(src):
+            logger.info(src)
+            src_fps.append(src)
         else:
-            record = None
-            try:
-                record = dem_class(src_fp)
-                record.get_dem_info()
-            except Exception as e:
-                logger.error(e)
-                if record is not None and hasattr(record, 'srcfp'):
-                    logger.error("Error encountered on DEM record: {}".format(record.srcfp))
+            for root, dirs, files in walk.walk(src, maxdepth=args.maxdepth):
+                for f in files:
+                    if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
+                        logger.debug(os.path.join(root,f))
+                        src_fps.append(os.path.join(root,f))
+
+        total = len(src_fps)
+        i=0
+        for src_fp in src_fps:
+            i+=1
+            if not args.np:
+                utils.progress(i, total, "DEMs identified")
+            if args.read_json:
+                temp_records = read_json(os.path.join(src_fp),args.mode)
+                records.extend(temp_records)
             else:
-                ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
-                if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
-                        and args.dsp_record_mode in ['orig', 'both']:
-                    logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
+                record = None
+                try:
+                    record = dem_class(src_fp)
+                    record.get_dem_info()
+                except Exception as e:
+                    logger.error(e)
+                    if record is not None and hasattr(record, 'srcfp'):
+                        logger.error("Error encountered on DEM record: {}".format(record.srcfp))
                 else:
-                    records.append(record)
-    if not args.np:
-        print('')
+                    ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
+                    if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
+                            and args.dsp_record_mode in ['orig', 'both']:
+                        logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
+                    else:
+                        records.append(record)
+        if not args.np:
+            print('')
 
-    total = len(records)
+        total = len(records)
 
-    if total == 0:
-        logger.info("No valid records found")
-    else:
-        logger.info("{} records found".format(total))
-        ## Group into strips or tiles for json writing
-        groups = {}
-        for record in records:
-            groupid = getattr(record, groupid_fld)
-            if groupid in groups:
-                groups[groupid].append(record)
-            else:
-                groups[groupid] = [record]
-
-        #### Write index
-        if args.write_json:
-            write_to_json(dst, groups, total, args)
-        elif not args.dryrun:
-            rc = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
-                                                pairs, total, path_prefix, fld_defs, args)
+        if total == 0:
+            logger.info("No valid records found")
         else:
-            logger.info("Exiting dryrun")
+            logger.info("{} records found".format(total))
+            ## Group into strips or tiles for json writing
+            groups = {}
+            for record in records:
+                groupid = getattr(record, groupid_fld)
+                if groupid in groups:
+                    groups[groupid].append(record)
+                else:
+                    groups[groupid] = [record]
+
+            #### Write index
+            if args.write_json:
+                write_to_json(dst, groups, total, args)
+            elif not args.dryrun:
+                rc = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
+                                                    pairs, total, path_prefix, fld_defs, args)
+            else:
+                logger.info("Exiting dryrun")
 
     sys.exit(rc)
 
