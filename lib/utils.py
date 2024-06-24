@@ -823,10 +823,9 @@ def getWrappedGeometry(src_geom):
 
             # Add the points to the ring
             for pt in ring_points:
-                ring.AddPoint(pt[0], pt[1])
-
+                ring.AddPoint_2D(pt[0], pt[1])
             # Repeat the first point to close the ring
-            ring.AddPoint(ring_points[0][0], ring_points[0][1])
+            ring.AddPoint_2D(ring_points[0][0], ring_points[0][1])
 
             # Add the ring to the polygon and the polygon to the geometry
             poly.AddGeometry(ring)
