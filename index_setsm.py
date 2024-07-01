@@ -241,6 +241,7 @@ def main():
             logger.warning('--epsg and --dsp-original-res will be ignored with the --write-json option')
 
     logger.info("Current repo version: %s", VERSION)
+    rc = 0
 
     if args.write_json:
         logger.info("Forcing indexer to use absolute paths for writing JSONs")
@@ -294,7 +295,7 @@ def main():
 
             else:
                 logger.error(f"--config file or ~/.pg_service.conf must contain credentials for service name '{section}'")
-                sys.exit(-1)
+                rc = -1
 
         #### Set dataset path is SHP or GDB
         elif ogr_driver_str in ("ESRI Shapefile", "FileGDB", "OpenFileGDB", "GPKG"):
@@ -304,7 +305,7 @@ def main():
 
         else:
             logger.error("Format {} is not supported".format(ogr_driver_str))
-            sys.exit(-1)
+            rc = -1
 
         ## Get pairname-region dict
         if args.skip_region_lookup or args.mode == 'tile':
@@ -371,7 +372,7 @@ def main():
                         ogrDriver.DeleteDataSource(dst_ds)
                 elif not args.append:
                     logger.error("Dst shapefile exists.  Use the --overwrite or --append options.")
-                    sys.exit(-1)
+                    rc = -1
 
         elif ogr_driver_str in ('FileGDB', 'OpenFileGDB', 'GPKG'):
             if os.path.isdir(dst_ds):
@@ -387,7 +388,7 @@ def main():
                                 break
                             elif not args.append:
                                 logger.error("Dst GDB layer exists.  Use the --overwrite or --append options.")
-                                sys.exit(-1)
+                                rc = -1
                     ds = None
 
         ## Postgres check - do not overwrite
@@ -404,100 +405,98 @@ def main():
                             break
                         elif not args.append:
                             logger.error("Dst DB layer exists.  Use the --overwrite or --append options.")
-                            sys.exit(-1)
+                            rc = -1
                 ds = None
 
         else:
             logger.error("Format {} not handled in dst table existence check".format(ogr_driver_str))
-            sys.exit(-1)
+            rc = -1
 
+    if rc == 0:
+        #### ID records
+        dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
+        if args.mode == 'tile' and args.use_release_fields:
+            fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+        if args.mode == 'strip' and args.use_release_fields:
+            fld_defs_base = utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE
+        if args.mode == 'strip' and args.search_masked:
+            suffix = mask_strip_suffixes + tuple([suffix])
+        # fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base - DEPRECATED
+        fld_defs = fld_defs_base
+        src_fps = []
+        records = []
+        logger.info('Source: {}'.format(src))
+        logger.info('Identifying DEMs')
 
-    #### ID records
-    dem_class, suffix, groupid_fld, fld_defs_base, reg_fld_defs = MODES[args.mode]
-    if args.mode == 'tile' and args.use_release_fields:
-        fld_defs_base = utils.TILE_DEM_ATTRIBUTE_DEFINITIONS_RELEASE
-    if args.mode == 'strip' and args.use_release_fields:
-        fld_defs_base = utils.DEM_ATTRIBUTE_DEFINITIONS_RELEASE
-    if args.mode == 'strip' and args.search_masked:
-        suffix = mask_strip_suffixes + tuple([suffix])
-    # fld_defs = fld_defs_base + reg_fld_defs if args.include_registration else fld_defs_base - DEPRECATED
-    fld_defs = fld_defs_base
-    src_fps = []
-    records = []
-    logger.info('Source: {}'.format(src))
-    logger.info('Identifying DEMs')
-
-    if os.path.isfile(src):
-        logger.info(src)
-        src_fps.append(src)
-    else:
-        for root, dirs, files in walk.walk(src, maxdepth=args.maxdepth):
-            for f in files:
-                if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
-                    logger.debug(os.path.join(root,f))
-                    src_fps.append(os.path.join(root,f))
-
-    total = len(src_fps)
-    i=0
-    for src_fp in src_fps:
-        i+=1
-        if not args.np:
-            utils.progress(i, total, "DEMs identified")
-        if args.read_json:
-            temp_records = read_json(os.path.join(src_fp),args.mode)
-            records.extend(temp_records)
+        if os.path.isfile(src):
+            logger.info(src)
+            src_fps.append(src)
         else:
-            record = None
-            try:
-                record = dem_class(src_fp)
-                record.get_dem_info()
-            except Exception as e:
-                logger.error(e)
-                if record is not None and hasattr(record, 'srcfp'):
-                    logger.error("Error encountered on DEM record: {}".format(record.srcfp))
+            for root, dirs, files in walk.walk(src, maxdepth=args.maxdepth):
+                for f in files:
+                    if (f.endswith('.json') and args.read_json) or (f.endswith(suffix) and not args.read_json):
+                        logger.debug(os.path.join(root,f))
+                        src_fps.append(os.path.join(root,f))
+
+        total = len(src_fps)
+        i=0
+        for src_fp in src_fps:
+            i+=1
+            if not args.np:
+                utils.progress(i, total, "DEMs identified")
+            if args.read_json:
+                temp_records = read_json(os.path.join(src_fp),args.mode)
+                records.extend(temp_records)
             else:
-                ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
-                if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
-                        and args.dsp_record_mode in ['orig', 'both']:
-                    logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
+                record = None
+                try:
+                    record = dem_class(src_fp)
+                    record.get_dem_info()
+                except Exception as e:
+                    logger.error(e)
+                    if record is not None and hasattr(record, 'srcfp'):
+                        logger.error("Error encountered on DEM record: {}".format(record.srcfp))
                 else:
-                    records.append(record)
-    if not args.np:
-        print('')
+                    ## Check if DEM is a DSP DEM, dsp-record mode includes 'orig', and the original DEM data is unavailable
+                    if args.mode == 'scene' and record.is_dsp and not os.path.isfile(record.dspinfo) \
+                            and args.dsp_record_mode in ['orig', 'both']:
+                        logger.error("DEM {} has no Dsp downsample info file: {}, skipping".format(record.id,record.dspinfo))
+                    else:
+                        records.append(record)
+        if not args.np:
+            print('')
 
-    total = len(records)
+        total = len(records)
 
-    if total == 0:
-        logger.info("No valid records found")
-    else:
-        logger.info("{} records found".format(total))
-        ## Group into strips or tiles for json writing
-        groups = {}
-        for record in records:
-            groupid = getattr(record, groupid_fld)
-            if groupid in groups:
-                groups[groupid].append(record)
-            else:
-                groups[groupid] = [record]
-
-        #### Write index
-        if args.write_json:
-            write_to_json(dst, groups, total, args)
-        elif not args.dryrun:
-            write_result = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
-                                                pairs, total, path_prefix, fld_defs, args)
-            if write_result:
-                sys.exit(0)
-            else:
-                sys.exit(-1)
+        if total == 0:
+            logger.info("No valid records found")
         else:
-            logger.info("Exiting dryrun")
-            sys.exit(0)
+            logger.info("{} records found".format(total))
+            ## Group into strips or tiles for json writing
+            groups = {}
+            for record in records:
+                groupid = getattr(record, groupid_fld)
+                if groupid in groups:
+                    groups[groupid].append(record)
+                else:
+                    groups[groupid] = [record]
+
+            #### Write index
+            if args.write_json:
+                write_to_json(dst, groups, total, args)
+            elif not args.dryrun:
+                rc = write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups,
+                                                    pairs, total, path_prefix, fld_defs, args)
+            else:
+                logger.info("Exiting dryrun")
+
+    sys.exit(rc)
 
 
 def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pairs, total, path_prefix, fld_defs, args):
 
     ds = None
+    rc = 0
 
     ## Create dataset if it does not exist
     if ogr_driver_str == 'ESRI Shapefile':
@@ -543,7 +542,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
     if ds is None:
         logger.info("Cannot open dataset: {}".format(dst_ds))
-        sys.exit(-1)
+        rc = -1
     else:
 
         ## Create table if it does not exist
@@ -638,6 +637,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                         ## Set attributes
                         ## Fields for scene DEM
                         if args.mode == 'scene':
+                            logger.debug(f"Processing scene: {record.sceneid} - mode {dsp_mode}")
 
                             attrib_map = {
                                 'SCENEDEMID': record.dsp_sceneid if (dsp_mode == 'orig') else record.sceneid,
@@ -782,6 +782,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Fields for strip DEM
                         if args.mode == 'strip':
+                            logger.debug(f"Processing strip: {record.stripid}")
                             attrib_map = {
                                 'DEM_ID': record.stripid,
                                 'STRIPDEMID': record.stripdemid,
@@ -918,6 +919,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
                         ## Fields for tile DEM
                         if args.mode == 'tile':
+                            logger.debug(f"Processing tile: {record.tileid}")
                             attrib_map = {
                                 'DEM_ID': record.tileid,
                                 'TILE': record.tile_id_no_res,
@@ -1025,6 +1027,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         mp_geom = ogr.ForceToMultiPolygon(temp_geom)
                                         feat_geom = mp_geom
 
+                            del src_srs  # clean up memory
+
                             ## Convert fields for tile and strip DEM to release format
                             if args.use_release_fields:
                                 tile_to_general_attrib_name = {
@@ -1033,6 +1037,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                     'DATA_PERC': 'DENSITY',
                                     'ACQDATE1': 'AVGACQTM1',
                                     'ACQDATE2': 'AVGACQTM2',
+                                    'SETSM_VER': 'ALGM_VER',
                                 }
 
                                 if args.mode == 'tile':
@@ -1166,7 +1171,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
             if len(recordids) == 0 and not args.dryrun:
                 logger.error("No valid records found")
-                sys.exit(-1)
+                rc = -1
 
             # Check contents of layer for all records
             if args.check and not args.dryrun:
@@ -1187,20 +1192,21 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                     logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
 
                 if err_cnt > 0:
-                    sys.exit(-1)
+                    rc = -1
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
-            ds = None
-            sys.exit(-1)
+            rc = -1
 
         ds = None
+        del tgt_srs  # clean up memory
 
     if args.dryrun:
         logger.info("Done (dryrun)")
     else:
         logger.info("Done")
-    sys.exit(0)
+
+    return rc
 
 
 def convert_value(fld, val):

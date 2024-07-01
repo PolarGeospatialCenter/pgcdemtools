@@ -69,9 +69,21 @@ find "${DEM_DIR} \
 ## Usage notes
 Some of the tools are designed to be run either in a serial, parallel, or with a PBS or SLURM scheduler.  If a scheduler is present, the --scheduler option can be used to submit the jobs to PBS or SLURM.  The pbs_* and slurm_* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
 
+
+## Running Tests
+Most unit tests and functional tests for pgcdemtools are written using python's unittest library. They use licensed commercial data that cannot be distributed freely but is available to project contributors.
+
+On Linux systems:
+```sh
+# first time only
+ln -s <test_data_location>/tests/testdata tests/
+
+# run the tests
+python tests/func_test_index.pr 
+python tests/func_test_package.py
+etc... 
+```
+
 ## Contact
-Claire Porter
-
-[Polar Geospatial Center](//www.pgc.umn.edu)
-
-Email: <porte254@umn.edu>
+To report any questions or issues, please open a github issue or contact the Polar Geospatial Center: 
+pgc-support@umn.edu
