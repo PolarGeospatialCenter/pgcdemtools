@@ -332,52 +332,53 @@ def build_archive(raster, scratch, args):
                     raster.write_readme_file()
 
             ## create rasterproxy MRF file
-            mrf_tifs = [c for c in components if c[0].endswith(('dem.tif', 'bitmask.tif'))]
-            if args.rasterproxy_prefix:
-                logger.info("Creating raster proxy files")
-                s3url = args.rasterproxy_prefix
-                s3url = s3url.replace('<project>', args.project)
-                s3url = s3url.replace('<type>', 'strips')
-                s3url = s3url.replace('<version>', raster.release_version)
-                s3url = s3url.replace('<resolution>', raster.res_str)
-                s3url = s3url.replace('<group>', raster.geocell)
-                s3url = s3url.replace('<dem_id>', raster.id)
-                rasterproxy_prefix_parts = s3url.split('/')
-                bucket = rasterproxy_prefix_parts[2]
-                bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
-                sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
-                dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
-                for tif, _, _ in mrf_tifs:
-                    suffix = tif[len(raster.stripid):-4]  # eg "_dem"
-                    mrf = '{}{}.mrf'.format(raster.stripid, suffix)
-                    if not os.path.isfile(mrf):
-                        sourcepath = f'{sourceprefix}{suffix}.tif'
-                        datapath = f'{dataprefix}{suffix}.mrfcache'
-                        static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
-                        cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
-                            static_args,
-                            datapath,
-                            sourcepath,
-                            tif,
-                            mrf
-                        )
-                        rc = subprocess.call(cmd, shell=True)
-                        if rc != 0:
-                            logger.error("Received non-zero return code ({}) from gdal_translate call".format(rc))
+            if args.build_rasterproxies:
+                mrf_tifs = [c for c in components if c[0].endswith(('dem.tif', 'bitmask.tif'))]
+                if args.rasterproxy_prefix:
+                    logger.info("Creating raster proxy files")
+                    s3url = args.rasterproxy_prefix
+                    s3url = s3url.replace('<project>', args.project)
+                    s3url = s3url.replace('<type>', 'strips')
+                    s3url = s3url.replace('<version>', raster.release_version)
+                    s3url = s3url.replace('<resolution>', raster.res_str)
+                    s3url = s3url.replace('<group>', raster.geocell)
+                    s3url = s3url.replace('<dem_id>', raster.id)
+                    rasterproxy_prefix_parts = s3url.split('/')
+                    bucket = rasterproxy_prefix_parts[2]
+                    bpath = '/'.join(rasterproxy_prefix_parts[3:]).strip(r'/')
+                    sourceprefix = '/vsicurl/http://{}.s3.us-west-2.amazonaws.com/{}'.format(bucket, bpath)
+                    dataprefix = 'z:/mrfcache/{}/{}'.format(bucket, bpath)
+                    for tif, _, _ in mrf_tifs:
+                        suffix = tif[len(raster.stripid):-4]  # eg "_dem"
+                        mrf = '{}{}.mrf'.format(raster.stripid, suffix)
                         if not os.path.isfile(mrf):
-                            logger.error("Raster proxy file was not created")
-                        else:
-                            remove_output = False
+                            sourcepath = f'{sourceprefix}{suffix}.tif'
+                            datapath = f'{dataprefix}{suffix}.mrfcache'
+                            static_args = '-q -of MRF -co BLOCKSIZE=512 -co "UNIFORM_SCALE=2" -co COMPRESS=LERC -co NOCOPY=TRUE'
+                            cmd = 'gdal_translate {0} -co INDEXNAME={1} -co DATANAME={1} -co CACHEDSOURCE={2} {3} {4}'.format(
+                                static_args,
+                                datapath,
+                                sourcepath,
+                                tif,
+                                mrf
+                            )
+                            rc = subprocess.call(cmd, shell=True)
                             if rc != 0:
-                                logger.error(
-                                    "Removing output raster proxy file because non-zero return code was hit: {}".format(
-                                        mrf))
-                                remove_output = True
-                            elif os.path.getsize(mrf) == 0:
-                                logger.error("Created raster proxy file size is zero, removing: {}".format(mrf))
-                                remove_output = True
-                            if remove_output:
-                                os.remove(mrf)
+                                logger.error("Received non-zero return code ({}) from gdal_translate call".format(rc))
+                            if not os.path.isfile(mrf):
+                                logger.error("Raster proxy file was not created")
+                            else:
+                                remove_output = False
+                                if rc != 0:
+                                    logger.error(
+                                        "Removing output raster proxy file because non-zero return code was hit: {}".format(
+                                            mrf))
+                                    remove_output = True
+                                elif os.path.getsize(mrf) == 0:
+                                    logger.error("Created raster proxy file size is zero, removing: {}".format(mrf))
+                                    remove_output = True
+                                if remove_output:
+                                    os.remove(mrf)
 
             ## Convert all rasters to COG in place
             tifs = [c for c in components if c[0].endswith('tif')]
