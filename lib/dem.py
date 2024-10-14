@@ -54,7 +54,7 @@ scene_dem_res_lookup = {
 }
 
 #### Strip DEM name pattern
-setsm_scene_pattern = re.compile("""(?P<pairname>
+setsm_scene_pattern = re.compile(r"""(?P<pairname>
                                     (?P<sensor>[A-Z][A-Z\d]{2}\d)_
                                     (?P<timestamp>\d{8})_
                                     (?P<catid1>[A-Z0-9]{16})_
@@ -68,7 +68,7 @@ setsm_scene_pattern = re.compile("""(?P<pairname>
                                     (-(?P<subtile>\d{2}))?
                                     _meta\.txt\Z""", re.I | re.X)
 
-setsm_strip_pattern = re.compile("""((?P<algorithm>SETSM)_
+setsm_strip_pattern = re.compile(r"""((?P<algorithm>SETSM)_
                                     (?P<relversion>s2s\d{3})_
                                     )?
                                     (?P<pairname>
@@ -84,7 +84,7 @@ setsm_strip_pattern = re.compile("""((?P<algorithm>SETSM)_
                                     (?P<suffix>dem(_water-masked|_cloud-masked|_cloud-water-masked|_masked)?
                                     \.(tif|jpg))\Z""", re.I | re.X)
 
-setsm_strip_pattern2 = re.compile("""(?P<pairname>
+setsm_strip_pattern2 = re.compile(r"""(?P<pairname>
                                      (?P<sensor>[A-Z][A-Z\d]{2}\d)_
                                      (?P<timestamp>\d{8})_
                                      (?P<catid1>[A-Z0-9]{16})_
@@ -96,14 +96,14 @@ setsm_strip_pattern2 = re.compile("""(?P<pairname>
                                      (lsf_)?
                                      (?P<suffix>dem\.(tif|jpg))\Z""", re.I | re.X)
 
-asp_strip_pattern = re.compile("""(?P<pairname>
+asp_strip_pattern = re.compile(r"""(?P<pairname>
                                   (?P<sensor>[A-Z]{2}\d{2})_
                                   (?P<timestamp>\d{8})_
                                   (?P<catid1>[A-Z0-9]{16})_
                                   (?P<catid2>[A-Z0-9]{16}))_?
                                   (?P<res>\d+m)?-dem\.(tif|jpg)\Z""", re.I | re.X)
 
-setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
+setsm_tile_pattern = re.compile(r"""((?P<scheme>utm\d{2}[ns])_)?
                                    (?P<tile>\d+_\d+s?)_
                                    ((?P<subtile>\d+_\d+)_)?
                                    (?P<res>(\d+|0\.\d+)c?m)_
@@ -111,7 +111,7 @@ setsm_tile_pattern = re.compile("""((?P<scheme>utm\d{2}[ns])_)?
                                    (reg_)?
                                    dem\.tif\Z""", re.I| re.X)
 
-setsm_pairname_pattern = re.compile("""((?P<algorithm>SETSM)_
+setsm_pairname_pattern = re.compile(r"""((?P<algorithm>SETSM)_
                                        (?P<relversion>s2s\d{3})_
                                        )?
                                        (?P<pairname>
@@ -120,9 +120,9 @@ setsm_pairname_pattern = re.compile("""((?P<algorithm>SETSM)_
                                        (?P<catid1>[A-Z0-9]{16})_
                                        (?P<catid2>[A-Z0-9]{16}))""", re.I | re.X)
 
-xtrack_sensor_pattern = re.compile("[wqg]\d[wqg]\d", re.I)
-s2s_version_pattern = re.compile("Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
-source_image_pattern = re.compile("([\w\-]+?)(_temp)?(\.tif)?$")
+xtrack_sensor_pattern = re.compile(r"[wqg]\d[wqg]\d", re.I)
+s2s_version_pattern = re.compile(r"Strip Metadata( \(v(?P<s2sversion>\d[\d\.]*)\))?")
+source_image_pattern = re.compile(r"([\w\-]+?)(_temp)?(\.tif)?$")
 
 strip_masks = {
     ## name: (edgemask, watermask, cloudmask)

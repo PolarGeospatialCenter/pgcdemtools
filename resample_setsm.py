@@ -10,7 +10,7 @@ from lib import taskhandler, VERSION, SHORT_VERSION, utils
 logger = logging.getLogger("logger")
 logger.setLevel(logging.INFO)
 
-strip_pattern = re.compile("SETSM_(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>\d+)_(?P<res>\d+m)_matchtag.tif", re.I)
+strip_pattern = re.compile(r"SETSM_(?P<pairname>(?P<sensor>[A-Z]{2}\d{2})_(?P<timestamp>\d{8})_(?P<catid1>[A-Z0-9]{16})_(?P<catid2>[A-Z0-9]{16}))_(?P<partnum>\d+)_(?P<res>\d+m)_matchtag.tif", re.I)
 default_res = 16
 suffixes = ('matchtag', 'dem', 'bitmask')
 
