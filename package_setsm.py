@@ -162,7 +162,7 @@ def main():
                     expected_outputs.append(cog_sem)
                 if not args.skip_archive:
                     expected_outputs.append(raster.archive)
-                if args.rasterproxy_prefix:
+                if args.build_rasterproxies:
                     # this checks for only 1 of the several rasterproxies that are expected
                     expected_outputs.append(rp)
 

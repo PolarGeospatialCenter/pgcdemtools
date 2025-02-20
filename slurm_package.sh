@@ -9,11 +9,12 @@
 ## memory per job
 #SBATCH --mem 4gb
 ## licenses (per filesystem limit)
-#SBATCH --licenses vida:200
+#SBATCH --licenses vida:150
 ## gres (per node bandwidth limit)
 #SBATCH --gres bandwidth:1000
 ## job log path
 #SBATCH -o %x.%j.out
+#SBATCH --nice=10000
 
 echo ________________________________________
 echo
