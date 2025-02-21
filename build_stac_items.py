@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 
 import argparse
+import dataclasses
 import datetime
 import json
 import logging
 import os
 import pathlib
 import sys
+
+import rasterio
 
 from lib import utils, dem, VERSION, SHORT_VERSION
 
@@ -15,6 +18,17 @@ DOMAIN_TITLES = {
     "earthdem": "EarthDEM",
     "rema": "REMA"
 }
+LATEST_MOSAIC_VERSION = {
+    "arcticdem": "4.1",
+    "earthdem": "1.1",
+    "rema": "2.0",
+}
+STAC_VERSION = "1.1.0"
+STAC_EXTENSIONS = [
+    "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+    "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
+]
+S3_BUCKET = "pgc-opendata-dems"
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -102,7 +116,6 @@ def main():
     logger.info('Reading rasters')
     j = 0
     total = len(scene_paths)
-    scenes = []
     for sp in scene_paths:
         try:
             if pathlib.Path(sp).name.startswith('SETSM_'):
@@ -132,6 +145,8 @@ def main():
             #logger.debug(stac_item_json)
 
             if args.stac_base_dir:
+                # Assumes that the 'rel': 'self' is the first link in the list
+                # Fragile since the order is defined in other functions
                 stac_item_geojson_path = stac_item["links"][0]["href"].replace(args.stac_base_url, args.stac_base_dir)
                 pathlib.Path(stac_item_geojson_path).parent.mkdir(parents=True, exist_ok=True)
             else:
@@ -162,14 +177,26 @@ def build_strip_stac_item(base_url, domain, raster):
     if raster.release_version != id_parts[1]:
         raise RuntimeError(f"Strip ID version mismatch: v{raster.release_version} != {id_parts[1]}")
 
+    # Get info for each raster asset
+    hillshade_info = RasterAssetInfo.from_raster(raster.browse)
+    hillshade_masked_info = RasterAssetInfo.from_raster(raster.browse_masked)
+    dem_info = RasterAssetInfo.from_raster(raster.dem)
+    mask_info = RasterAssetInfo.from_raster(raster.bitmask)
+    matchtag_info = RasterAssetInfo.from_raster(raster.matchtag)
+
+    href_builder = StacHrefBuilder(
+        base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=raster
+    )
+
     stac_item = {
         "type": "Feature",
-        "stac_version": "1.0.0",
-        "stac_extensions": [ "https://stac-extensions.github.io/projection/v1.0.0/schema.json" ],
+        "stac_version": STAC_VERSION,
+        "stac_extensions": STAC_EXTENSIONS,
         "id": raster.stripid,
         "bbox": get_geojson_bbox(raster.get_geom_wgs84()),
         "collection": collection_name,
         "properties": {
+            # Common properties
             "title": raster.stripid,
             "description": "Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.",
             "created": iso8601(raster.creation_date, f"{raster.stripid} creation_date"), # are these actually in UTC, does it matter?
@@ -179,8 +206,14 @@ def build_strip_stac_item(base_url, domain, raster):
             "end_datetime": iso8601(end_time, f"{raster.stripid} end_time"),
             "instruments": [ raster.sensor1, raster.sensor2 ],
             "constellation": "maxar",
-            "gsd": (raster.xres + raster.yres)/2.0, ## dem.res is a string ('2m','50cm'), gsd be a float (2.0).
-            "proj:epsg": raster.epsg,
+            "license": "CC-BY-4.0",
+            # Proj properties
+            "gsd": dem_info.gsd,
+            "proj:code": dem_info.proj_code,
+            "proj:shape": dem_info.proj_shape,
+            "proj:transform": dem_info.proj_transform,
+            "proj:geometry": dem_info.proj_geojson,
+            # PGC Properties
             "pgc:image_ids": [ raster.catid1, raster.catid2 ],
             "pgc:geocell": raster.geocell,
             "pgc:is_xtrack": raster.is_xtrack == True,
@@ -201,93 +234,174 @@ def build_strip_stac_item(base_url, domain, raster):
             "pgc:avg_convergence_angle": raster.avg_conv_angle,
             "pgc:avg_expected_height_accuracy": raster.avg_exp_height_acc,
             "pgc:avg_sun_elevs": [ raster.avg_sun_el1, raster.avg_sun_el2 ],
-            "license": "CC-BY-4.0"
-            },
+        },
         "links": [
             {
                 "rel": "self",
-                "href": f"{base_url}/{domain}/strips/{raster.release_version}/{raster.res_str}/{raster.geocell}/{raster.stripid}.json",
+                "href": href_builder.item_href(),
                 "type": "application/geo+json"
             },
             {
                 "rel": "parent",
                 "title": f"Geocell {raster.geocell}",
-                "href": f"../{raster.geocell}.json",
+                "href": href_builder.catalog_href(),
                 "type": "application/json"
             },
             {
                 "rel": "collection",
                 "title": f"{domain_title} {raster.res_str} DEM Strips, version {raster.release_version}",
-                "href": f"{base_url}/{domain}/strips/{raster.release_version}/{raster.res_str}.json",
+                "href": href_builder.collection_href(),
                 "type": "application/json"
             },
             {
                 "rel": "root",
                 "title": "PGC Data Catalog",
-                "href": f"{base_url}/pgc-data-stac.json",
+                "href": href_builder.root_href(),
                 "type": "application/json"
             }
-            ],
+        ],
         "assets": {
             "hillshade": {
                 "title": "10m hillshade",
-                "href": "./"+raster.stripid+"_dem_10m_shade.tif",
+                "href": href_builder.asset_href(raster.browse),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "overview", "visual" ]
-
+                "roles": [ "overview", "visual" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.browse, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": hillshade_info.nodata,
+                        "data_type": hillshade_info.data_type,
+                    }
+                ],
+                # Since this asset is at a different resolution than the primary item,
+                # include PROJ properties to supersede the item-level ones
+                "gsd": hillshade_info.gsd,
+                "proj:code": hillshade_info.proj_code,
+                "proj:shape": hillshade_info.proj_shape,
+                "proj:transform": hillshade_info.proj_transform,
+                "proj:geometry": hillshade_info.proj_geojson,
             },
             "hillshade_masked": {
                 "title": "Masked 10m hillshade",
-                "href": "./"+raster.stripid+"_dem_10m_shade_masked.tif",
+                "href": href_builder.asset_href(raster.browse_masked),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
                 "roles": [ "overview", "visual" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.browse_masked, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": hillshade_masked_info.nodata,
+                        "data_type": hillshade_masked_info.data_type,
+                    }
+                ],
+                # Since this asset is at a different resolution than the primary item,
+                # include PROJ properties to supersede the item-level ones
+                "gsd": hillshade_masked_info.gsd,
+                "proj:code": hillshade_masked_info.proj_code,
+                "proj:shape": hillshade_masked_info.proj_shape,
+                "proj:transform": hillshade_masked_info.proj_transform,
+                "proj:geometry": hillshade_masked_info.proj_geojson,
             },
             "dem": {
                 "title": f"{raster.res_str} DEM",
-                "href": "./"+raster.stripid+"_dem.tif",
+                "href": href_builder.asset_href(raster.dem),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "data" ]
+                "roles": [ "data" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.dem, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        "unit": "meter",
+                        "nodata": dem_info.nodata,
+                        "data_type": dem_info.data_type,
+                    }
+                ],
             },
             "mask": {
                 "title": "Valid data mask",
-                "href": "./"+raster.stripid+"_bitmask.tif",
+                "href": href_builder.asset_href(raster.bitmask),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "data-mask", "land-water", "water-mask", "cloud" ]
+                "roles": [ "metadata", "data-mask", "land-water", "water-mask", "cloud" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.bitmask, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": mask_info.nodata,
+                        "data_type": mask_info.data_type,
+                    }
+                ],
             },
             "matchtag": {
                 "title": "Match point mask",
-                "href": "./"+raster.stripid+"_matchtag.tif",
+                "href": href_builder.asset_href(raster.matchtag),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "matchtag" ]
+                "roles": [ "metadata", "matchtag" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.matchtag, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": matchtag_info.nodata,
+                        "data_type": matchtag_info.data_type,
+                    }
+                ],
             },
             "metadata": {
                 "title": "Metadata",
-                "href": "./"+raster.stripid+"_mdf.txt",
+                "href": href_builder.asset_href(raster.mdf),
                 "type": "text/plain",
-                "roles": [ "metadata" ]
+                "roles": [ "metadata" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.mdf, as_s3=True),
+                    }
+                },
             },
             "readme": {
                 "title": "Readme",
-                "href": "./"+raster.stripid+"_readme.txt",
+                "href": href_builder.asset_href(raster.readme),
                 "type": "text/plain",
-                "roles": [ "metadata" ]
+                "roles": [ "metadata" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(raster.readme, as_s3=True),
+                    }
+                },
             }
         },
-            # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
-            # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
+        # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
+        # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
-            # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-            "geometry": json.loads(utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson())
-        }
+        # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
+        "geometry": json.loads(utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson())
+    }
 
     return stac_item
 
 
 def build_mosaic_stac_item(base_url, domain, tile):
-    tile.release_version = "2.0" # TODO: HACK for broken metadata.
+    tile.release_version = LATEST_MOSAIC_VERSION[domain] # TODO: HACK for broken metadata.
     collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
-    gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
 
     # validate tileid matches metadata - tileid is built off the filename in dem.py
     id_parts = tile.tileid.split('_')
@@ -296,14 +410,28 @@ def build_mosaic_stac_item(base_url, domain, tile):
     if "v"+tile.release_version != id_parts[-1]:
         raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
 
+    # Get info for each raster asset
+    hillshade_info = RasterAssetInfo.from_raster(tile.browse)
+    dem_info = RasterAssetInfo.from_raster(tile.srcfp)
+    count_info = RasterAssetInfo.from_raster(tile.count)
+    mad_info = RasterAssetInfo.from_raster(tile.mad)
+    maxdate_info = RasterAssetInfo.from_raster(tile.maxdate)
+    mindate_info = RasterAssetInfo.from_raster(tile.mindate)
+    datamask_info = RasterAssetInfo.from_raster(tile.datamask)
+
+    href_builder = StacHrefBuilder(
+        base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
+    )
+
     stac_item = {
         "type": "Feature",
-        "stac_version": "1.0.0",
-        "stac_extensions": [ "https://stac-extensions.github.io/projection/v1.0.0/schema.json" ],
+        "stac_version": STAC_VERSION,
+        "stac_extensions": STAC_EXTENSIONS,
         "id": tile.tileid,
         "bbox": get_geojson_bbox(tile.get_geom_wgs84()),
         "collection": collection_name,
         "properties": {
+            # Common properties
             "title": tile.tileid,
             "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
             "created": iso8601(tile.creation_date, tile.tileid),
@@ -312,104 +440,206 @@ def build_mosaic_stac_item(base_url, domain, tile):
             "start_datetime": iso8601(tile.acqdate_min, tile.tileid),
             "end_datetime": iso8601(tile.acqdate_max, tile.tileid),
             "constellation": "maxar",
-            "gsd": gsd,
-            "proj:epsg": tile.epsg,
+            "license": "CC-BY-4.0",
+            # PROJ properties
+            "gsd": dem_info.gsd,
+            "proj:code": dem_info.proj_code,
+            "proj:shape": dem_info.proj_shape,
+            "proj:transform": dem_info.proj_transform,
+            "proj:geometry": dem_info.proj_geojson,
+            # PGC properties
             "pgc:pairname_ids": tile.pairname_ids,
             "pgc:supertile": tile.supertile_id_no_res, # use for dir path
             "pgc:tile": tile.tile_id_no_res,
             "pgc:release_version": tile.release_version,
             "pgc:data_perc": tile.density,
             "pgc:num_components": tile.num_components,
-            "license": "CC-BY-4.0"
-            },
+        },
         "links": [
             {
-                "rel": "self",
-                "href": f"{base_url}/{domain}/mosaics/v{tile.release_version}/{tile.res}/{tile.supertile_id_no_res}/{tile.tileid}.json",
+                "rel": "self", # the main function relies on this being the first item in the list
+                "href": href_builder.item_href(),
                 "type": "application/geo+json"
             },
             {
                 "rel": "parent",
                 "title": f"Tile Catalog {tile.supertile_id_no_res}",
-                "href": f"../{tile.supertile_id_no_res}.json",
+                "href": href_builder.catalog_href(),
                 "type": "application/json"
             },
             {
                 "rel": "collection",
                 "title": f"Resolution Collection {domain_title} {tile.res} DEM Mosaics, version {tile.release_version}",
-                "href": f"{base_url}/{domain}/mosaic/{tile.release_version}/{tile.res}.json",
+                "href": href_builder.collection_href(),
                 "type": "application/json"
             },
             {
                 "rel": "root",
                 "title": "PGC Data Catalog",
-                "href": f"{base_url}/pgc-data-stac.json",
+                "href": href_builder.root_href(),
                 "type": "application/json"
             }
-            ],
+        ],
         "assets": {
             "hillshade": {
                 "title": "Hillshade",
-                "href": "./"+tile.tileid+"_browse.tif",
+                "href": href_builder.asset_href(tile.browse),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "overview", "visual" ]
-
+                "roles": [ "overview", "visual" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.browse, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": hillshade_info.nodata,
+                        "data_type": hillshade_info.data_type,
+                    }
+                ],
+                # This asset will be at a different resolution than the primary item for
+                # 2m mosaics. For other mosaic resolutions, these properties are removed
+                # prior to returning the stac item.
+                "gsd": hillshade_info.gsd,
+                "proj:code": hillshade_info.proj_code,
+                "proj:shape": hillshade_info.proj_shape,
+                "proj:transform": hillshade_info.proj_transform,
+                "proj:geometry": hillshade_info.proj_geojson,
             },
             "dem": {
                 "title": f"{tile.res} DEM",
-                "href": "./"+tile.tileid+"_dem.tif",
+                "href": href_builder.asset_href(tile.srcfp),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "data" ]
+                "roles": [ "data" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.srcfp, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        "unit": "meter",
+                        "nodata": dem_info.nodata,
+                        "data_type": dem_info.data_type,
+                    }
+                ],
             },
             "count": {
                 "title": "Count",
-                "href": "./"+tile.tileid+"_count.tif",
+                "href": href_builder.asset_href(tile.count),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "count" ]
+                "roles": [ "metadata", "count" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.count, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": count_info.nodata,
+                        "data_type": count_info.data_type,
+                    }
+                ],
             },
-            #"count_matchtag": {
-            #    "title": "Count of Match points",
-            #    "href": "./"+tile.tileid+"_countmt.tif",
-            #    "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-            #    "roles": [ "metadata", "matchtag" ]
-            #},
             "mad": {
                 "title": "Median Absolute Deviation",
-                "href": "./"+tile.tileid+"_mad.tif",
+                "href": href_builder.asset_href(tile.mad),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "mad" ]
+                "roles": [ "metadata", "mad" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.mad, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": mad_info.nodata,
+                        "data_type": mad_info.data_type,
+                    }
+                ],
             },
             "maxdate": {
                 "title": "Max date",
-                "href": "./"+tile.tileid+"_maxdate.tif",
+                "href": href_builder.asset_href(tile.maxdate),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "date" ]
+                "roles": [ "metadata", "date" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.maxdate, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": maxdate_info.nodata,
+                        "data_type": maxdate_info.data_type,
+                    }
+                ],
             },
             "mindate": {
                 "title": "Min date",
-                "href": "./"+tile.tileid+"_mindate.tif",
+                "href": href_builder.asset_href(tile.mindate),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "date" ]
+                "roles": [ "metadata", "date" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.mindate, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": mindate_info.nodata,
+                        "data_type": mindate_info.data_type,
+                    }
+                ],
             },
             "datamask": {
                 "title": "Valid data mask",
-                "href": "./" + tile.tileid + "_datamask.tif",
+                "href": href_builder.asset_href(tile.datamask),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "data-mask" ]
+                "roles": [ "metadata", "data-mask" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.datamask, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": datamask_info.nodata,
+                        "data_type": datamask_info.data_type,
+                    }
+                ],
             },
             "metadata": {
                 "title": "Metadata",
-                "href": "./"+tile.tileid+"_meta.txt",
+                "href": href_builder.asset_href(tile.metapath),
                 "type": "text/plain",
-                "roles": [ "metadata" ]
+                "roles": [ "metadata" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.metapath, as_s3=True),
+                    }
+                },
             }
         },
-            # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
-            # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
+        # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
+        # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
-            # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-            "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
-        }
+        # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
+        "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
+    }
+
+    if dem_info.gsd != 2:
+        # For resolutions other than 2m, the hillshade will be the same resolution as the
+        # dem, so these keys are not needed on the asset
+        proj_keys = {"gsd", "proj:code", "proj:shape", "proj:transform", "proj:geometry"}
+        for key in proj_keys:
+            del stac_item["assets"]["hillshade"][key]
 
     return stac_item
 
@@ -418,7 +648,6 @@ def build_mosaic_stac_item(base_url, domain, tile):
 def build_mosaic_v3_stac_item(base_url, domain, tile):
     collection_name = f'{domain}-mosaics-v{tile.release_version}-{tile.res}'
     domain_title = DOMAIN_TITLES[domain]
-    gsd = int(tile.res[0:-1]) # strip off trailing 'm'. fails for cm!
 
     # validate tileid matches metadata - tileid is built off the filename in dem.py
     id_parts = tile.tileid.split('_')
@@ -427,14 +656,23 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
     if "v"+tile.release_version != id_parts[-1]:
         raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
 
+    # Get info for each raster asset
+    browse_info = RasterAssetInfo.from_raster(tile.browse)
+    dem_info = RasterAssetInfo.from_raster(tile.srcfp)
+
+    href_builder = StacHrefBuilder(
+        base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
+    )
+
     stac_item = {
         "type": "Feature",
-        "stac_version": "1.0.0",
-        "stac_extensions": [ "https://stac-extensions.github.io/projection/v1.0.0/schema.json" ],
+        "stac_version": STAC_VERSION,
+        "stac_extensions": STAC_EXTENSIONS,
         "id": tile.tileid,
         "bbox": get_geojson_bbox(tile.get_geom_wgs84()),
         "collection": collection_name,
         "properties": {
+            # Common properties
             "title": tile.tileid,
             "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
             "created": iso8601(tile.creation_date, f"{tile.tileid} creation_date"),
@@ -443,68 +681,109 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             "start_datetime": iso8601(tile.acqdate_min, f"{tile.tileid} acqdate_min"),
             "end_datetime": iso8601(tile.acqdate_max, f"{tile.tileid} acqdate_max"),
             "constellation": "maxar",
-            "gsd": gsd,
-            "proj:epsg": tile.epsg,
+            "license": "CC-BY-4.0",
+            # PROJ properties
+            "gsd": dem_info.gsd,
+            "proj:code": dem_info.proj_code,
+            "proj:shape": dem_info.proj_shape,
+            "proj:transform": dem_info.proj_transform,
+            "proj:geometry": dem_info.proj_geojson,
+            # PGC properties
             "pgc:pairname_ids": tile.pairname_ids,
             "pgc:supertile": tile.supertile_id_no_res, # use for dir path
             "pgc:tile": tile.tile_id_no_res,
             "pgc:release_version": tile.release_version,
             "pgc:data_perc": tile.density,
             "pgc:num_components": tile.num_components,
-            "license": "CC-BY-4.0"
-            },
+        },
         "links": [
             {
-                "rel": "self",
-                "href": f"{base_url}/{domain}/mosaics/v{tile.release_version}/{tile.res}/{tile.supertile_id_no_res}/{tile.tileid}.json",
+                "rel": "self", # the main function relies on this being the first item in the list
+                "href": href_builder.item_href(),
                 "type": "application/geo+json"
             },
             {
                 "rel": "parent",
                 "title": f"Tile Catalog {tile.supertile_id_no_res}",
-                "href": f"../{tile.supertile_id_no_res}.json",
+                "href": href_builder.catalog_href(),
                 "type": "application/json"
             },
             {
                 "rel": "collection",
                 "title": f"Resolution Collection {domain_title} {tile.res} DEM Mosaics, version {tile.release_version}",
-                "href": f"{base_url}/{domain}/mosaic/{tile.release_version}/{tile.res}.json",
+                "href": href_builder.collection_href(),
                 "type": "application/json"
             },
             {
                 "rel": "root",
                 "title": "PGC Data Catalog",
-                "href": f"{base_url}/pgc-data-stac.json",
+                "href": href_builder.root_href(),
                 "type": "application/json"
             }
-            ],
+        ],
         "assets": {
             "browse": {
                 "title": "Browse",
-                "href": "./"+tile.tileid+"_reg_dem_browse.tif",
+                "href": href_builder.asset_href(tile.browse),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "overview", "visual" ]
-
+                "roles": [ "overview", "visual" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.browse, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        # "unit" property is meaningless here, so it is omitted
+                        "nodata": browse_info.nodata,
+                        "data_type": browse_info.data_type,
+                    }
+                ],
+                # This asset will be at a different resolution than the primary item for
+                # 2m mosaics. For other mosaic resolutions, these properties are removed
+                # prior to returning the stac item.
+                "gsd": browse_info.gsd,
+                "proj:code": browse_info.proj_code,
+                "proj:shape": browse_info.proj_shape,
+                "proj:transform": browse_info.proj_transform,
+                "proj:geometry": browse_info.proj_geojson,
             },
             "dem": {
                 "title": f"{tile.res} DEM",
-                "href": "./"+tile.tileid+"_reg_dem.tif",
+                "href": href_builder.asset_href(tile.srcfp),
                 "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "data" ]
+                "roles": [ "data" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.srcfp, as_s3=True),
+                    }
+                },
+                "bands": [
+                    {
+                        "unit": "meter",
+                        "nodata": dem_info.nodata,
+                        "data_type": dem_info.data_type,
+                    }
+                ],
             },
             "metadata": {
                 "title": "Metadata",
-                "href": f"./{tile.supertile_id}_v{tile.release_version}_dem_meta.txt",
+                "href": href_builder.asset_href(tile.metapath),
                 "type": "text/plain",
-                "roles": [ "metadata" ]
+                "roles": [ "metadata" ],
+                "alternate": {
+                    "s3": {
+                        "href": href_builder.asset_href(tile.metapath, as_s3=True),
+                    }
+                },
             }
         },
-            # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
-            # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
+        # Geometries are WGS84 in Lon/Lat order (https://github.com/radiantearth/stac-spec/blob/master/item-spec/item-spec.md#item-fields)
+        # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
-            # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-            "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
-        }
+        # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
+        "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
+    }
 
     # _reg_dem_browse.tif only exists for 2m, remove for other resolutions
     if tile.res != "2m":
@@ -546,6 +825,103 @@ def iso8601(date_time, msg=""):
 
     logger.error(f"null date: {msg}")
     return None
+
+
+class StacHrefBuilder:
+    def __init__(
+            self, base_url: str, s3_bucket: str, domain: str, raster: dem.SetsmDem | dem.SetsmTile
+    ):
+        self.base_url = base_url.rstrip("/") # Remove trailing slash if present
+        self.base_s3_url = f"s3://{s3_bucket}"
+
+        if isinstance(raster, dem.SetsmDem):
+            kind = "strips"
+            geocell_or_supertile = raster.geocell
+            release_version = raster.release_version
+            res_str = raster.res_str
+            item_id = raster.stripid
+        elif isinstance(raster, dem.SetsmTile):
+            kind = "mosaics"
+            geocell_or_supertile = raster.supertile_id_no_res
+            release_version = f"v{raster.release_version}"
+            res_str = raster.res
+            item_id = raster.tileid
+        else:
+            raise ValueError(
+                f"raster argument must be either {type(dem.SetsmDem)} or {type(dem.SetsmTile)}. Got {type(raster)}"
+            )
+
+        self._partial_asset_key = f"{domain}/{kind}/{release_version}/{res_str}/{geocell_or_supertile}"
+        self._item_key = f"{domain}/{kind}/{release_version}/{res_str}/{geocell_or_supertile}/{item_id}.json"
+        self._catalog_key = f"{domain}/{kind}/{release_version}/{res_str}/{geocell_or_supertile}.json"
+        self._collection_key = f"{domain}/{kind}/{release_version}/{res_str}.json"
+        self._root_key = "pgc-data-stac.json"
+
+    def item_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._item_key}"
+
+    def catalog_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._catalog_key}"
+
+    def collection_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._collection_key}"
+
+    def root_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._root_key}"
+
+    def asset_href(self, filepath: str | pathlib.Path, as_s3: bool = False) -> str:
+        filename = pathlib.Path(filepath).name if isinstance(filepath, str) else filepath.name
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._partial_asset_key}/{filename}"
+
+
+@dataclasses.dataclass(frozen=True)
+class RasterAssetInfo:
+    nodata: int | float
+    data_type: str
+    gsd: float
+    proj_code: str
+    proj_shape: list[int]
+    proj_transform: list[float]
+    proj_bbox: list[float]
+    proj_geojson: dict
+
+    @classmethod
+    def from_raster(cls, filepath: str | pathlib.Path):
+        with rasterio.open(filepath, "r") as src:
+            if not src.crs.is_projected:
+                raise ValueError(f"{filepath} does not use a projected CRS")
+
+            authority, code = src.crs.to_authority()
+            x_min, y_min, x_max, y_max = src.bounds
+            proj_geojson = {
+                "type": "Polygon",
+                "coordinates": [
+                    [
+                        (x_min, y_min),  # lower left
+                        (x_max, y_min),  # lower right
+                        (x_max, y_max),  # upper right
+                        (x_min, y_max),  # upper left
+                        (x_min, y_min),  # lower left again
+                    ]
+                ],
+            }
+
+            return cls(
+                nodata=src.nodata,
+                data_type=src.dtypes[0],
+                gsd=(src.res[0] + src.res[1]) / 2.0,
+                proj_code=f"{authority}:{code}",
+                proj_shape=[src.height, src.width],
+                proj_transform=list(src.transform),
+                proj_bbox=list(src.bounds),
+                proj_geojson=proj_geojson,
+            )
+
 
 if __name__ == '__main__':
     main()
