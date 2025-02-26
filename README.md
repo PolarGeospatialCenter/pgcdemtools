@@ -106,6 +106,24 @@ mklink /d tests\testdata <\\server.school.edu\test_data_location>\tests\testdata
 pytest
 ```
 
+The STAC creation tests were written with pytest and utilize the pystac (version 1.12.0 or greater) and 
+jsonschema (to preform schema validation) libraries. If these dependencies are not available in your 
+environment, the tests that require them will be skipped.
+
+On Linux systems:
+```shell
+# link the testdata directory as shown in the previous section
+ln -s <test_data_location>/tests/testdata tests/
+# or set the environment variable TESTDATA_DIR
+export TESTDATA_DIR=<test_data_location>
+
+# run all the tests
+pytest -vv
+
+# run only the tests matching a grep-like pattern
+pytest -vv -k arcticdem_mosaics_v4_1
+```
+
 ## Contact
 To report any questions or issues, please open a GitHub issue or contact the Polar Geospatial Center: 
 pgc-support@umn.edu
