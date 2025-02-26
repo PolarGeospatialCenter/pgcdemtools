@@ -271,13 +271,9 @@ def build_strip_stac_item(base_url, domain, raster):
                         "href": href_builder.asset_href(raster.browse, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": hillshade_info.nodata,
-                        "data_type": hillshade_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": hillshade_info.nodata,
+                "data_type": hillshade_info.data_type,
                 # Since this asset is at a different resolution than the primary item,
                 # include PROJ properties to supersede the item-level ones
                 "gsd": hillshade_info.gsd,
@@ -296,13 +292,9 @@ def build_strip_stac_item(base_url, domain, raster):
                         "href": href_builder.asset_href(raster.browse_masked, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": hillshade_masked_info.nodata,
-                        "data_type": hillshade_masked_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": hillshade_masked_info.nodata,
+                "data_type": hillshade_masked_info.data_type,
                 # Since this asset is at a different resolution than the primary item,
                 # include PROJ properties to supersede the item-level ones
                 "gsd": hillshade_masked_info.gsd,
@@ -321,13 +313,9 @@ def build_strip_stac_item(base_url, domain, raster):
                         "href": href_builder.asset_href(raster.dem, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        "unit": "meter",
-                        "nodata": dem_info.nodata,
-                        "data_type": dem_info.data_type,
-                    }
-                ],
+                "unit": "meter",
+                "nodata": dem_info.nodata,
+                "data_type": dem_info.data_type,
             },
             "mask": {
                 "title": "Valid data mask",
@@ -339,13 +327,9 @@ def build_strip_stac_item(base_url, domain, raster):
                         "href": href_builder.asset_href(raster.bitmask, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": mask_info.nodata,
-                        "data_type": mask_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": mask_info.nodata,
+                "data_type": mask_info.data_type,
             },
             "matchtag": {
                 "title": "Match point mask",
@@ -357,13 +341,9 @@ def build_strip_stac_item(base_url, domain, raster):
                         "href": href_builder.asset_href(raster.matchtag, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": matchtag_info.nodata,
-                        "data_type": matchtag_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": matchtag_info.nodata,
+                "data_type": matchtag_info.data_type,
             },
             "metadata": {
                 "title": "Metadata",
@@ -417,7 +397,6 @@ def build_mosaic_stac_item(base_url, domain, tile):
     mad_info = RasterAssetInfo.from_raster(tile.mad)
     maxdate_info = RasterAssetInfo.from_raster(tile.maxdate)
     mindate_info = RasterAssetInfo.from_raster(tile.mindate)
-    datamask_info = RasterAssetInfo.from_raster(tile.datamask)
 
     href_builder = StacHrefBuilder(
         base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
@@ -491,13 +470,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.browse, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": hillshade_info.nodata,
-                        "data_type": hillshade_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": hillshade_info.nodata,
+                "data_type": hillshade_info.data_type,
                 # This asset will be at a different resolution than the primary item for
                 # 2m mosaics. For other mosaic resolutions, these properties are removed
                 # prior to returning the stac item.
@@ -517,13 +492,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.srcfp, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        "unit": "meter",
-                        "nodata": dem_info.nodata,
-                        "data_type": dem_info.data_type,
-                    }
-                ],
+                "unit": "meter",
+                "nodata": dem_info.nodata,
+                "data_type": dem_info.data_type,
             },
             "count": {
                 "title": "Count",
@@ -535,13 +506,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.count, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": count_info.nodata,
-                        "data_type": count_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": count_info.nodata,
+                "data_type": count_info.data_type,
             },
             "mad": {
                 "title": "Median Absolute Deviation",
@@ -553,13 +520,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.mad, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": mad_info.nodata,
-                        "data_type": mad_info.data_type,
-                    }
-                ],
+                "unit": "meter",
+                "nodata": mad_info.nodata,
+                "data_type": mad_info.data_type,
             },
             "maxdate": {
                 "title": "Max date",
@@ -571,13 +534,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.maxdate, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": maxdate_info.nodata,
-                        "data_type": maxdate_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": maxdate_info.nodata,
+                "data_type": maxdate_info.data_type,
             },
             "mindate": {
                 "title": "Min date",
@@ -589,31 +548,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.mindate, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": mindate_info.nodata,
-                        "data_type": mindate_info.data_type,
-                    }
-                ],
-            },
-            "datamask": {
-                "title": "Valid data mask",
-                "href": href_builder.asset_href(tile.datamask),
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "metadata", "data-mask" ],
-                "alternate": {
-                    "s3": {
-                        "href": href_builder.asset_href(tile.datamask, as_s3=True),
-                    }
-                },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": datamask_info.nodata,
-                        "data_type": datamask_info.data_type,
-                    }
-                ],
+                # "unit" property is meaningless here, so it is omitted
+                "nodata": mindate_info.nodata,
+                "data_type": mindate_info.data_type,
             },
             "metadata": {
                 "title": "Metadata",
@@ -633,6 +570,25 @@ def build_mosaic_stac_item(base_url, domain, tile):
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
         "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
     }
+
+    if domain in ("arcticdem", "earthdem"):
+        # REMA mosaics don't have a datamask asset
+        datamask_info = RasterAssetInfo.from_raster(tile.datamask)
+        datamask_asset = {
+            "title": "Valid data mask",
+            "href": href_builder.asset_href(tile.datamask),
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "data-mask"],
+            "alternate": {
+                "s3": {
+                    "href": href_builder.asset_href(tile.datamask, as_s3=True),
+                }
+            },
+            # "unit" property is meaningless here, so it is omitted
+            "nodata": datamask_info.nodata,
+            "data_type": datamask_info.data_type,
+        }
+        stac_item["assets"]["datamask"] = datamask_asset
 
     if dem_info.gsd != 2:
         # For resolutions other than 2m, the hillshade will be the same resolution as the
@@ -656,8 +612,7 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
     if "v"+tile.release_version != id_parts[-1]:
         raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
 
-    # Get info for each raster asset
-    browse_info = RasterAssetInfo.from_raster(tile.browse)
+    # Get info for each raster asset, except "browse" which is done conditionally later
     dem_info = RasterAssetInfo.from_raster(tile.srcfp)
 
     href_builder = StacHrefBuilder(
@@ -722,32 +677,6 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             }
         ],
         "assets": {
-            "browse": {
-                "title": "Browse",
-                "href": href_builder.asset_href(tile.browse),
-                "type": "image/tiff; application=geotiff; profile=cloud-optimized",
-                "roles": [ "overview", "visual" ],
-                "alternate": {
-                    "s3": {
-                        "href": href_builder.asset_href(tile.browse, as_s3=True),
-                    }
-                },
-                "bands": [
-                    {
-                        # "unit" property is meaningless here, so it is omitted
-                        "nodata": browse_info.nodata,
-                        "data_type": browse_info.data_type,
-                    }
-                ],
-                # This asset will be at a different resolution than the primary item for
-                # 2m mosaics. For other mosaic resolutions, these properties are removed
-                # prior to returning the stac item.
-                "gsd": browse_info.gsd,
-                "proj:code": browse_info.proj_code,
-                "proj:shape": browse_info.proj_shape,
-                "proj:transform": browse_info.proj_transform,
-                "proj:geometry": browse_info.proj_geojson,
-            },
             "dem": {
                 "title": f"{tile.res} DEM",
                 "href": href_builder.asset_href(tile.srcfp),
@@ -758,13 +687,9 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
                         "href": href_builder.asset_href(tile.srcfp, as_s3=True),
                     }
                 },
-                "bands": [
-                    {
-                        "unit": "meter",
-                        "nodata": dem_info.nodata,
-                        "data_type": dem_info.data_type,
-                    }
-                ],
+                "unit": "meter",
+                "nodata": dem_info.nodata,
+                "data_type": dem_info.data_type,
             },
             "metadata": {
                 "title": "Metadata",
@@ -785,9 +710,29 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
         "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
     }
 
-    # _reg_dem_browse.tif only exists for 2m, remove for other resolutions
-    if tile.res != "2m":
-        del stac_item["assets"]["browse"]
+    # _reg_dem_browse.tif only exists for 2m, only construct browse asset for that res
+    if tile.res == "2m":
+        browse_info = RasterAssetInfo.from_raster(tile.browse)
+        browse_asset = {
+            "title": "Browse",
+            "href": href_builder.asset_href(tile.browse),
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": [ "overview", "visual" ],
+            "alternate": {
+                "s3": {
+                    "href": href_builder.asset_href(tile.browse, as_s3=True),
+                }
+            },
+            # "unit" property is meaningless here, so it is omitted
+            "nodata": browse_info.nodata,
+            "data_type": browse_info.data_type,
+            "gsd": browse_info.gsd,
+            "proj:code": browse_info.proj_code,
+            "proj:shape": browse_info.proj_shape,
+            "proj:transform": browse_info.proj_transform,
+            "proj:geometry": browse_info.proj_geojson,
+        }
+        stac_item["assets"]["browse"] = browse_asset
 
     return stac_item
 
