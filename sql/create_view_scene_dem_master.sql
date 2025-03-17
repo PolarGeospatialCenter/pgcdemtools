@@ -56,6 +56,9 @@ alter materialized view dem.scene_dem_master owner to pgc_gis_admin;
 create unique index scenedem_stripdem_master_idx
     on dem.scene_dem_master (scenedemid, stripdemid);
 
+create index scene_dem_master_pairname_idx
+    on dem.scene_dem_master (pairname);
+
 grant select on dem.scene_dem_master to pgc_users;
 
 grant select on dem.scene_dem_master to backup;

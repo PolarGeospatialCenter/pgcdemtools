@@ -1,70 +1,78 @@
 create materialized view dem.strip_dem_master as
 WITH latest_version AS (
-    SELECT left(b.stripdemid, '-8') AS strip_nover,
-           max(b.stripdemid)        AS strip_max
-    FROM dem.strip_dem_all b
-    GROUP BY ("left"(b.stripdemid, '-8'))
-),
+        SELECT left(b.stripdemid, '-8') AS strip_nover,
+               max(b.stripdemid)        AS strip_max
+        FROM dem.strip_dem_all b
+        GROUP BY ("left"(b.stripdemid, '-8'))
+     ),
      latest_lsf AS (
-         SELECT strip_dem_all_1.stripdemid,
-                bool_and(strip_dem_all_1.is_lsf) AS min_lsf
-         FROM dem.strip_dem_all strip_dem_all_1
-                  JOIN latest_version ON strip_dem_all_1.stripdemid = latest_version.strip_max
-         GROUP BY strip_dem_all_1.stripdemid
+         SELECT a.stripdemid,
+                bool_and(a.is_lsf) AS min_lsf
+         FROM dem.strip_dem_all a
+                  JOIN latest_version ON a.stripdemid = latest_version.strip_max
+         GROUP BY a.stripdemid
      )
-SELECT strip_dem_all.ogc_fid,
-       strip_dem_all.dem_id,
-       strip_dem_all.stripdemid,
-       strip_dem_all.pairname,
-       strip_dem_all.sensor1,
-       strip_dem_all.sensor2,
-       strip_dem_all.acqdate1,
-       strip_dem_all.acqdate2,
-       strip_dem_all.avgacqtm1,
-       strip_dem_all.avgacqtm2,
-       strip_dem_all.catalogid1,
-       strip_dem_all.catalogid2,
-       strip_dem_all.cent_lat,
-       strip_dem_all.cent_lon,
-       strip_dem_all.geocell,
-       strip_dem_all.region,
-       strip_dem_all.epsg,
-       strip_dem_all.proj4,
-       strip_dem_all.nd_value,
-       strip_dem_all.dem_res,
-       strip_dem_all.cr_date,
-       strip_dem_all.algm_ver,
-       strip_dem_all.s2s_ver,
-       strip_dem_all.is_lsf,
-       strip_dem_all.is_xtrack,
-       strip_dem_all.edgemask,
-       strip_dem_all.watermask,
-       strip_dem_all.cloudmask,
-       strip_dem_all.mask_dens,
-       strip_dem_all.valid_dens,
-       strip_dem_all.valid_area,
-       strip_dem_all.valid_perc,
-       strip_dem_all.water_area,
-       strip_dem_all.water_perc,
-       strip_dem_all.cloud_area,
-       strip_dem_all.cloud_perc,
-       strip_dem_all.avgconvang,
-       strip_dem_all.avg_ht_acc,
-       strip_dem_all.avg_sunel1,
-       strip_dem_all.avg_sunel2,
-       strip_dem_all.rmse,
-       strip_dem_all.location,
-       strip_dem_all.filesz_dem,
-       strip_dem_all.filesz_mt,
-       strip_dem_all.filesz_or,
-       strip_dem_all.filesz_or2,
-       strip_dem_all.index_date,
-       strip_dem_all.wkb_geometry
-FROM dem.strip_dem_all
-         JOIN latest_lsf ON strip_dem_all.stripdemid = latest_lsf.stripdemid AND
-                            strip_dem_all.is_lsf = latest_lsf.min_lsf;
 
-comment on materialized view dem.strip_dem_master is 'Strip DEMs from strip_dem that belong to canonical stripdemids. Canonical is defined as the latest SETSM version of a strip imagery pair and resolution.';
+SELECT sda.dem_id,
+       sda.stripdemid,
+       sda.pairname,
+       sda.sensor1,
+       sda.sensor2,
+       sda.acqdate1,
+       sda.acqdate2,
+       sda.avgacqtm1,
+       sda.avgacqtm2,
+       sda.catalogid1,
+       sda.catalogid2,
+       sda.cent_lat,
+       sda.cent_lon,
+       sda.geocell,
+       sda.region,
+       sda.epsg,
+       sda.proj4,
+       sda.nd_value,
+       sda.dem_res,
+       sda.cr_date,
+       sda.algm_ver,
+       sda.s2s_ver,
+       sda.is_lsf,
+       sda.is_xtrack,
+       sda.edgemask,
+       sda.watermask,
+       sda.cloudmask,
+       sda.mask_dens,
+       sda.valid_dens,
+       sda.valid_area,
+       sda.valid_perc,
+       sda.water_area,
+       sda.water_perc,
+       sda.cloud_area,
+       sda.cloud_perc,
+       sda.avgconvang,
+       sda.avg_ht_acc,
+       sda.avg_sunel1,
+       sda.avg_sunel2,
+       sda.rmse,
+       sda.location,
+       sda.filesz_dem,
+       sda.filesz_mt,
+       sda.filesz_or,
+       sda.filesz_or2,
+       sda.index_date,
+       sda.wkb_geometry
+FROM dem.strip_dem_all sda
+JOIN latest_lsf
+    ON sda.stripdemid = latest_lsf.stripdemid
+    AND sda.is_lsf = latest_lsf.min_lsf
+WHERE sda.status = 'vida';
+
+comment on materialized view dem.strip_dem_master is 'Strip DEMs from strip_dem_all that belong to canonical stripdemids and exist on Vida. Canonical is defined as the latest SETSM version of a strip imagery pair and resolution.  Non-LSF is given preference if both types exist.';
+
+create index strip_dem_mst_dem_id_idx
+    on dem.strip_dem_master (dem_id);
+
+create unique index strip_dem_mst_dem_strip_id_idx
+    on dem.strip_dem_master (dem_id, stripdemid);
 
 alter materialized view dem.strip_dem_master owner to pgc_gis_admin;
 
