@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import dataclasses
 import datetime
 import json
 import logging
@@ -9,9 +8,8 @@ import os
 import pathlib
 import sys
 
-import rasterio
 
-from lib import utils, dem, VERSION, SHORT_VERSION
+from lib import utils, dem, VERSION, SHORT_VERSION, stac
 
 DOMAIN_TITLES = {
     "arcticdem": "ArcticDEM",
@@ -178,11 +176,11 @@ def build_strip_stac_item(base_url, domain, raster):
         raise RuntimeError(f"Strip ID version mismatch: v{raster.release_version} != {id_parts[1]}")
 
     # Get info for each raster asset
-    hillshade_info = RasterAssetInfo.from_raster(raster.browse)
-    hillshade_masked_info = RasterAssetInfo.from_raster(raster.browse_masked)
-    dem_info = RasterAssetInfo.from_raster(raster.dem)
-    mask_info = RasterAssetInfo.from_raster(raster.bitmask)
-    matchtag_info = RasterAssetInfo.from_raster(raster.matchtag)
+    hillshade_info = stac.RasterAssetInfo.from_raster(raster.browse)
+    hillshade_masked_info = stac.RasterAssetInfo.from_raster(raster.browse_masked)
+    dem_info = stac.RasterAssetInfo.from_raster(raster.dem)
+    mask_info = stac.RasterAssetInfo.from_raster(raster.bitmask)
+    matchtag_info = stac.RasterAssetInfo.from_raster(raster.matchtag)
 
     href_builder = StacHrefBuilder(
         base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=raster
@@ -391,12 +389,12 @@ def build_mosaic_stac_item(base_url, domain, tile):
         raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
 
     # Get info for each raster asset
-    hillshade_info = RasterAssetInfo.from_raster(tile.browse)
-    dem_info = RasterAssetInfo.from_raster(tile.srcfp)
-    count_info = RasterAssetInfo.from_raster(tile.count)
-    mad_info = RasterAssetInfo.from_raster(tile.mad)
-    maxdate_info = RasterAssetInfo.from_raster(tile.maxdate)
-    mindate_info = RasterAssetInfo.from_raster(tile.mindate)
+    hillshade_info = stac.RasterAssetInfo.from_raster(tile.browse)
+    dem_info = stac.RasterAssetInfo.from_raster(tile.srcfp)
+    count_info = stac.RasterAssetInfo.from_raster(tile.count)
+    mad_info = stac.RasterAssetInfo.from_raster(tile.mad)
+    maxdate_info = stac.RasterAssetInfo.from_raster(tile.maxdate)
+    mindate_info = stac.RasterAssetInfo.from_raster(tile.mindate)
 
     href_builder = StacHrefBuilder(
         base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
@@ -573,7 +571,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
 
     if domain in ("arcticdem", "earthdem"):
         # REMA mosaics don't have a datamask asset
-        datamask_info = RasterAssetInfo.from_raster(tile.datamask)
+        datamask_info = stac.RasterAssetInfo.from_raster(tile.datamask)
         datamask_asset = {
             "title": "Valid data mask",
             "href": href_builder.asset_href(tile.datamask),
@@ -613,7 +611,7 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
         raise RuntimeError(f"Tile ID version mismatch: v{tile.release_version} != {id_parts[-1]}")
 
     # Get info for each raster asset, except "browse" which is done conditionally later
-    dem_info = RasterAssetInfo.from_raster(tile.srcfp)
+    dem_info = stac.RasterAssetInfo.from_raster(tile.srcfp)
 
     href_builder = StacHrefBuilder(
         base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
@@ -712,7 +710,7 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
 
     # _reg_dem_browse.tif only exists for 2m, only construct browse asset for that res
     if tile.res == "2m":
-        browse_info = RasterAssetInfo.from_raster(tile.browse)
+        browse_info = stac.RasterAssetInfo.from_raster(tile.browse)
         browse_asset = {
             "title": "Browse",
             "href": href_builder.asset_href(tile.browse),
@@ -822,50 +820,6 @@ class StacHrefBuilder:
         filename = pathlib.Path(filepath).name if isinstance(filepath, str) else filepath.name
         base = self.base_s3_url if as_s3 else self.base_url
         return f"{base}/{self._partial_asset_key}/{filename}"
-
-
-@dataclasses.dataclass(frozen=True)
-class RasterAssetInfo:
-    nodata: int | float
-    data_type: str
-    gsd: float
-    proj_code: str
-    proj_shape: list[int]
-    proj_transform: list[float]
-    proj_bbox: list[float]
-    proj_geojson: dict
-
-    @classmethod
-    def from_raster(cls, filepath: str | pathlib.Path):
-        with rasterio.open(filepath, "r") as src:
-            if not src.crs.is_projected:
-                raise ValueError(f"{filepath} does not use a projected CRS")
-
-            authority, code = src.crs.to_authority()
-            x_min, y_min, x_max, y_max = src.bounds
-            proj_geojson = {
-                "type": "Polygon",
-                "coordinates": [
-                    [
-                        (x_min, y_min),  # lower left
-                        (x_max, y_min),  # lower right
-                        (x_max, y_max),  # upper right
-                        (x_min, y_max),  # upper left
-                        (x_min, y_min),  # lower left again
-                    ]
-                ],
-            }
-
-            return cls(
-                nodata=src.nodata,
-                data_type=src.dtypes[0],
-                gsd=(src.res[0] + src.res[1]) / 2.0,
-                proj_code=f"{authority}:{code}",
-                proj_shape=[src.height, src.width],
-                proj_transform=list(src.transform),
-                proj_bbox=list(src.bounds),
-                proj_geojson=proj_geojson,
-            )
 
 
 if __name__ == '__main__':
