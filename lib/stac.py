@@ -2,6 +2,8 @@ import dataclasses
 import pathlib
 import rasterio
 
+from .dem import SetsmDem, SetsmTile
+
 COLLECTIONS = {
     "arcticdem-mosaics-v3.0-2m",
     "arcticdem-mosaics-v3.0-10m",
@@ -66,3 +68,57 @@ class RasterAssetInfo:
                 # https://github.com/stac-extensions/projection?tab=readme-ov-file#projcentroid
                 proj_centroid=[centroid_lat, centroid_long],
             )
+
+
+class StacHrefBuilder:
+    def __init__(
+            self, base_url: str, s3_bucket: str, domain: str,
+            raster: SetsmDem | SetsmTile
+    ):
+        self.base_url = base_url.rstrip("/")  # Remove trailing slash if present
+        self.base_s3_url = f"s3://{s3_bucket}"
+
+        if isinstance(raster, SetsmDem):
+            kind = "strips"
+            geocell_or_supertile = raster.geocell
+            release_version = raster.release_version
+            res_str = raster.res_str
+            item_id = raster.stripid
+        elif isinstance(raster, SetsmTile):
+            kind = "mosaics"
+            geocell_or_supertile = raster.supertile_id_no_res
+            release_version = f"v{raster.release_version}"
+            res_str = raster.res
+            item_id = raster.tileid
+        else:
+            raise ValueError(
+                f"raster argument must be either {type(SetsmDem)} or {type(SetsmTile)}. Got {type(raster)}"
+            )
+
+        self._partial_asset_key = f"{domain}/{kind}/{release_version}/{res_str}/{geocell_or_supertile}"
+        self._item_key = f"{domain}/{kind}/{release_version}/{res_str}/{geocell_or_supertile}/{item_id}.json"
+        self._catalog_key = f"{domain}/{kind}/{release_version}/{res_str}/{geocell_or_supertile}.json"
+        self._collection_key = f"{domain}/{kind}/{release_version}/{res_str}.json"
+        self._root_key = "pgc-data-stac.json"
+
+    def item_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._item_key}"
+
+    def catalog_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._catalog_key}"
+
+    def collection_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._collection_key}"
+
+    def root_href(self, as_s3: bool = False) -> str:
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._root_key}"
+
+    def asset_href(self, filepath: str | pathlib.Path, as_s3: bool = False) -> str:
+        filename = pathlib.Path(filepath).name if isinstance(filepath,
+                                                             str) else filepath.name
+        base = self.base_s3_url if as_s3 else self.base_url
+        return f"{base}/{self._partial_asset_key}/{filename}"
