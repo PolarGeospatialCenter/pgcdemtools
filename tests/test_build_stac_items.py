@@ -113,6 +113,7 @@ def arcticdem_mosaics_v4_1_2m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "arcticdem_mosaics_v4.1_2m" / "44_74_1_2_2m_v4.1_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "4.1"
     return build_mosaic_stac_item(base_url=BASE_URL, domain="arcticdem", tile=tile)
 
 
@@ -127,6 +128,7 @@ def arcticdem_mosaics_v4_1_10m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "arcticdem_mosaics_v4.1_10m" / "58_05_10m_v4.1_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "4.1"
     return build_mosaic_stac_item(base_url=BASE_URL, domain="arcticdem", tile=tile)
 
 
@@ -141,6 +143,7 @@ def arcticdem_mosaics_v4_1_32m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "arcticdem_mosaics_v4.1_32m" / "58_05_32m_v4.1_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "4.1"
     return build_mosaic_stac_item(base_url=BASE_URL, domain="arcticdem", tile=tile)
 
 
@@ -155,6 +158,7 @@ def rema_mosaics_v2_0_2m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "rema_mosaics_v2.0_2m" / "26_12_1_2_2m_v2.0_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "2.0"
     return build_mosaic_stac_item(base_url=BASE_URL, domain="rema", tile=tile)
 
 
@@ -169,6 +173,7 @@ def rema_mosaics_v2_0_10m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "rema_mosaics_v2.0_10m" / "29_30_10m_v2.0_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "2.0"
     return build_mosaic_stac_item(base_url=BASE_URL, domain="rema", tile=tile)
 
 
@@ -183,6 +188,7 @@ def rema_mosaics_v2_0_32m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "rema_mosaics_v2.0_32m" / "29_30_32m_v2.0_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "2.0"
     return build_mosaic_stac_item(base_url=BASE_URL, domain="rema", tile=tile)
 
 
@@ -197,6 +203,7 @@ def arcticdem_mosaics_v3_0_2m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "arcticdem_mosaics_v3.0_2m" / "50_49_2_2_2m_v3.0_reg_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "3.0"
     return build_mosaic_v3_stac_item(base_url=BASE_URL, domain="arcticdem", tile=tile)
 
 
@@ -211,6 +218,7 @@ def arcticdem_mosaics_v3_0_10m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "arcticdem_mosaics_v3.0_10m" / "50_49_10m_v3.0_reg_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "3.0"
     return build_mosaic_v3_stac_item(base_url=BASE_URL, domain="arcticdem", tile=tile)
 
 
@@ -225,6 +233,7 @@ def arcticdem_mosaics_v3_0_32m() -> dict:
     filepath = get_testdata_dir() / "stac_item" / "arcticdem_mosaics_v3.0_32m" / "50_49_32m_v3.0_reg_dem.tif"
     tile = dem.SetsmTile(f"{filepath}")
     tile.get_dem_info()
+    assert tile.release_version == "3.0"
     return build_mosaic_v3_stac_item(base_url=BASE_URL, domain="arcticdem", tile=tile)
 
 
@@ -428,6 +437,7 @@ def asset_has_proj_keys(asset: pystac.Asset) -> bool:
 def test_content_arcticdem_strips_s2s041_2m(arcticdem_strips_s2s041_2m):
     item = pystac.Item.from_dict(arcticdem_strips_s2s041_2m)
 
+    assert item.id == "SETSM_s2s041_W2W3_20231231_10300100F3CE3A00_104001008FBB9800_2m_seg1"
     assert item.collection_id == "arcticdem-strips-s2s041-2m"
     assert item.common_metadata.gsd == 2
     assert item.common_metadata.start_datetime <= item.common_metadata.end_datetime
