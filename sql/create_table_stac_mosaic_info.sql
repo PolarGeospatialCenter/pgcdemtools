@@ -8,7 +8,7 @@ CREATE TABLE IF NOT EXISTS dem.stac_mosaic_info (
     PRIMARY KEY (collection, item_id)
 );
 
-COMMENT ON TABLE dem.stac_mosaic_info IS 'Store pairname ids used to create mosaic tile for STAC item creation';
+COMMENT ON TABLE dem.stac_mosaic_info IS 'Store extra mosaic tile metadata for STAC item creation';
 
 ALTER TABLE dem.stac_mosaic_info OWNER TO pgc_gis_admin;
 
