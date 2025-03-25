@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW dem.stac_mosaic_item AS (
+CREATE OR REPLACE VIEW dem.stac_mosaic_item AS (
 WITH canonical_mosaics AS (
     -- Contains one row for each mosaic item that should be created
     SELECT
@@ -6,6 +6,7 @@ WITH canonical_mosaics AS (
         dem_id AS item_id,
         dem_id
     FROM dem.mosaic_dem_release as md_release
+    WHERE license = 'public'
 ),
 
 href_parts AS (
@@ -499,8 +500,8 @@ mosaic_items AS (
 SELECT * FROM mosaic_items
 );
 
-COMMENT ON MATERIALIZED VIEW dem.stac_mosaic_item IS 'Static STAC items for public mosaic DEMs';
+COMMENT ON VIEW dem.stac_mosaic_item IS 'Static STAC items for public mosaic DEMs';
 
-ALTER MATERIALIZED VIEW dem.stac_mosaic_item OWNER TO pgc_gis_admin;
+ALTER VIEW dem.stac_mosaic_item OWNER TO pgc_gis_admin;
 
 GRANT SELECT ON dem.stac_mosaic_item TO pgc_users;

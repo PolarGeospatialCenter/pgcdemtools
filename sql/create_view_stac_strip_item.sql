@@ -1,4 +1,4 @@
-CREATE MATERIALIZED VIEW dem.stac_strip_item AS (
+CREATE OR REPLACE VIEW dem.stac_strip_item AS (
 WITH canonical_strips AS (
     -- Contains one row for each strip item that should be created
     -- NOTE: dem_id is not unique in dem.strip_dem_all. Use a combination of dem_id & stripdemid to
@@ -9,6 +9,7 @@ WITH canonical_strips AS (
         dem_id,
         stripdemid
     FROM dem.strip_dem_release AS sd_release
+    WHERE license = 'public'
 ),
 
 href_parts AS (
@@ -309,8 +310,8 @@ strip_items AS (
 SELECT * FROM strip_items
 );
 
-COMMENT ON MATERIALIZED VIEW dem.stac_strip_item IS 'Static STAC items for public strip DEMs';
+COMMENT ON VIEW dem.stac_strip_item IS 'Static STAC items for public strip DEMs';
 
-ALTER MATERIALIZED VIEW dem.stac_strip_item OWNER TO pgc_gis_admin;
+ALTER VIEW dem.stac_strip_item OWNER TO pgc_gis_admin;
 
 GRANT SELECT ON dem.stac_strip_item TO pgc_users;
