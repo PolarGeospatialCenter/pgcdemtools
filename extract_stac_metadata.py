@@ -3,7 +3,6 @@ import json
 import logging
 import pathlib
 from dataclasses import dataclass
-from datetime import datetime
 from typing import NamedTuple
 
 import psycopg2
@@ -57,6 +56,7 @@ class ScriptArgs:
         parser.add_argument(
             "--batch-size",
             default=100,
+            type=int,
             help="Number of DB records to generate before performing insert. (default=%(default)s)"
         )
         parser.add_argument(
@@ -123,7 +123,7 @@ def extract_stac_metadata(args: ScriptArgs) -> None:
         logger.info("{src} is a text file")
         logger.info("Reading paths from text file")
         with open(src, "r") as f:
-            files = [pathlib.Path(line) for line in f.readlines()]
+            files = [pathlib.Path(line.strip()) for line in f.readlines()]
 
     logger.info(f"Found {len(files)} DEM(s)")
 
@@ -135,7 +135,7 @@ def extract_stac_metadata(args: ScriptArgs) -> None:
 
     logger.info("Generating DB records from DEM(s)")
     for file in files:
-        logger.debug(f"Working on {file}")
+        logger.info(f"Working on {file}")
         if file.name.startswith("SETSM_"):
             setsm = dem.SetsmDem(f"{file}")
         else:
@@ -159,7 +159,7 @@ def extract_stac_metadata(args: ScriptArgs) -> None:
 
         if "mosaics" in collection:
             # Generate stac_moscaic_pairname_ids record
-            record = StacMosaicPairnameIdsRecord.from_tile(collection, setsm)
+            record = StacMosaicInfoRecord.from_tile(collection, setsm)
             logger.debug(f"Generated record: {record}")
             mosaic_pairname_ids_records.append(record)
 
@@ -175,7 +175,7 @@ def extract_stac_metadata(args: ScriptArgs) -> None:
             asset_info_records.clear()
 
             logger.info(
-                f"Inserting {len(mosaic_pairname_ids_records)} records into {StacMosaicPairnameIdsRecord.table_identifier()}"
+                f"Inserting {len(mosaic_pairname_ids_records)} records into {StacMosaicInfoRecord.table_identifier()}"
             )
             if not args.dryrun:
                 insert_records(dsn=args.dsn, records=mosaic_pairname_ids_records, upsert=args.upsert)
@@ -190,7 +190,7 @@ def extract_stac_metadata(args: ScriptArgs) -> None:
     asset_info_records.clear()
 
     logger.info(
-        f"Inserting {len(mosaic_pairname_ids_records)} records into {StacMosaicPairnameIdsRecord.table_identifier()}"
+        f"Inserting {len(mosaic_pairname_ids_records)} records into {StacMosaicInfoRecord.table_identifier()}"
     )
     if not args.dryrun:
         insert_records(dsn=args.dsn, records=mosaic_pairname_ids_records, upsert=args.upsert)
@@ -237,6 +237,7 @@ def _generate_insert_statement(
 
 
 JsonStr = str
+Iso8601Str = str
 
 
 class StacRasterAssetInfoRecord(NamedTuple):
@@ -318,16 +319,16 @@ def get_stac_raster_asset_info_records(
     return records
 
 
-class StacMosaicPairnameIdsRecord(NamedTuple):  # TODO: Change name of table
+class StacMosaicInfoRecord(NamedTuple):
     collection: str
     item_id: str
     pairname_ids: JsonStr
-    start_datetime: datetime
-    end_datetime: datetime
+    start_datetime: Iso8601Str
+    end_datetime: Iso8601Str
 
     @classmethod
     def table_identifier(cls) -> str:
-        return "dem.stac_mosaic_pairname_ids"  # TODO: Change name of table
+        return "dem.stac_mosaic_info"
 
     @classmethod
     def get_insert_statement(cls, upsert: bool) -> str:
@@ -352,7 +353,7 @@ class StacMosaicPairnameIdsRecord(NamedTuple):  # TODO: Change name of table
 
 def insert_records(
         dsn: str,
-        records: list[StacRasterAssetInfoRecord] | list[StacMosaicPairnameIdsRecord],
+        records: list[StacRasterAssetInfoRecord] | list[StacMosaicInfoRecord],
         upsert: bool,
 ) -> None:
     if not records:
