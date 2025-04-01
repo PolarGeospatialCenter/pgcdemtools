@@ -215,3 +215,70 @@ def test_mat_view_in_sync_with_mosaic_dem_release(db_connection):
         rows = cur.fetchall()
         assert len(rows) == 0, \
             f"Materialized view may be out of sync with dem.mosaic_dem_release (LIMIT 10): {rows}"
+
+
+def test_asset_keys(db_connection, sampling_strategy):
+    sampling_clause, sampling_description = sampling_strategy
+
+    query = f"""
+    WITH actual AS (
+        SELECT
+            collection,
+            item_id,
+            array_agg(key) AS asset_keys
+        FROM dem.stac_static_item {sampling_clause},
+            jsonb_object_keys(content->'assets') AS key
+        WHERE collection = %s
+        GROUP BY collection, item_id
+    ),
+
+    expected AS (
+        SELECT %s::TEXT[] AS asset_keys
+    ),
+
+    compare AS (
+        SELECT
+            collection,
+            item_id,
+            array_to_json(actual.asset_keys)::jsonb - expected.asset_keys AS extra_keys,
+            array_to_json(expected.asset_keys)::jsonb - actual.asset_keys AS missing_keys
+        FROM actual, expected
+    )
+
+    SELECT *
+    FROM compare
+    WHERE extra_keys != '[]'::jsonb
+        OR missing_keys != '[]'::jsonb
+    LIMIT 10
+    """
+
+    strip_assets = ["hillshade", "hillshade_masked", "dem", "mask", "matchtag",
+                    "metadata", "readme"]
+
+    arcticdem_mosaics_v4_1_assets = ["hillshade", "dem", "count", "mad", "maxdate",
+                                     "mindate", "datamask", "metadata"]
+
+    rema_mosaics_v2_0_assets = ["hillshade", "dem", "count", "mad", "maxdate",
+                                "mindate", "metadata"]
+
+    expected = {
+        "arcticdem-strips-s2s041-2m": strip_assets,
+        "earthdem-strips-s2s041-2m": strip_assets,
+        "rema-strips-s2s041-2m": strip_assets,
+        "arcticdem-mosaics-v4.1-2m": arcticdem_mosaics_v4_1_assets,
+        "arcticdem-mosaics-v4.1-10m": arcticdem_mosaics_v4_1_assets,
+        "arcticdem-mosaics-v4.1-32m": arcticdem_mosaics_v4_1_assets,
+        "rema-mosaics-v2.0-2m": rema_mosaics_v2_0_assets,
+        "rema-mosaics-v2.0-10m": rema_mosaics_v2_0_assets,
+        "rema-mosaics-v2.0-32m": rema_mosaics_v2_0_assets,
+        "arcticdem-mosaics-v3.0-2m": ["browse", "dem", "metadata"],
+        "arcticdem-mosaics-v3.0-10m": ["dem", "metadata"],
+        "arcticdem-mosaics-v3.0-32m": ["dem", "metadata"],
+    }
+
+    with db_connection.cursor() as cur:
+        for collection, expected_asset_keys in expected.items():
+            cur.execute(query, (collection, expected_asset_keys))
+            rows = cur.fetchall()
+            assert len(rows) == 0, \
+                f"Found strips with missing or extra keys using {sampling_description} (LIMIT 10): {rows}"
