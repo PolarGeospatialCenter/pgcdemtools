@@ -91,8 +91,6 @@ def test_no_null_property_values(db_connection, sampling_strategy):
         value
     FROM dem.stac_static_item {sampling_clause}, jsonb_each(content->'properties')
     WHERE value = 'null'::jsonb
-        -- TODO: Set dem.strip_dem_release.release_date for 2025 strip dem release, then remove the following clause
-        AND key != 'published' 
     LIMIT 10
     """
 
