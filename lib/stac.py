@@ -1,4 +1,5 @@
 import dataclasses
+import json
 import pathlib
 import rasterio
 
@@ -44,16 +45,17 @@ class RasterAssetInfo:
                 "type": "Polygon",
                 "coordinates": [
                     [
-                        (x_min, y_min),  # lower left
-                        (x_max, y_min),  # lower right
-                        (x_max, y_max),  # upper right
-                        (x_min, y_max),  # upper left
-                        (x_min, y_min),  # lower left again
+                        [x_min, y_min],  # lower left
+                        [x_max, y_min],  # lower right
+                        [x_max, y_max],  # upper right
+                        [x_min, y_max],  # upper left
+                        [x_min, y_min],  # lower left again
                     ]
                 ],
             }
 
             centroid_long, centroid_lat = src.lnglat()
+            proj_centroid = {"lat": centroid_lat, "lon": centroid_long}
 
             return cls(
                 nodata=src.nodata,
@@ -66,7 +68,7 @@ class RasterAssetInfo:
                 proj_geojson=proj_geojson,
                 # The center of the raster in [lat, long] per the projection extension
                 # https://github.com/stac-extensions/projection?tab=readme-ov-file#projcentroid
-                proj_centroid=[centroid_lat, centroid_long],
+                proj_centroid=proj_centroid,
             )
 
 

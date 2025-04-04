@@ -2,6 +2,7 @@
 
 import argparse
 import datetime
+import functools
 import json
 import logging
 import os
@@ -197,7 +198,7 @@ def build_strip_stac_item(base_url, domain, raster):
             # Common properties
             "title": raster.stripid,
             "description": "Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.",
-            "created": iso8601(raster.creation_date, f"{raster.stripid} creation_date"), # are these actually in UTC, does it matter?
+            "created": iso8601(raster.creation_date.date(), f"{raster.stripid} creation_date"),  # Sandwich equivalent is stored as date, ensure created_date is actually a date.
             "published": iso8601(datetime.datetime.utcnow()), # now
             "datetime": iso8601(start_time), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": iso8601(start_time, f"{raster.stripid} start_time"),
@@ -210,7 +211,9 @@ def build_strip_stac_item(base_url, domain, raster):
             "proj:code": dem_info.proj_code,
             "proj:shape": dem_info.proj_shape,
             "proj:transform": dem_info.proj_transform,
+            "proj:bbox": dem_info.proj_bbox,
             "proj:geometry": dem_info.proj_geojson,
+            "proj:centroid": dem_info.proj_centroid,
             # PGC Properties
             "pgc:image_ids": [ raster.catid1, raster.catid2 ],
             "pgc:geocell": raster.geocell,
@@ -218,20 +221,23 @@ def build_strip_stac_item(base_url, domain, raster):
             "pgc:is_lsf": raster.is_lsf == True,
             "pgc:setsm_version": raster.algm_version,
             "pgc:s2s_version": raster.s2s_version,
-            "pgc:rmse": raster.rmse,
+            "pgc:rmse": round(raster.rmse, 6),
             "pgc:stripdemid": raster.stripdemid,
             "pgc:pairname": raster.pairname,
-            "pgc:masked_matchtag_density": raster.masked_density,
-            "pgc:valid_area_matchtag_density": raster.valid_density,
-            "pgc:cloud_area_percent": raster.cloud_perc,
-            "pgc:water_area_percent": raster.water_perc,
-            "pgc:valid_area_percent": raster.valid_perc,
-            "pgc:cloud_area_sqkm": raster.cloud_area,
-            "pgc:water_area_sqkm": raster.water_area,
-            "pgc:valid_area_sqkm": raster.valid_area,
-            "pgc:avg_convergence_angle": raster.avg_conv_angle,
-            "pgc:avg_expected_height_accuracy": raster.avg_exp_height_acc,
-            "pgc:avg_sun_elevs": [ raster.avg_sun_el1, raster.avg_sun_el2 ],
+            "pgc:masked_matchtag_density": round(raster.masked_density, 6),
+            "pgc:valid_area_matchtag_density": round(raster.valid_density, 6),
+            "pgc:cloud_area_percent": round(raster.cloud_perc, 6),
+            "pgc:water_area_percent": round(raster.water_perc, 6),
+            "pgc:valid_area_percent": round(raster.valid_perc, 6),
+            "pgc:cloud_area_sqkm": round(raster.cloud_area, 6),
+            "pgc:water_area_sqkm": round(raster.water_area, 6),
+            "pgc:valid_area_sqkm": round(raster.valid_area, 6),
+            "pgc:avg_convergence_angle": round(raster.avg_conv_angle, 6),
+            "pgc:avg_expected_height_accuracy": round(raster.avg_exp_height_acc, 6),
+            "pgc:avg_sun_elevs": [
+                round(raster.avg_sun_el1, 6),
+                round(raster.avg_sun_el2, 6)
+            ],
         },
         "links": [
             {
@@ -278,7 +284,9 @@ def build_strip_stac_item(base_url, domain, raster):
                 "proj:code": hillshade_info.proj_code,
                 "proj:shape": hillshade_info.proj_shape,
                 "proj:transform": hillshade_info.proj_transform,
+                "proj:bbox": hillshade_info.proj_bbox,
                 "proj:geometry": hillshade_info.proj_geojson,
+                "proj:centroid": hillshade_info.proj_centroid,
             },
             "hillshade_masked": {
                 "title": "Masked 10m hillshade",
@@ -299,7 +307,9 @@ def build_strip_stac_item(base_url, domain, raster):
                 "proj:code": hillshade_masked_info.proj_code,
                 "proj:shape": hillshade_masked_info.proj_shape,
                 "proj:transform": hillshade_masked_info.proj_transform,
+                "proj:bbox": hillshade_masked_info.proj_bbox,
                 "proj:geometry": hillshade_masked_info.proj_geojson,
+                "proj:centroid": hillshade_masked_info.proj_centroid,
             },
             "dem": {
                 "title": f"{raster.res_str} DEM",
@@ -370,7 +380,10 @@ def build_strip_stac_item(base_url, domain, raster):
         # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-        "geometry": json.loads(utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson())
+        "geometry": json.loads(
+            utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson(),
+            parse_float=round_coordinates,
+        )
     }
 
     return stac_item
@@ -768,6 +781,10 @@ def iso8601(date_time, msg=""):
 
     logger.error(f"null date: {msg}")
     return None
+
+
+def round_coordinates(s: str) -> float:
+    return round(float(s), 6)
 
 
 if __name__ == '__main__':

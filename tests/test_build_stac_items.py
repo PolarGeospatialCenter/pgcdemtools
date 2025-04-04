@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 import requests
+import shapely
 
 repo = Path(__file__).parent.parent
 sys.path.append(f"{repo}")
@@ -686,3 +687,142 @@ def test_content_arcticdem_mosaics_v3_0_32m(arcticdem_mosaics_v3_0_32m):
         AssetParams(asset="dem", nodata=-9999.0, data_type="float32", unit="meter"),
     ]
     assert_asset_params(item, asset_params)
+
+
+########################################################################################
+# Sandwich synchronization
+# The STAC Items produced by build_stac_items.py should be the same as those contained
+# in dem.stac_static_item
+########################################################################################
+
+
+def get_same_item_from_sandwich(db_connection, item_dict):
+    collection = item_dict["collection"]
+    item_id = item_dict["id"]
+
+    query = """
+    SELECT content
+    FROM dem.stac_strip_item
+    WHERE collection = %s
+        AND item_id = %s
+    """
+
+    with db_connection.cursor() as cur:
+        cur.execute("SET TIME ZONE 'UTC'")  # Prevent conversion of timestamps to local
+        cur.execute(query, (collection, item_id))
+        row = cur.fetchone()
+        return row[0]
+
+
+def extract_structure(d, path=""):
+    """
+    Recursively extract the structure of a dictionary.
+    Returns a set of dot-separated key paths.
+    """
+    structure = set()
+
+    if isinstance(d, dict):
+        # If there are no keys, add the current path as a leaf
+        if not d:
+            structure.add(path)
+
+        # Process each key
+        for key, value in d.items():
+            new_path = f"{path}.{key}" if path else key
+
+            # If value is a dict, recurse
+            if isinstance(value, dict):
+                structure.update(extract_structure(value, new_path))
+            # If value is a list, process each item with its index
+            elif isinstance(value, list):
+                for i, item in enumerate(value):
+                    if isinstance(item, dict):
+                        structure.update(extract_structure(item, f"{new_path}[{i}]"))
+                    else:
+                        structure.add(f"{new_path}[{i}]")
+            # Other values are leaves
+            else:
+                structure.add(new_path)
+
+    return structure
+
+
+def test_sync_arcticdem_strips_s2s041_2m(db_connection, arcticdem_strips_s2s041_2m):
+    from_raster = arcticdem_strips_s2s041_2m
+    from_sandwich = get_same_item_from_sandwich(db_connection, from_raster)
+
+    raster_structure = extract_structure(from_raster)
+    sandwhich_structure = extract_structure(from_sandwich)
+    assert raster_structure == sandwhich_structure
+
+    # The "published" property will never align (datetime.utcnow() vs sandwich value),
+    # but that's okay.
+    from_raster_props = {k: v for k, v in from_raster["properties"].items()
+                         if k != "published"}
+    from_sandwich_props = {k: v for k, v in from_sandwich["properties"].items()
+                           if k != "published"}
+    assert from_raster_props == from_sandwich_props
+
+    assert from_raster["assets"] == from_sandwich["assets"]
+
+    from_raster_polygon = shapely.MultiPolygon(
+        from_raster["geometry"]["coordinates"]
+    ).normalize()
+    from_sandwich_polygon = shapely.MultiPolygon(
+        from_sandwich["geometry"]["coordinates"]
+    ).normalize()
+    assert from_raster_polygon.equals(from_sandwich_polygon)
+
+
+def test_sync_earthdem_strips_s2s041_2m(db_connection, earthdem_strips_s2s041_2m):
+    from_raster = earthdem_strips_s2s041_2m
+    from_sandwich = get_same_item_from_sandwich(db_connection, from_raster)
+
+    raster_structure = extract_structure(from_raster)
+    sandwhich_structure = extract_structure(from_sandwich)
+    assert raster_structure == sandwhich_structure
+
+    # The "published" property will never align (datetime.utcnow() vs sandwich value),
+    # but that's okay.
+    from_raster_props = {k: v for k, v in from_raster["properties"].items()
+                         if k != "published"}
+    from_sandwich_props = {k: v for k, v in from_sandwich["properties"].items()
+                           if k != "published"}
+    assert from_raster_props == from_sandwich_props
+
+    assert from_raster["assets"] == from_sandwich["assets"]
+
+    from_raster_polygon = shapely.MultiPolygon(
+        from_raster["geometry"]["coordinates"]
+    ).normalize()
+    from_sandwich_polygon = shapely.MultiPolygon(
+        from_sandwich["geometry"]["coordinates"]
+    ).normalize()
+    assert from_raster_polygon.equals(from_sandwich_polygon)
+
+
+def test_sync_rema_strips_s2s041_2m(db_connection, rema_strips_s2s041_2m):
+    from_raster = rema_strips_s2s041_2m
+    from_sandwich = get_same_item_from_sandwich(db_connection, from_raster)
+
+    raster_structure = extract_structure(from_raster)
+    sandwhich_structure = extract_structure(from_sandwich)
+    assert raster_structure == sandwhich_structure
+
+    # The "published" property will never align (datetime.utcnow() vs sandwich value),
+    # but that's okay.
+    from_raster_props = {k: v for k, v in from_raster["properties"].items()
+                         if k != "published"}
+    from_sandwich_props = {k: v for k, v in from_sandwich["properties"].items()
+                           if k != "published"}
+    assert from_raster_props == from_sandwich_props
+
+    assert from_raster["assets"] == from_sandwich["assets"]
+
+    from_raster_polygon = shapely.MultiPolygon(
+        from_raster["geometry"]["coordinates"]
+    ).normalize()
+    from_sandwich_polygon = shapely.MultiPolygon(
+        from_sandwich["geometry"]["coordinates"]
+    ).normalize()
+    assert from_raster_polygon.equals(from_sandwich_polygon)

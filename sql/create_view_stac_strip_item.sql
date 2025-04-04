@@ -101,29 +101,32 @@ strip_properties AS (
             'proj:transform', primary_asset.proj_transform,
             'proj:bbox', primary_asset.proj_bbox,
             'proj:geometry', primary_asset.proj_geometry,
-            'proj:centroid', primary_asset.proj_centroid,
+            'proj:centroid', jsonb_build_object('lat', primary_asset.proj_centroid[0], 'lon', primary_asset.proj_centroid[1]),
 
             -- PGC properties
-            'pgc:rmse', sd_all.rmse,
+            'pgc:rmse', round(sd_all.rmse::NUMERIC, 6),
             'pgc:is_lsf', sd_all.is_lsf,
             'pgc:geocell', sd_all.geocell,
             'pgc:pairname', sd_all.pairname,
-            'pgc:image_ids', json_build_array(sd_all.catalogid2, sd_all.catalogid2),
+            'pgc:image_ids', json_build_array(sd_all.catalogid1, sd_all.catalogid2),
             'pgc:is_xtrack', sd_all.is_xtrack,
             'pgc:stripdemid', sd_all.stripdemid,
             'pgc:s2s_version', sd_all.s2s_ver,
-            'pgc:avg_sun_elevs', json_build_array(sd_all.avg_sunel1, sd_all.avg_sunel2),
+            'pgc:avg_sun_elevs', json_build_array(
+                round(sd_all.avg_sunel1::NUMERIC, 6),
+                round(sd_all.avg_sunel2::NUMERIC, 6)
+            ),
             'pgc:setsm_version', sd_all.algm_ver,
-            'pgc:cloud_area_sqkm', sd_all.cloud_area,
-            'pgc:valid_area_sqkm', sd_all.valid_area,
-            'pgc:water_area_sqkm', sd_all.water_area,
-            'pgc:cloud_area_percent', sd_all.cloud_perc,
-            'pgc:valid_area_percent', sd_all.valid_perc,
-            'pgc:water_area_percent', sd_all.water_perc,
-            'pgc:avg_convergence_angle', sd_all.avgconvang,
-            'pgc:masked_matchtag_density', sd_all.mask_dens,
-            'pgc:valid_area_matchtag_density', sd_all.valid_dens,
-            'pgc:avg_expected_height_accuracy', sd_all.avg_ht_acc
+            'pgc:cloud_area_sqkm', round(sd_all.cloud_area::NUMERIC, 6),
+            'pgc:valid_area_sqkm', round(sd_all.valid_area::NUMERIC, 6),
+            'pgc:water_area_sqkm', round(sd_all.water_area::NUMERIC, 6),
+            'pgc:cloud_area_percent', round(sd_all.cloud_perc::NUMERIC, 6),
+            'pgc:valid_area_percent', round(sd_all.valid_perc::NUMERIC, 6),
+            'pgc:water_area_percent', round(sd_all.water_perc::NUMERIC, 6),
+            'pgc:avg_convergence_angle', round(sd_all.avgconvang::NUMERIC, 6),
+            'pgc:masked_matchtag_density', round(sd_all.mask_dens::NUMERIC, 6),
+            'pgc:valid_area_matchtag_density', round(sd_all.valid_dens::NUMERIC, 6),
+            'pgc:avg_expected_height_accuracy', round(sd_all.avg_ht_acc::NUMERIC, 6)
         ) AS content
     FROM canonical_strips
 
@@ -156,7 +159,7 @@ strip_assets AS (
             ),
             -- 'unit' property omitted
             'nodata', 0,
-            'data_type', 'unit8',
+            'data_type', 'uint8',
             -- Projection properties
             'gsd', secondary_asset.gsd,
             'proj:code', secondary_asset.proj_code,
@@ -164,7 +167,7 @@ strip_assets AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', secondary_asset.proj_centroid
+            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
         ) AS hillshade,
 
         jsonb_build_object(
@@ -177,7 +180,7 @@ strip_assets AS (
             ),
             -- 'unit' property omitted
             'nodata', 0,
-            'data_type', 'unit8',
+            'data_type', 'uint8',
             -- Projection properties
             'gsd', secondary_asset.gsd,
             'proj:code', secondary_asset.proj_code,
@@ -185,7 +188,7 @@ strip_assets AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', secondary_asset.proj_centroid
+            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
         ) AS hillsahde_masked,
 
         jsonb_build_object(
@@ -283,7 +286,7 @@ strip_items AS (
                 'metadata', strip_assets.metadata,
                 'readme', strip_assets.readme
             ),
-            'geometry', st_asgeojson(sd_all.wkb_geometry)::jsonb,
+            'geometry', st_asgeojson(sd_all.wkb_geometry, maxdecimaldigits := 6)::jsonb,
             'collection', collection,
             'properties', strip_properties.content,
             'stac_version', '1.1.0',
