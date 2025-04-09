@@ -25,7 +25,7 @@ def main():
     #### Set Up Arguments 
     parser = argparse.ArgumentParser(
         formatter_class=RawTextArgumentDefaultsHelpFormatter,
-        description="shelve setsm files by geocell"
+        description="shelve setsm files by geocell, shp, or date"
         )
     
     #### Positional Arguments
@@ -127,14 +127,14 @@ def main():
             except RuntimeError as e:
                 logger.error( e )
             else:
-                if raster.metapath is not None:
+                if raster.metapath or raster.mdf:
                     if args.res:
                         if raster.res == args.res:
                             rasters.append(raster)
                     else:
                         rasters.append(raster)
                 else:
-                    logger.warning("DEM does not include a valid meta.txt and cannot be shelved: {}".format(raster.srcfp))
+                    logger.warning("DEM does not include a valid meta.txt or mdf.txt and cannot be shelved: {}".format(raster.srcfp))
 
         logger.info('{} DEMs found'.format(len(rasters)))
 
