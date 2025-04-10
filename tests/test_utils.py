@@ -1,22 +1,13 @@
 import argparse
-import logging
 import os
 import sys
 import unittest
 
-script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-root_dir = os.path.dirname(script_dir)
-sys.path.append(root_dir)
+__test_dir__ = os.path.dirname(__file__)
+__app_dir__ = os.path.dirname(__test_dir__)
+sys.path.append(__app_dir__)
 
 from lib import utils
-
-logger = logging.getLogger("logger")
-# lso = logging.StreamHandler()
-# lso.setLevel(logging.ERROR)
-# formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
-# lso.setFormatter(formatter)
-# logger.addHandler(lso)
-        
 
 class TestCopyDems(unittest.TestCase):
     
