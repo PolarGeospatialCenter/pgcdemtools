@@ -7,33 +7,44 @@ Version `1.2` released 2023-03-10.
 #### [Download Latest](https://github.com/PolarGeospatialCenter/pgcdemtools/releases)
 
 ## Config
-Scripts that support writing to an output Postgres database (such as index_setsm) have a `--config` argument path to a config file containing database access information. See the example [config](./config.ini.example) for reference. Alternatively, the information in this config file may be sourced from the Postgres standard pair of [~/.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) and [~/.pg_service.conf](https://www.postgresql.org/docs/current/libpq-pgservice.html) files.
-> **Note:** The `~/.pg_service.conf` file does not support definition of an active schema in the config service information. When leveraging a service from the `~/.pg_service.conf` file in a script argument for `pgcdemtools` scripts, always indicate the schema name of the target layer. For example, `"PG:service_name:schema_name.layer_name"`. If the schema name is not provided and `~/.pg_service.conf` is used, the default schema name (usually 'public') will be assumed.
+Scripts that support writing to an output Postgres database (such as index_setsm) have a `--config` argument path to a 
+config file containing database access information. See the example [config](./config.ini.example) for reference. Alternatively, the 
+information in this config file may be sourced from the Postgres standard pair of [~/.pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html) 
+and [~/.pg_service.conf](https://www.postgresql.org/docs/current/libpq-pgservice.html) files.
+> **Note:** The `~/.pg_service.conf` file does not support definition of an active schema in the config service 
+> information. When leveraging a service from the `~/.pg_service.conf` file in a script argument for `pgcdemtools` 
+> scripts, always indicate the schema name of the target layer. For example, `"PG:service_name:schema_name.layer_name"`.
+> If the schema name is not provided and `~/.pg_service.conf` is used, the default schema name (usually 'public') will 
+> be assumed.
 
 ## Tools
 ### Rename
 rename_setsm_add_version
 
 ### Index
-index_setsm - Build a gdb or shapefile index of a single SETSM DEM scene, strip, or tile, or a directory of DEMs of these types.
+index_setsm - Build a gdb or shapefile index of a single SETSM DEM scene, strip, or tile, or a directory of DEMs of 
+these types.
 
 ### Package
-package_setsm - Build an index of a SETSM DEM or directory of DEMs and package all auxilary files into tar.gz archives.
+package_setsm - Build an index of a SETSM DEM or directory of DEMs and package all auxiliary files into tar.gz archives.
 
-package_setsm_tiles - Build an index of a SETSM DEM mosaic tiles or directory of tiles and package all auxilary files into tar.gz archives.
+package_setsm_tiles - Build an index of a SETSM DEM mosaic tiles or directory of tiles and package all auxiliary files
+into tar.gz archives.
 
 ### Shelve
 shelve_setsm_by_date - Move or copy a SETSM DEM or a directory of DEMs into folders based on acquisition date.
 
-shelve_setsm_by_geocell - Move or copy a SETSM DEM or a directory of DEMs into folders based on the geocell that intersects with the DEM cetroid, as identified by the lower left geocell corner.
+shelve_setsm_by_geocell - Move or copy a SETSM DEM or a directory of DEMs into folders based on the geocell that 
+intersects with the DEM centroid, as identified by the lower left geocell corner.
 
-shelve_setsm_by_shp - Move or copy a SETSM DEM or a directory of DEMs into folders based on a custon shapefile index.
+shelve_setsm_by_shp - Move or copy a SETSM DEM or a directory of DEMs into folders based on a custom shapefile index.
 
 ### Retrieve
-copy_dems - Copy DEMs using a subset of the DEM index bult using index_setsm.py.
+copy_dems - Copy DEMs using a subset of the DEM index built using index_setsm.py.
 
 ### Misc
-apply_setsm_registration - If GCP registration information is included with a SETSM DEM, apply the offset and output a new raster.
+apply_setsm_registration - If GCP registration information is included with a SETSM DEM, apply the offset and output a 
+new raster.
 
 resample_setsm - resample SETSM DEMs to a lower resolution.
 
@@ -67,11 +78,15 @@ find "${DEM_DIR} \
 ```
 
 ## Usage notes
-Some of the tools are designed to be run either in a serial, parallel, or with a PBS or SLURM scheduler.  If a scheduler is present, the --scheduler option can be used to submit the jobs to PBS or SLURM.  The pbs_* and slurm_* scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available, allows the given tool to operate on several tasks at once.
+Some of the tools are designed to be run either in a serial, parallel, or with a PBS or SLURM scheduler.  If a 
+scheduler is present, the --scheduler option can be used to submit the jobs to PBS or SLURM.  The pbs_* and slurm_* 
+scripts can be modified or used as a template for job submission scripts. The --parallel-processes option, if available,
+allows the given tool to operate on several tasks at once.
 
 
 ## Running Tests
-Most unit tests and functional tests for pgcdemtools are written using python's unittest library. They use licensed commercial data that cannot be distributed freely but is available to project contributors.
+pgcdemtools uses pytest for running tests. Some use large files that are not included in the git repo, but are available
+upon request
 
 On Linux systems:
 ```sh
@@ -79,11 +94,9 @@ On Linux systems:
 ln -s <test_data_location>/tests/testdata tests/
 
 # run the tests
-python tests/func_test_index.pr 
-python tests/func_test_package.py
-etc... 
+pytest 
 ```
 
 ## Contact
-To report any questions or issues, please open a github issue or contact the Polar Geospatial Center: 
+To report any questions or issues, please open a GitHub issue or contact the Polar Geospatial Center: 
 pgc-support@umn.edu

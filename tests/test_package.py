@@ -3,26 +3,18 @@ import glob
 import os
 import shutil
 import subprocess
-import sys
 import unittest
 
-from osgeo import ogr, gdal, gdalconst
+from osgeo import gdal, gdalconst
 
 try:
     import ConfigParser
 except ImportError:
     import configparser as ConfigParser
 
-script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-testdata_dir = os.path.join(script_dir, 'testdata')
-root_dir = os.path.dirname(script_dir)
-
-# logger = logging.getLogger("logger")
-# lso = logging.StreamHandler()
-# lso.setLevel(logging.ERROR)
-# formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
-# lso.setFormatter(formatter)
-# logger.addHandler(lso)
+__test_dir__ = os.path.dirname(__file__)
+testdata_dir = os.path.join(__test_dir__, 'testdata')
+__app_dir__ = os.path.dirname(__test_dir__)
 
 
 class TestPackagerStrips(unittest.TestCase):
@@ -31,18 +23,13 @@ class TestPackagerStrips(unittest.TestCase):
         self.script_name = 'package_setsm.py'
         self.source_data_dn = 'setsm_strip_packager'
         self.source_data = os.path.join(testdata_dir, self.source_data_dn)
-        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.output_dir = os.path.join(__test_dir__, 'tmp_output')
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def tearDown(self):
         ## Clean up output
-        for f in os.listdir(self.output_dir):
-            fp = os.path.join(self.output_dir, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
-            else:
-                shutil.rmtree(fp)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
 
-    # @unittest.skip("test")
     def testOutput(self):
 
         o_list = [
@@ -67,7 +54,7 @@ class TestPackagerStrips(unittest.TestCase):
             # link source to test area
             shutil.copytree(self.source_data, o_dir, copy_function=os.link)
             # run test
-            cmd = f'python {root_dir}/{self.script_name} {o_dir} {o_dir} {opts}'
+            cmd = f'python {__app_dir__}/{self.script_name} {o_dir} {o_dir} {opts}'
 
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()
@@ -101,16 +88,12 @@ class TestPackagerTiles(unittest.TestCase):
         self.script_name = 'package_setsm_tiles.py'
         self.source_data_dn = 'setsm_tile_packager'
         self.source_data = os.path.join(testdata_dir, self.source_data_dn)
-        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.output_dir = os.path.join(__test_dir__, 'tmp_output')
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def tearDown(self):
         ## Clean up output
-        for f in os.listdir(self.output_dir):
-            fp = os.path.join(self.output_dir, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
-            else:
-                shutil.rmtree(fp)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
 
     # @unittest.skip("test")
     def testOutput(self):
@@ -136,7 +119,7 @@ class TestPackagerTiles(unittest.TestCase):
             # link source to test area
             shutil.copytree(self.source_data, o_dir, copy_function=os.link)
             # run test
-            cmd = f'python {root_dir}/{self.script_name} {o_dir} {o_dir} {opts}'
+            cmd = f'python {__app_dir__}/{self.script_name} {o_dir} {o_dir} {opts}'
 
             p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             (so, se) = p.communicate()

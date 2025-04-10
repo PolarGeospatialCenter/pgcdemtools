@@ -2,7 +2,6 @@ import argparse
 import os
 import shutil
 import subprocess
-import sys
 import unittest
 
 from osgeo import ogr
@@ -12,22 +11,14 @@ try:
 except ImportError:
     import configparser as ConfigParser
 
-script_dir = os.path.dirname(os.path.abspath(sys.argv[0]))
-testdata_dir = os.path.join(script_dir, 'testdata')
-root_dir = os.path.dirname(script_dir)
+__test_dir__ = os.path.dirname(__file__)
+testdata_dir = os.path.join(__test_dir__, 'testdata')
+__app_dir__ = os.path.dirname(__test_dir__)
 
 res_str = {
     2.0: '_2m_v',
     0.5: '_50cm_v',
 }
-
-# logger = logging.getLogger("logger")
-# lso = logging.StreamHandler()
-# lso.setLevel(logging.ERROR)
-# formatter = logging.Formatter('%(asctime)s %(levelname)s- %(message)s','%m-%d-%Y %H:%M:%S')
-# lso.setFormatter(formatter)
-# logger.addHandler(lso)
-
 
 class TestIndexerScenes(unittest.TestCase):
 
@@ -36,9 +27,10 @@ class TestIndexerScenes(unittest.TestCase):
         self.scene_json_dir = os.path.join(testdata_dir, 'setsm_scene_json')
         self.scene50cm_dir = os.path.join(testdata_dir, 'setsm_scene_50cm')
         self.scenedsp_dir = os.path.join(testdata_dir, 'setsm_scene_2mdsp')
-        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.output_dir = os.path.join(__test_dir__, 'tmp_output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
+        os.makedirs(self.output_dir, exist_ok=True)
 
         self.scene_count = 52
         self.scene_json_count = 43
@@ -47,12 +39,7 @@ class TestIndexerScenes(unittest.TestCase):
 
     def tearDown(self):
         ## Clean up output
-        for f in os.listdir(self.output_dir):
-            fp = os.path.join(self.output_dir, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
-            else:
-                shutil.rmtree(fp)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
 
     # @unittest.skip("test")
     def testOutputShp(self):
@@ -74,7 +61,7 @@ class TestIndexerScenes(unittest.TestCase):
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np {} {} {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -133,21 +120,21 @@ class TestIndexerScenes(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.scene_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --custom-paths BP --check'.format(root_dir),
+            (self.scene_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --custom-paths BP --check'.format(__app_dir__),
              self.scene_count, 'Done'), # test BP paths
-            (self.scene_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(root_dir),
+            (self.scene_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(__app_dir__),
              self.scene_count, 'Done'),  # test PGC paths
             (self.scene_dir, self.test_str, '--skip-region-lookup --overwrite --custom-paths CSS',
              self.scene_count, 'Done'),  # test CSS paths
-            (self.scenedsp_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths BP --check'.format(root_dir),
+            (self.scenedsp_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths BP --check'.format(__app_dir__),
              self.scenedsp_count, 'Done'),  # test 2m_dsp record
-            (self.scenedsp_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(root_dir),
+            (self.scenedsp_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(__app_dir__),
              self.scenedsp_count, 'Done'),  # test 2m_dsp record
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np {} {} {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -207,7 +194,7 @@ class TestIndexerScenes(unittest.TestCase):
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np {} {} --skip-region-lookup {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -233,88 +220,6 @@ class TestIndexerScenes(unittest.TestCase):
             except AssertionError as e:
                 self.assertIn(msg, se.decode())
 
-    @unittest.skip("test")
-    def testOutputPostgres(self):
-
-        ## Get config info
-        protocol, section, lyr = self.pg_test_str.split(':')
-        try:
-            config = ConfigParser.ConfigParser()  # ConfigParser() replaces SafeConfigParser() in Python >=3.2
-        except NameError:
-            config = ConfigParser.SafeConfigParser()
-        config.read(os.path.join(root_dir, 'config.ini'))
-        conn_info = {
-            'host': config.get(section, 'host'),
-            'port': config.getint(section, 'port'),
-            'name': config.get(section, 'name'),
-            'schema': config.get(section, 'schema'),
-            'user': config.get(section, 'user'),
-            'pw': config.get(section, 'pw'),
-        }
-        pg_conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(
-            **conn_info)
-
-        ## Build shp
-        test_param_list = (
-            # input, output, args, result feature count, message
-            (self.scene_dir, self.pg_test_str, '--check ', self.scene_count, 'Done', 2),  # test creation and check
-            (self.scene_dir, self.pg_test_str, '--append --check', self.scene_count * 2, 'Done', 2),  # test append and check
-            (self.scene_dir, self.pg_test_str, '', self.scene_count * 2,
-             'Dst DB layer exists.  Use the --overwrite or --append options.', 2),  # test error message on existing layer
-            (self.scene_dir, self.pg_test_str, '--overwrite', self.scene_count, 'Removing old index', 2), # test overwrite
-            (self.scenedsp_dir, self.pg_test_str, '--overwrite', self.scenedsp_count, 'Done', 2), # test as 2m_dsp record
-            (self.scenedsp_dir, self.pg_test_str, '--overwrite --dsp-record-mode orig', self.scenedsp_count, 'Done', 0.5),
-        )
-
-        ## Ensure test layer does not exist on DB
-        ds = ogr.Open(pg_conn_str, 1)
-        for i in range(ds.GetLayerCount()):
-            l = ds.GetLayer(i)
-            if l.GetName() == lyr:
-                ds.DeleteLayer(i)
-                break
-
-        for i, o, options, result_cnt, msg, res in test_param_list:
-            cmd = 'python {}/index_setsm.py --np {} {} --skip-region-lookup {}'.format(
-                root_dir,
-                i,
-                o,
-                options
-            )
-            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            (so, se) = p.communicate()
-            # print(se)
-            # print(so)
-
-            ## Test if ds exists and has corrent number of records
-            ds = ogr.Open(pg_conn_str, 0)
-            layer = ds.GetLayerByName(lyr)
-            self.assertIsNotNone(layer)
-            cnt = layer.GetFeatureCount()
-            self.assertEqual(cnt, result_cnt)
-            for feat in layer:
-                scenedemid = feat.GetField('SCENEDEMID')
-                stripdemid = feat.GetField('STRIPDEMID')
-                self.assertEqual(feat.GetField('DEM_RES'), res)
-                scenedemid_lastpart = scenedemid.split('_')[-1]
-                self.assertTrue(scenedemid_lastpart.startswith('2' if res == 2.0 else '0'))
-                self.assertTrue(res_str[res] in stripdemid)
-            ds, layer = None, None
-
-            ## Test if stdout has proper error
-            try:
-                self.assertIn(msg, so.decode())
-            except AssertionError as e:
-                self.assertIn(msg, se.decode())
-
-        # Ensure test layer does not exist on DB
-        ds = ogr.Open(pg_conn_str, 1)
-        for i in range(ds.GetLayerCount()):
-            l = ds.GetLayer(i)
-            if l.GetName() == lyr:
-                ds.DeleteLayer(i)
-                break
-
     # @unittest.skip("test")
     def testScene50cm(self):
 
@@ -326,7 +231,7 @@ class TestIndexerScenes(unittest.TestCase):
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np {} {} --skip-region-lookup {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -375,13 +280,13 @@ class TestIndexerScenes(unittest.TestCase):
             'Done', None),  # test as 50cm and 2m records
             (self.scenedsp_dir, self.test_str, '--overwrite --dsp-record-mode both --status-dsp-record-mode-orig aws --skip-region-lookup',
             self.scenedsp_count * 2, 'Done', None),  # test as 50cm and 2m records with custom status
-            (self.scenedsp_dir, self.test_str, '--overwrite --custom-paths BP --dsp-record-mode both --status-dsp-record-mode-orig aws --read-pickle {}/tests/testdata/pair_region_lookup.p'.format(root_dir),
+            (self.scenedsp_dir, self.test_str, '--overwrite --custom-paths BP --dsp-record-mode both --status-dsp-record-mode-orig aws --read-pickle {}/tests/testdata/pair_region_lookup.p'.format(__app_dir__),
              self.scenedsp_count * 2, 'Done', None),  # test as 50cm and 2m records with Bp paths and custom status
         )
 
         for i, o, options, result_cnt, msg, res in test_param_list:
             cmd = 'python {}/index_setsm.py --np {} {} {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -437,7 +342,7 @@ class TestIndexerScenes(unittest.TestCase):
 
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --write-json'.format(
-            root_dir,
+            __app_dir__,
             self.scene_dir,
             self.output_dir,
         )
@@ -465,7 +370,7 @@ class TestIndexerScenes(unittest.TestCase):
         ## Test json exists error
         msg = 'Json file already exists'
         cmd = 'python {}/index_setsm.py --np {} {} --write-json'.format(
-            root_dir,
+            __app_dir__,
             self.scene_dir,
             self.output_dir,
         )
@@ -481,7 +386,7 @@ class TestIndexerScenes(unittest.TestCase):
         mod_date1 = stat.st_mtime
 
         cmd = 'python {}/index_setsm.py --np {} {} --write-json --overwrite'.format(
-            root_dir,
+            __app_dir__,
             self.scene_dir,
             self.output_dir,
         )
@@ -497,7 +402,7 @@ class TestIndexerScenes(unittest.TestCase):
         ## Test json read
         test_shp = os.path.join(self.output_dir, 'test.shp')
         cmd = 'python {}/index_setsm.py --np {} {} --skip-region-lookup --read-json --check'.format(
-            root_dir,
+            __app_dir__,
             self.output_dir,
             test_shp,
         )
@@ -539,7 +444,7 @@ class TestIndexerScenes(unittest.TestCase):
 
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --write-json'.format(
-            root_dir,
+            __app_dir__,
             self.scenedsp_dir,
             self.output_dir,
         )
@@ -555,7 +460,7 @@ class TestIndexerScenes(unittest.TestCase):
         test_shp = os.path.join(self.output_dir, 'test.shp')
         for options, result_cnt, res in test_param_list:
             cmd = 'python {}/index_setsm.py --np {} {} {} --skip-region-lookup --read-json'.format(
-                root_dir,
+                __app_dir__,
                 self.output_dir,
                 test_shp,
                 options,
@@ -603,10 +508,11 @@ class TestIndexerStrips(unittest.TestCase):
         self.strip_txt_mdf_dir = os.path.join(testdata_dir, 'setsm_strip_txt_mdf')
         self.stripmasked_dir = os.path.join(testdata_dir, 'setsm_strip_masked')
         self.striprenamed_dir = os.path.join(testdata_dir, 'setsm_strip_renamed')
-        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.output_dir = os.path.join(__test_dir__, 'tmp_output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
         self.test_str2 = os.path.join(self.output_dir, 'test2.shp')
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
+        os.makedirs(self.output_dir, exist_ok=True)
 
         self.strip_count = 6
         self.stripmasked_count = 3
@@ -616,12 +522,7 @@ class TestIndexerStrips(unittest.TestCase):
 
     def tearDown(self):
         ## Clean up output
-        for f in os.listdir(self.output_dir):
-            fp = os.path.join(self.output_dir, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
-            else:
-                shutil.rmtree(fp)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
 
     # @unittest.skip("test")
     def testStrip(self):
@@ -655,7 +556,7 @@ class TestIndexerStrips(unittest.TestCase):
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np --mode strip {} {} --skip-region-lookup {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -715,7 +616,7 @@ class TestIndexerStrips(unittest.TestCase):
             )
             for i, o in test_param_list:
                 cmd = 'python {}/index_setsm.py --np --mode strip {} {} --skip-region-lookup {}'.format(
-                    root_dir,
+                    __app_dir__,
                     i,
                     o,
                     opts
@@ -758,7 +659,7 @@ class TestIndexerStrips(unittest.TestCase):
     def testStripJson(self):
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --mode strip --write-json'.format(
-            root_dir,
+            __app_dir__,
             self.strip_dir,
             self.output_dir,
         )
@@ -778,7 +679,7 @@ class TestIndexerStrips(unittest.TestCase):
 
         ## Test json read
         cmd = 'python {}/index_setsm.py --np {} {} --mode strip --skip-region-lookup --read-json'.format(
-            root_dir,
+            __app_dir__,
             self.output_dir,
             self.test_str,
         )
@@ -814,20 +715,20 @@ class TestIndexerStrips(unittest.TestCase):
         ## Build shp
         test_param_list = (
             # input, output, args, result feature count, message
-            (self.strip_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --custom-paths BP'.format(root_dir),
+            (self.strip_dir, self.test_str, '--read-pickle {}/tests/testdata/pair_region_lookup.p --custom-paths BP'.format(__app_dir__),
              self.strip_count, 'Done'),  # test BP paths
             (self.strip_dir, self.test_str,
-             '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(root_dir),
+             '--read-pickle {}/tests/testdata/pair_region_lookup.p --overwrite --custom-paths PGC'.format(__app_dir__),
              self.strip_count, 'Done'),  # test PGC paths
             (self.strip_dir, self.test_str,
-             '--read-pickle {}/tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS'.format(root_dir),
+             '--read-pickle {}/tests/testdata/pair_region_lookup.p --skip-region-lookup --overwrite --custom-paths CSS'.format(__app_dir__),
              self.strip_count,
              'Done'),  # test CSS paths
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np --mode strip {} {} {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -877,18 +778,14 @@ class TestIndexerTiles(unittest.TestCase):
 
     def setUp(self):
         self.tile_dir = os.path.join(testdata_dir, 'setsm_tile')
-        self.output_dir = os.path.join(testdata_dir, 'output')
+        self.output_dir = os.path.join(__test_dir__, 'tmp_output')
         self.test_str = os.path.join(self.output_dir, 'test.shp')
         self.pg_test_str = 'PG:sandwich:test_pgcdemtools'
+        os.makedirs(self.output_dir, exist_ok=True)
 
     def tearDown(self):
         ## Clean up output
-        for f in os.listdir(self.output_dir):
-            fp = os.path.join(self.output_dir, f)
-            if os.path.isfile(fp):
-                os.remove(fp)
-            else:
-                shutil.rmtree(fp)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
 
     # @unittest.skip("test")
     def testTile(self):
@@ -907,7 +804,7 @@ class TestIndexerTiles(unittest.TestCase):
 
         for i, o, options, result_cnt, msg in test_param_list:
             cmd = 'python {}/index_setsm.py --np --mode tile  {} {} {}'.format(
-                root_dir,
+                __app_dir__,
                 i,
                 o,
                 options
@@ -933,7 +830,7 @@ class TestIndexerTiles(unittest.TestCase):
     def testTileJson(self):
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --write-json'.format(
-            root_dir,
+            __app_dir__,
             os.path.join(self.tile_dir, 'v3', '33_11'),
             self.output_dir,
         )
@@ -955,7 +852,7 @@ class TestIndexerTiles(unittest.TestCase):
 
         ## Test json read
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --read-json'.format(
-            root_dir,
+            __app_dir__,
             self.output_dir,
             self.test_str,
         )
@@ -977,7 +874,7 @@ class TestIndexerTiles(unittest.TestCase):
     def testTilev4Json(self):
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --write-json'.format(
-            root_dir,
+            __app_dir__,
             os.path.join(self.tile_dir, 'v4', '59_57'),
             self.output_dir,
         )
@@ -996,7 +893,7 @@ class TestIndexerTiles(unittest.TestCase):
 
         ## Test json read
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --read-json'.format(
-            root_dir,
+            __app_dir__,
             self.output_dir,
             self.test_str,
         )
@@ -1017,7 +914,7 @@ class TestIndexerTiles(unittest.TestCase):
     def testTileJson_qtile(self):
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --write-json'.format(
-            root_dir,
+            __app_dir__,
             os.path.join(self.tile_dir, 'v3', '33_11_quartertiles'),
             self.output_dir,
         )
@@ -1031,7 +928,7 @@ class TestIndexerTiles(unittest.TestCase):
 
         ## Test json read
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --read-json'.format(
-            root_dir,
+            __app_dir__,
             self.output_dir,
             self.test_str,
         )
@@ -1049,14 +946,11 @@ class TestIndexerTiles(unittest.TestCase):
         ds, layer = None, None
 
 
-## test bad config file
-
-
 if __name__ == '__main__':
 
     #### Set Up Arguments
     parser = argparse.ArgumentParser(
-        description="Functional test for index_setsm"
+        description="Functional tests for index_setsm"
     )
 
     #### Parse Arguments
