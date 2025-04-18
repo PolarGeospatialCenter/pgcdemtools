@@ -84,15 +84,15 @@ strip_properties AS (
         jsonb_build_object(
             -- Common properties
             'title', item_id,
-            'created', to_char(sd_all.cr_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
+            'created', to_char(sd_all.cr_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
             'license', 'CC-BY-4.0',
-            'published', to_char(sd_release.release_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
+            'published', to_char(sd_release.release_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
             'description', 'Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.',
             'instruments', jsonb_build_array(sd_all.sensor1, sd_all.sensor2),
             'constellation', 'maxar',
-            'datetime', to_char(least(sd_all.avgacqtm1, sd_all.avgacqtm2), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            'start_datetime', to_char(least(sd_all.avgacqtm1, sd_all.avgacqtm2), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            'end_datetime', to_char(greatest(sd_all.avgacqtm1, sd_all.avgacqtm2), 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'datetime', to_char(least(sd_all.avgacqtm1, sd_all.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'start_datetime', to_char(least(sd_all.avgacqtm1, sd_all.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'end_datetime', to_char(greatest(sd_all.avgacqtm1, sd_all.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 
             -- Projection properties
             'gsd', primary_asset.gsd,

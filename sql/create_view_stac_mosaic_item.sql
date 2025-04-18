@@ -86,14 +86,14 @@ mosaic_properties AS (
         item_id,
         jsonb_build_object(
             'title', item_id,
-            'created', to_char(md_release.creationdate, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
+            'created', to_char(md_release.creationdate AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
             'license', 'CC-BY-4.0',
-            'published', to_char(md_release.release_date, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
+            'published', to_char(md_release.release_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
             'description', 'Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.',
             'constellation', 'maxar',
-            'datetime', to_char(extras.start_datetime, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            'start_datetime', to_char(extras.start_datetime, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            'end_datetime', to_char(extras.end_datetime, 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'datetime', to_char(extras.start_datetime AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'start_datetime', to_char(extras.start_datetime AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'end_datetime', to_char(extras.end_datetime AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 
             -- Projection properties
             'gsd', primary_asset.gsd,
@@ -102,14 +102,14 @@ mosaic_properties AS (
             'proj:transform', primary_asset.proj_transform,
             'proj:bbox', primary_asset.proj_bbox,
             'proj:geometry', primary_asset.proj_geometry,
-            'proj:centroid', primary_asset.proj_centroid,
+            'proj:centroid', jsonb_build_object('lat', primary_asset.proj_centroid[0], 'lon', primary_asset.proj_centroid[1]),
 
             -- PGC properties
             'pgc:pairname_ids', extras.pairname_ids,
             'pgc:supertile', md_release.supertile,
             'pgc:tile', md_release.tile,
             'pgc:release_version', md_release.release_ver,
-            'pgc:data_perc', md_release.data_percent,
+            'pgc:data_perc', round(md_release.data_percent::NUMERIC, 6),
             'pgc:num_components', md_release.num_components
         ) AS content
     FROM canonical_mosaics
@@ -271,7 +271,7 @@ downsampled_assets_for_latest_version AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', secondary_asset.proj_centroid
+            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
         ) AS hillshade_with_proj
 
     FROM canonical_mosaics
@@ -364,7 +364,7 @@ downsampled_assets_for_arcticdem_v3_0 AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', secondary_asset.proj_centroid
+            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
         ) AS browse_with_proj
 
     FROM canonical_mosaics
@@ -473,7 +473,7 @@ mosaic_items AS (
             'type', 'Feature',
             'links', links.content,
             'assets', mosaic_assets.content,
-            'geometry', st_asgeojson(md_release.wkb_geometry)::jsonb,
+            'geometry', st_asgeojson(md_release.wkb_geometry, maxdecimaldigits := 6)::jsonb,
             'collection', collection,
             'properties', mosaic_properties.content,
             'stac_version', '1.1.0',
