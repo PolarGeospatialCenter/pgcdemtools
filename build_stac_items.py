@@ -2,7 +2,6 @@
 
 import argparse
 import datetime
-import functools
 import json
 import logging
 import os
@@ -413,6 +412,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
         base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
     )
 
+    # Attempt to force density to always be calculated from the source
+    tile.density = dem.get_raster_density(tile.count, tile.geom.Area())
+
     stac_item = {
         "type": "Feature",
         "stac_version": STAC_VERSION,
@@ -424,7 +426,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
             # Common properties
             "title": tile.tileid,
             "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
-            "created": iso8601(tile.creation_date, tile.tileid),
+            "created": iso8601(tile.creation_date.date(), tile.tileid),
             "published": iso8601(datetime.datetime.utcnow()),
             "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": iso8601(tile.acqdate_min, tile.tileid),
@@ -436,13 +438,15 @@ def build_mosaic_stac_item(base_url, domain, tile):
             "proj:code": dem_info.proj_code,
             "proj:shape": dem_info.proj_shape,
             "proj:transform": dem_info.proj_transform,
+            "proj:bbox": dem_info.proj_bbox,
             "proj:geometry": dem_info.proj_geojson,
+            "proj:centroid": dem_info.proj_centroid,
             # PGC properties
             "pgc:pairname_ids": tile.pairname_ids,
-            "pgc:supertile": tile.supertile_id_no_res, # use for dir path
+            "pgc:supertile": tile.supertile_id_no_res,  # use for dir path
             "pgc:tile": tile.tile_id_no_res,
             "pgc:release_version": tile.release_version,
-            "pgc:data_perc": tile.density,
+            "pgc:data_perc": round(tile.density, 6),
             "pgc:num_components": tile.num_components,
         },
         "links": [
@@ -491,7 +495,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                 "proj:code": hillshade_info.proj_code,
                 "proj:shape": hillshade_info.proj_shape,
                 "proj:transform": hillshade_info.proj_transform,
+                "proj:bbox": hillshade_info.proj_bbox,
                 "proj:geometry": hillshade_info.proj_geojson,
+                "proj:centroid": hillshade_info.proj_centroid,
             },
             "dem": {
                 "title": f"{tile.res} DEM",
@@ -579,7 +585,10 @@ def build_mosaic_stac_item(base_url, domain, tile):
         # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-        "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
+        "geometry": json.loads(
+            utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson(),
+            parse_float=round_coordinates,
+        )
     }
 
     if domain in ("arcticdem", "earthdem"):
@@ -604,7 +613,8 @@ def build_mosaic_stac_item(base_url, domain, tile):
     if dem_info.gsd != 2:
         # For resolutions other than 2m, the hillshade will be the same resolution as the
         # dem, so these keys are not needed on the asset
-        proj_keys = {"gsd", "proj:code", "proj:shape", "proj:transform", "proj:geometry"}
+        proj_keys = {"gsd", "proj:code", "proj:shape", "proj:transform", "proj:bbox",
+                     "proj:geometry", "proj:centroid"}
         for key in proj_keys:
             del stac_item["assets"]["hillshade"][key]
 
@@ -630,6 +640,9 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
         base_url=base_url, s3_bucket=S3_BUCKET, domain=domain, raster=tile
     )
 
+    # Attempt to force density to always be calculated from the source
+    tile.density = dem.get_raster_density(tile.srcfp, tile.geom.Area())
+
     stac_item = {
         "type": "Feature",
         "stac_version": STAC_VERSION,
@@ -641,7 +654,7 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             # Common properties
             "title": tile.tileid,
             "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
-            "created": iso8601(tile.creation_date, f"{tile.tileid} creation_date"),
+            "created": iso8601(tile.creation_date.date(), f"{tile.tileid} creation_date"),
             "published": iso8601(datetime.datetime.utcnow()),
             "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": iso8601(tile.acqdate_min, f"{tile.tileid} acqdate_min"),
@@ -653,7 +666,9 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             "proj:code": dem_info.proj_code,
             "proj:shape": dem_info.proj_shape,
             "proj:transform": dem_info.proj_transform,
+            "proj:bbox": dem_info.proj_bbox,
             "proj:geometry": dem_info.proj_geojson,
+            "proj:centroid": dem_info.proj_centroid,
             # PGC properties
             "pgc:pairname_ids": tile.pairname_ids,
             "pgc:supertile": tile.supertile_id_no_res, # use for dir path
@@ -718,7 +733,10 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
         # Note: may have to introduce points to make the WGS84 reprojection follow the actual locations well enough
 
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
-        "geometry": json.loads(utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson())
+        "geometry": json.loads(
+            utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson(),
+            parse_float=round_coordinates,
+        )
     }
 
     # _reg_dem_browse.tif only exists for 2m, only construct browse asset for that res
@@ -741,7 +759,9 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             "proj:code": browse_info.proj_code,
             "proj:shape": browse_info.proj_shape,
             "proj:transform": browse_info.proj_transform,
+            "proj:bbox": browse_info.proj_bbox,
             "proj:geometry": browse_info.proj_geojson,
+            "proj:centroid": browse_info.proj_centroid,
         }
         stac_item["assets"]["browse"] = browse_asset
 

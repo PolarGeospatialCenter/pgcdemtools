@@ -1,6 +1,6 @@
 import dataclasses
-import json
 import pathlib
+
 import rasterio
 
 from .dem import SetsmDem, SetsmTile
