@@ -110,7 +110,9 @@ mosaic_properties AS (
             'pgc:tile', md_release.tile,
             'pgc:release_version', md_release.release_ver,
             'pgc:data_perc', round(md_release.data_percent::NUMERIC, 6),
-            'pgc:num_components', md_release.num_components
+            -- md_release.num_components is incorrect for Arcticdem v3.0 10m and 32m collections, so the length of the
+            -- pairname_ids array is used instead.
+            'pgc:num_components', jsonb_array_length(extras.pairname_ids)
         ) AS content
     FROM canonical_mosaics
 

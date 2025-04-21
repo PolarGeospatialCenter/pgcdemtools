@@ -861,11 +861,6 @@ def test_sync_arcticdem_mosaics_v3_0_10m(db_connection, arcticdem_mosaics_v3_0_1
     del from_raster["properties"]["pgc:data_perc"]
     del from_sandwich["properties"]["pgc:data_perc"]
 
-    # These properties do not match between the existing metadata files and the indexes
-    # that are the source for the sandwich table. TODO: Investigate which is correct.
-    del from_raster["properties"]["pgc:num_components"]
-    del from_sandwich["properties"]["pgc:num_components"]
-
     assert_items_are_equivalent(from_raster, from_sandwich)
 
 
@@ -877,10 +872,5 @@ def test_sync_arcticdem_mosaics_v3_0_32m(db_connection, arcticdem_mosaics_v3_0_3
     # the raster and sandwich versions will never match
     del from_raster["properties"]["pgc:data_perc"]
     del from_sandwich["properties"]["pgc:data_perc"]
-
-    # These properties do not match between the existing metadata files and the indexes
-    # that are the source for the sandwich table. TODO: Investigate which is correct.
-    del from_raster["properties"]["pgc:num_components"]
-    del from_sandwich["properties"]["pgc:num_components"]
 
     assert_items_are_equivalent(from_raster, from_sandwich)
