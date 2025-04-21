@@ -140,6 +140,30 @@ def test_strip_rmse_property(db_connection, sampling_strategy):
             f"Found invalid rmse values using {sampling_description} (LIMIT 10): {rows}"
 
 
+def test_mosaic_num_components_property(db_connection, sampling_strategy):
+    sampling_clause, sampling_description = sampling_strategy
+    query = f"""
+    SELECT *
+    FROM (
+        SELECT
+            collection,
+            item_id,
+            (content->'properties'->'pgc:num_components')::INTEGER AS num_components,
+            jsonb_array_length(content->'properties'->'pgc:pairname_ids') AS pairname_ids_length
+        FROM dem.stac_static_item {sampling_clause}
+        WHERE collection LIKE '%mosaics%'
+    ) AS subquery
+    WHERE num_components <> pairname_ids_length
+    LIMIT 10
+    """
+
+    with db_connection.cursor() as cur:
+        cur.execute(query)
+        rows = cur.fetchall()
+        assert len(rows) == 0, \
+            f"Found mismatched num_components and pairname_ids length using {sampling_description} (LIMIT 10): {rows}"
+
+
 def test_mat_view_in_sync_with_strip_dem_release(db_connection):
     query = """
     SELECT
