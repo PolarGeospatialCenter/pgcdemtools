@@ -195,7 +195,7 @@ def extract_stac_items_from_sandwich(args: ScriptArgs):
 
             logger.info(f"Writing STAC Items as newline-delimited JSON to: {file}")
             with open(file, "w") as f:
-                f.writelines((json.dumps(item, indent=None) for item in items))
+                f.writelines((f"{json.dumps(item, indent=None)}\n" for item in items))
 
         else:
             logger.info("Writing STAC Items as mirror of AWS bucket")
