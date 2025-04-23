@@ -129,6 +129,10 @@ def gather_stac_collections(args: ScriptArgs):
             collections.append(collection)
 
     logger.info(f"Writing {args.output}")
+
+    if args.dryrun:
+        return
+
     with open(args.output, "w") as f:
         for collection in collections:
             f.write(f"{json.dumps(collection, indent=None)}\n")
