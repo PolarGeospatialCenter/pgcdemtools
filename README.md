@@ -53,11 +53,18 @@ divide_setsm_tiles - Divide SETSM DEM mosaic tiles into subtiles.
 
 ## SpatioTemporal Asset Catalog (STAC) Building Tools
 
-### Build STAC Items
-build_stac_items - scans a directory for DEMs and creates a STAC Item for each DEM.
+### Build STAC Items From Source Rasters
+build_stac_items - Scans a directory for DEMs and creates a STAC Item for each DEM.
+
+### Build STAC Items From Sandwich
+extract_stac_metadata - Scans source DEMs and extracts additional raster metadata needed to construct STAC Items from Sandwich tables.
+
+extract_stac_items_from_sandwich - Downloads STAC Items from Sandwich tables to the file system as a mirror of the AWS public bucket or NDJSON.
 
 ### Build STAC Tree
-build_stac_tree - scans a directory tree for STAC Items and builds a PGC STAC open data catalog
+build_stac_tree - Scans a directory tree for STAC Items and builds a PGC STAC open data catalog.
+
+gather_stac_collections - Scans a directory tree for STAC Collections and gathers them into an NDJSON file for updating the dynamic STAC API.
 
 
 ### Example:
