@@ -92,7 +92,7 @@ def test_get_mirror_path(db_connection):
 def test_timezones_are_not_changed(db_connection):
     query = sql.SQL("""
     SELECT content
-    FROM dem.stac_mosaic_item
+    FROM dem.stac_static_item
     WHERE collection = %s AND item_id = %s
     """)
 
