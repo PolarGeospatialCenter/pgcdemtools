@@ -560,7 +560,7 @@ def get_source_names(src_fp):
         _src_fp = src_fp
         src_lyr = os.path.splitext(os.path.basename(src_fp))[0]
     elif ".gdb" in src_fp.lower() and not src_fp.lower().endswith(".gdb"):
-        _src_fp, src_lyr = re.split(r"(?<=\.gdb)/", src_fp, re.I)
+        _src_fp, src_lyr = os.path.split(src_fp)
     else:
         msg = "The source {} does not appear to be a Shapefile, File GDB, or GeoPackage -- quitting".format(src_fp)
         raise RuntimeError(msg)
@@ -581,7 +581,7 @@ def get_source_names2(src_str):
     elif ".gdb" in src_str.lower():
         driver = ["FileGDB", "OpenFileGDB"]
         if not src_str_abs.lower().endswith(".gdb"):
-            src_ds, src_lyr = re.split(r"(?<=\.gdb)/", src_str_abs, re.I)
+            src_ds, src_lyr = os.path.split(src_str_abs)
         else:
             src_ds = src_str
             src_lyr = os.path.splitext(os.path.basename(src_str))[0]
@@ -589,7 +589,7 @@ def get_source_names2(src_str):
     elif ".gpkg" in src_str.lower():
         driver = ["GPKG"]
         if not src_str_abs.lower().endswith(".gpkg"):
-            src_ds, src_lyr = re.split(r"(?<=\.gpkg)/", src_str_abs, re.I)
+            src_ds, src_lyr = os.path.split(src_str_abs)
         else:
             src_ds = src_str
             src_lyr = os.path.splitext(os.path.basename(src_str))[0]

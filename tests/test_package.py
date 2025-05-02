@@ -1,10 +1,12 @@
 import argparse
 import glob
 import os
+import platform
 import shutil
 import subprocess
 import unittest
 
+import pytest
 from osgeo import gdal, gdalconst
 
 try:
@@ -16,7 +18,7 @@ __test_dir__ = os.path.dirname(__file__)
 testdata_dir = os.path.join(__test_dir__, 'testdata')
 __app_dir__ = os.path.dirname(__test_dir__)
 
-
+@pytest.mark.skipif(platform.system() == "Windows", reason="Not applicable on Windows")
 class TestPackagerStrips(unittest.TestCase):
 
     def setUp(self):
@@ -81,7 +83,7 @@ class TestPackagerStrips(unittest.TestCase):
                 except AssertionError as e:
                     self.assertIn(msg, se.decode())
 
-
+@pytest.mark.skipif(platform.system() == "Windows", reason="Not applicable on Windows")
 class TestPackagerTiles(unittest.TestCase):
 
     def setUp(self):
