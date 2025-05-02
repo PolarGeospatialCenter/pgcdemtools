@@ -88,13 +88,22 @@ allows the given tool to operate on several tasks at once.
 pgcdemtools uses pytest for running tests. Some use large files that are not included in the git repo, but are available
 upon request
 
-On Linux systems:
+On Linux systems, make a symlink to the test data location:
 ```sh
 # first time only
 ln -s <test_data_location>/tests/testdata tests/
 
 # run the tests
-pytest 
+pytest
+```
+
+On Windows, you have to use the full network path and not a mounted drive letter path:
+```sh
+# first time only
+mklink /d tests\testdata <\\server.school.edu\test_data_location>\tests\testdata
+
+# run the tests
+pytest
 ```
 
 ## Contact
