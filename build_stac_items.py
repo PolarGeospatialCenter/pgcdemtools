@@ -198,7 +198,7 @@ def build_strip_stac_item(base_url, domain, raster):
             "title": raster.stripid,
             "description": "Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.",
             "created": iso8601(raster.creation_date.date(), f"{raster.stripid} creation_date"),  # Sandwich equivalent is stored as date, ensure created_date is actually a date.
-            "published": iso8601(datetime.datetime.utcnow()), # now
+            "published": iso8601(datetime.datetime.now(datetime.UTC)), # now
             "datetime": iso8601(start_time), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": iso8601(start_time, f"{raster.stripid} start_time"),
             "end_datetime": iso8601(end_time, f"{raster.stripid} end_time"),
@@ -427,7 +427,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
             "title": tile.tileid,
             "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
             "created": iso8601(tile.creation_date.date(), tile.tileid),
-            "published": iso8601(datetime.datetime.utcnow()),
+            "published": iso8601(datetime.datetime.now(datetime.UTC)),
             "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": iso8601(tile.acqdate_min, tile.tileid),
             "end_datetime": iso8601(tile.acqdate_max, tile.tileid),
@@ -655,7 +655,7 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             "title": tile.tileid,
             "description": "Digital surface model mosaic from photogrammetric elevation extraction using the SETSM algorithm.  The mosaic tiles are a composite product using DEM strips from varying collection times.",
             "created": iso8601(tile.creation_date.date(), f"{tile.tileid} creation_date"),
-            "published": iso8601(datetime.datetime.utcnow()),
+            "published": iso8601(datetime.datetime.now(datetime.UTC)),
             "datetime": iso8601(tile.acqdate_min), # this is only required if start_datetime/end_datetime are not specified
             "start_datetime": iso8601(tile.acqdate_min, f"{tile.tileid} acqdate_min"),
             "end_datetime": iso8601(tile.acqdate_max, f"{tile.tileid} acqdate_max"),

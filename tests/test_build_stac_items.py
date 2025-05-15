@@ -757,7 +757,7 @@ def assert_items_are_equivalent(from_raster: dict, from_sandwich: dict):
     sandwhich_structure = extract_structure(from_sandwich)
     assert raster_structure == sandwhich_structure
 
-    # The "published" property will never align (datetime.utcnow() vs sandwich value),
+    # The "published" property will never align (datetime.now(datetime.UTC) vs sandwich value),
     # but that's okay.
     from_raster_props = {k: v for k, v in from_raster["properties"].items()
                          if k != "published"}
