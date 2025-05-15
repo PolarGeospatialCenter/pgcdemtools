@@ -31,7 +31,7 @@ class RasterAssetInfo:
     proj_transform: list[float]
     proj_bbox: list[float]
     proj_geojson: dict
-    proj_centroid: list[float]
+    proj_centroid: dict[str, float]
 
     @classmethod
     def from_raster(cls, filepath: str | pathlib.Path):
@@ -66,7 +66,7 @@ class RasterAssetInfo:
                 proj_transform=list(src.transform),
                 proj_bbox=list(src.bounds),
                 proj_geojson=proj_geojson,
-                # The center of the raster in [lat, long] per the projection extension
+                # The center of the raster as {"lat": ..., "long": ...} per the projection extension
                 # https://github.com/stac-extensions/projection?tab=readme-ov-file#projcentroid
                 proj_centroid=proj_centroid,
             )

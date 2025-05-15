@@ -102,7 +102,10 @@ mosaic_properties AS (
             'proj:transform', primary_asset.proj_transform,
             'proj:bbox', primary_asset.proj_bbox,
             'proj:geometry', primary_asset.proj_geometry,
-            'proj:centroid', jsonb_build_object('lat', primary_asset.proj_centroid[0], 'lon', primary_asset.proj_centroid[1]),
+            'proj:centroid', jsonb_build_object(
+                'lat', round(primary_asset.proj_centroid[0]::NUMERIC, 6),
+                'lon', round(primary_asset.proj_centroid[1]::NUMERIC, 6)
+            ),
 
             -- PGC properties
             'pgc:pairname_ids', extras.pairname_ids,
@@ -273,7 +276,10 @@ downsampled_assets_for_latest_version AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
+            'proj:centroid', jsonb_build_object(
+                'lat', round(secondary_asset.proj_centroid[0]::NUMERIC, 6),
+                'lon', round(secondary_asset.proj_centroid[1]::NUMERIC, 6)
+            )
         ) AS hillshade_with_proj
 
     FROM canonical_mosaics
@@ -366,7 +372,10 @@ downsampled_assets_for_arcticdem_v3_0 AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
+            'proj:centroid', jsonb_build_object(
+                'lat', round(secondary_asset.proj_centroid[0]::NUMERIC, 6),
+                'lon', round(secondary_asset.proj_centroid[1]::NUMERIC, 6)
+            )
         ) AS browse_with_proj
 
     FROM canonical_mosaics

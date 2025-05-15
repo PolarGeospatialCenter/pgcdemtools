@@ -101,7 +101,10 @@ strip_properties AS (
             'proj:transform', primary_asset.proj_transform,
             'proj:bbox', primary_asset.proj_bbox,
             'proj:geometry', primary_asset.proj_geometry,
-            'proj:centroid', jsonb_build_object('lat', primary_asset.proj_centroid[0], 'lon', primary_asset.proj_centroid[1]),
+            'proj:centroid', jsonb_build_object(
+                'lat', round(primary_asset.proj_centroid[0]::NUMERIC, 6),
+                'lon', round(primary_asset.proj_centroid[1]::NUMERIC, 6)
+            ),
 
             -- PGC properties
             'pgc:rmse', round(sd_all.rmse::NUMERIC, 6),
@@ -167,7 +170,10 @@ strip_assets AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
+            'proj:centroid', jsonb_build_object(
+                'lat', round(secondary_asset.proj_centroid[0]::NUMERIC, 6),
+                'lon', round(secondary_asset.proj_centroid[1]::NUMERIC, 6)
+            )
         ) AS hillshade,
 
         jsonb_build_object(
@@ -188,7 +194,10 @@ strip_assets AS (
             'proj:transform', secondary_asset.proj_transform,
             'proj:bbox', secondary_asset.proj_bbox,
             'proj:geometry', secondary_asset.proj_geometry,
-            'proj:centroid', jsonb_build_object('lat', secondary_asset.proj_centroid[0], 'lon', secondary_asset.proj_centroid[1])
+            'proj:centroid', jsonb_build_object(
+                'lat', round(secondary_asset.proj_centroid[0]::NUMERIC, 6),
+                'lon', round(secondary_asset.proj_centroid[1]::NUMERIC, 6)
+            )
         ) AS hillsahde_masked,
 
         jsonb_build_object(

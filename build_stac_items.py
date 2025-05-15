@@ -27,6 +27,7 @@ STAC_EXTENSIONS = [
     "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
 ]
 S3_BUCKET = "pgc-opendata-dems"
+FLOAT_N_DIGITS = 6
 
 #### Create Logger
 logger = logging.getLogger("logger")
@@ -380,10 +381,12 @@ def build_strip_stac_item(base_url, domain, raster):
 
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
         "geometry": json.loads(
-            utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson(),
-            parse_float=round_coordinates,
+            utils.getWrappedGeometry(raster.get_geom_wgs84()).ExportToJson()
         )
     }
+
+    # Round all floats, once, at the end
+    stac_item = json.loads(json.dumps(stac_item), parse_float=round_floats)
 
     return stac_item
 
@@ -586,8 +589,7 @@ def build_mosaic_stac_item(base_url, domain, tile):
 
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
         "geometry": json.loads(
-            utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson(),
-            parse_float=round_coordinates,
+            utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson()
         )
     }
 
@@ -617,6 +619,9 @@ def build_mosaic_stac_item(base_url, domain, tile):
                      "proj:geometry", "proj:centroid"}
         for key in proj_keys:
             del stac_item["assets"]["hillshade"][key]
+
+    # Round all floats, once, at the end
+    stac_item = json.loads(json.dumps(stac_item), parse_float=round_floats)
 
     return stac_item
 
@@ -734,8 +739,7 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
 
         # Geometries should be split at the antimeridian (https://datatracker.ietf.org/doc/html/rfc7946#section-3.1.9)
         "geometry": json.loads(
-            utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson(),
-            parse_float=round_coordinates,
+            utils.getWrappedGeometry(tile.get_geom_wgs84()).ExportToJson()
         )
     }
 
@@ -764,6 +768,9 @@ def build_mosaic_v3_stac_item(base_url, domain, tile):
             "proj:centroid": browse_info.proj_centroid,
         }
         stac_item["assets"]["browse"] = browse_asset
+
+    # Round all floats, once, at the end
+    stac_item = json.loads(json.dumps(stac_item), parse_float=round_floats)
 
     return stac_item
 
@@ -803,8 +810,8 @@ def iso8601(date_time, msg=""):
     return None
 
 
-def round_coordinates(s: str) -> float:
-    return round(float(s), 6)
+def round_floats(s: str, ndigits: int = FLOAT_N_DIGITS) -> float:
+    return round(float(s), ndigits)
 
 
 if __name__ == '__main__':
