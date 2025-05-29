@@ -50,6 +50,8 @@ def main():
                         help="build mdf and readme files and convert rasters to COG, do not archive")
     parser.add_argument('--build-rasterproxies', action='store_true', default=False,
                         help='build rasterproxy .mrf files')
+    parser.add_argument('--project', choices=utils.PROJECTS.keys(),
+                        help='project name (required to build raster proxies)')
     parser.add_argument('--filter-dems', action='store_true', default=False,
                         help="remove dems with valid (masked) area < {} sqkm or masked density < {}".format(
                             VALID_AREA_THRESHOLD, DENSITY_THRESHOLD))
@@ -86,6 +88,8 @@ def main():
         parser.error("Source directory or file does not exist: %s" %args.src)
     if not os.path.isdir(args.scratch) and not args.scheduler:  #scratch dir may not exist on head node when running jobs via pbs
         parser.error("Scratch directory does not exist: %s" %args.scratch)
+    if args.build_rasterproxies and not args.project:
+        parser.error("--project argument is required to build raster proxies")
     
     ## Verify qsubscript
     qsubpath = utils.verify_scheduler_args(parser, args, scriptpath, submission_script_map)
