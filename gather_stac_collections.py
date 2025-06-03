@@ -94,7 +94,7 @@ def main() -> None:
     # Parse and verify arguments
     try:
         args = ScriptArgs.parse().validate()
-    except (FileNotFoundError, NotADirectoryError, ValueError) as e:
+    except (FileNotFoundError, NotADirectoryError, FileExistsError, ValueError) as e:
         logger.error(e)
         exit(1)
 
