@@ -322,7 +322,7 @@ def stac_add_child(base_url, parent, child):
 def stac_pgc_catalog(base_url):
     catalog = {
         "type": "Catalog",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         "id": "pgc-data-stac",
         "title": "PGC Data Catalog",
         "description": "PGC Data Catalog of open digital elevation models",
@@ -339,8 +339,8 @@ def stac_pgc_catalog(base_url):
                 "href": f"{base_url}/pgc-data-stac.json",
                 "type": "application/json"
             }
-            ]
-        }
+        ]
+    }
     return catalog
 
 
@@ -350,7 +350,7 @@ def stac_domain_collection(base_url, domain):
 
     collection = {
         "type": "Collection",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         "id": id,
         "title": DOMAINS[domain]["title"],
         "description": DOMAINS[domain]["description"],
@@ -397,8 +397,8 @@ def stac_domain_collection(base_url, domain):
                 "href": f"{base_url}/pgc-data-stac.json",
                 "type": "application/json"
             }
-            ]
-        }
+        ]
+    }
     return collection
 
 
@@ -417,7 +417,7 @@ def stac_kind_collection(base_url, domain, kind):
 
     collection = {
         "type": "Collection",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         "id": id,
         "title": title,
         "description": description,
@@ -464,8 +464,8 @@ def stac_kind_collection(base_url, domain, kind):
                 "href": domain_self["href"],
                 "type": "application/json"
             }
-            ]
-        }
+        ]
+    }
     return collection
 
 
@@ -487,7 +487,7 @@ def stac_version_collection(base_url, kind, version):
 
     collection = {
         "type": "Collection",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         "id": id,
         "title": title,
         "description": description,
@@ -534,8 +534,8 @@ def stac_version_collection(base_url, kind, version):
                 "href": kind_self["href"],
                 "type": "application/json"
             }
-            ]
-        }
+        ]
+    }
     return collection
 
 
@@ -551,7 +551,7 @@ def stac_resolution_collection(base_url, version, resolution):
 
     collection = {
         "type": "Collection",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         "id": id,
         "title": title,
         "description": f"{version['description']}, {get_resolution(id)} resolution",
@@ -598,9 +598,179 @@ def stac_resolution_collection(base_url, version, resolution):
                 "href": version_self["href"],
                 "type": "application/json"
             }
-            ]
-        }
+        ],
+        "item_assets": item_assets_factory(collection=id)
+    }
     return collection
+
+def item_assets_factory(collection: str) -> dict:
+    item_asset_dict_funcs = {
+        "arcticdem-mosaics-v3.0-2m": arcticdem_mosaics_v3_0_item_assets,
+        "arcticdem-mosaics-v3.0-10m": arcticdem_mosaics_v3_0_item_assets,
+        "arcticdem-mosaics-v3.0-32m": arcticdem_mosaics_v3_0_item_assets,
+        "arcticdem-mosaics-v4.1-2m": arcticdem_moasics_v4_1_item_assets,
+        "arcticdem-mosaics-v4.1-10m": arcticdem_moasics_v4_1_item_assets,
+        "arcticdem-mosaics-v4.1-32m": arcticdem_moasics_v4_1_item_assets,
+        "arcticdem-strips-s2s041-2m": strip_vs2s041_item_assets,
+        "earthdem-strips-s2s041-2m": strip_vs2s041_item_assets,
+        "rema-mosaics-v2.0-2m": rema_mosaic_v2_0_item_assets,
+        "rema-mosaics-v2.0-10m": rema_mosaic_v2_0_item_assets,
+        "rema-mosaics-v2.0-32m": rema_mosaic_v2_0_item_assets,
+        "rema-strips-s2s041-2m": strip_vs2s041_item_assets,
+    }
+    resolution = collection.split("-")[-1]
+    return item_asset_dict_funcs[collection](resolution)
+
+
+def strip_vs2s041_item_assets(_resolution: str) -> dict:
+    return {
+        "dem": {
+            "title": "2m DEM",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["data"],
+        },
+        "hillshade": {
+            "title": "10m hillshade",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["overview", "visual"],
+        },
+        "hillshade_masked": {
+            "title": "Masked 10m hillshade",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["overview", "visual"],
+        },
+        "mask": {
+            "title": "Valid data mask",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "data-mask", "land-water", "water-mask", "cloud"],
+        },
+        "matchtag": {
+            "title": "Match point mask",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "matchtag"],
+        },
+        "metadata": {
+            "title": "Metadata",
+            "type": "text/plain",
+            "roles": ["metadata"],
+        },
+        "readme": {
+            "title": "Readme",
+            "type": "text/plain",
+            "roles": ["metadata"],
+        },
+    }
+
+
+def arcticdem_mosaics_v3_0_item_assets(resolution: str) -> dict:
+    d = {
+        "dem": {
+            "title": f"{resolution} DEM",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["data"],
+        },
+        "metadata": {
+            "title": "Metadata",
+            "type": "text/plain",
+            "roles": ["metadata"],
+        },
+    }
+    if resolution == "2m":
+        d.update(
+            {
+                "browse": {
+                    "title": "Browse",
+                    "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+                    "roles": ["overview", "visual"],
+                }
+            }
+        )
+    return d
+
+
+def arcticdem_moasics_v4_1_item_assets(resolution: str) -> dict:
+    return {
+        "dem": {
+            "title": f"{resolution} DEM",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["data"],
+        },
+        "hillshade": {
+            "title": "Hillshade",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["overview", "visual"],
+        },
+        "datamask": {
+            "title": "Valid data mask",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "data-mask"],
+        },
+        "count": {
+            "title": "Count",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "count"],
+        },
+        "mad": {
+            "title": "Median Absolute Deviation",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "mad"],
+        },
+        "maxdate": {
+            "title": "Max date",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "date"],
+        },
+        "mindate": {
+            "title": "Min date",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "date"],
+        },
+        "metadata": {
+            "title": "Metadata",
+            "type": "text/plain",
+            "roles": ["metadata"],
+        },
+    }
+
+
+def rema_mosaic_v2_0_item_assets(resolution: str) -> dict:
+    return {
+        "dem": {
+            "title": f"{resolution} DEM",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["data"],
+        },
+        "hillshade": {
+            "title": "Hillshade",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["overview", "visual"],
+        },
+        "count": {
+            "title": "Count",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "Count"],
+        },
+        "mad": {
+            "title": "Median Absolute Deviation",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "mad"],
+        },
+        "maxdate": {
+            "title": "Max date",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "date"],
+        },
+        "mindate": {
+            "title": "Min date",
+            "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+            "roles": ["metadata", "date"],
+        },
+        "metadata": {
+            "title": "Metadata",
+            "type": "text/plain",
+            "roles": ["metadata"],
+        },
+    }
 
 # Geocell: n67w132 or Supertile: 34_45
 def stac_geocell_catalog(base_url, resolution, geocell):
@@ -614,7 +784,7 @@ def stac_geocell_catalog(base_url, resolution, geocell):
 
     catalog = {
         "type": "Catalog",
-        "stac_version": "1.0.0",
+        "stac_version": "1.1.0",
         "id": id,
         "title": title,
         "description": f"{domain_title} geographic grouping: {title}",
@@ -638,8 +808,8 @@ def stac_geocell_catalog(base_url, resolution, geocell):
                 "href": resolution_self["href"],
                 "type": "application/json"
             }
-            ]
-        }
+        ]
+    }
     return catalog
 
 
