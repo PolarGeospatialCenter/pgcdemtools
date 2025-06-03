@@ -41,17 +41,17 @@ class ScriptArgs:
         parser.add_argument(
             "--dsn",
             required=True,
-            help="Postgres DSN"
+            help="Postgres DSN [required]"
         )
         parser.add_argument(
             '--stac-base-dir',
             required=True,
             type=pathlib.Path,
-            help="Base directory to write STAC JSON files"
+            help="Base directory to write STAC JSON files [required]"
         )
         parser.add_argument(
             "--collection",
-            help="STAC collection id",
+            help="STAC collection id [required]",
             required=True,
         )
 

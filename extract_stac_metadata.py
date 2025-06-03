@@ -38,15 +38,17 @@ class ScriptArgs:
             help="Source directory, text file of file paths, or dem",
         )
 
-        #### Options Arguments
+        #### Always required flags
         domain_choices = ("arcticdem", "earthdem", "rema")
         parser.add_argument(
             "--domain",
-            help="PGC domain",
+            help="PGC domain [required]",
             required=True,
             choices=domain_choices,
         )
-        parser.add_argument("--dsn", required=True, help="Postgres DSN")
+        parser.add_argument("--dsn", required=True, help="Postgres DSN [required]")
+
+        #### Options Arguments
         parser.add_argument(
             "--upsert",
             help="On primary key conflict, update row (DO UPDATE SET ...). Otherwise, insert will be ignored (DO NOTHING).",

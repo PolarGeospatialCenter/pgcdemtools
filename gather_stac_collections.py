@@ -31,13 +31,13 @@ class ScriptArgs:
             '--aws-mirror-dir',
             required=True,
             type=pathlib.Path,
-            help="Directory containing the root of the aws mirror of the STAC tree"
+            help="Directory containing the root of the aws mirror of the STAC tree [required]"
         )
         parser.add_argument(
             '--output',
             required=True,
             type=pathlib.Path,
-            help="Path to write NDJSON result"
+            help="Path to write NDJSON result [required]"
         )
 
         #### Extra CLI stuff
