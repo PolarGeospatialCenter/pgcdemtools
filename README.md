@@ -168,10 +168,13 @@ database tables/views allow for configuring the sampling strategy. The environme
 are described below.
 
 ```shell
+# On Linux
 export SANDWICH_DSN="..."           # PostgreSQL connection string 
 export SAMPLING_STRATEGY="static"   # 1% random sample (repeatable) [DEFAULT IF NOT SET]
 export SAMPLING_STRATEGY="random"   # 1% random sample (non-repeatable)
 export SAMPLING_STRATEGY="full"     # Full dataset scan
+
+# On Windows, use 'set' in place of 'export' (e.g. set SANDWICH_DSN="...")
 ```
 
 ### Execute Tests
