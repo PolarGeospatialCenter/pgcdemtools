@@ -40,8 +40,6 @@ def main():
     #### Positional Arguments
     parser.add_argument('src', help="source directory, text file of file paths, or dem")
     parser.add_argument('scratch', help="scratch space to build index shps")
-    parser.add_argument('--project', required=True, choices=utils.PROJECTS.keys(),
-                        help='project name')
 
     #### Optional Arguments
     parser.add_argument('--skip-cog', action='store_true', default=False,
