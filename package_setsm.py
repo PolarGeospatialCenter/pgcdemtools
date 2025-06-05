@@ -70,6 +70,8 @@ def main():
                         help="print actions without executing")
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
                         help='print version and exit')
+    parser.add_argument("--slurm-job-name", default=None,
+                        help="assign a name to the slurm job for easier job tracking")
 
     pos_arg_keys = ['src', 'scratch']
     arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun']
@@ -203,10 +205,15 @@ def main():
             if scenes_in_job_count == args.tasks_per_job or scene_count == len(scenes):
                 scenes_in_job_count=0
                 job_count+=1
+
+                if not args.slurm_job_name:
+                    job_name = 'Pkg{:04g}'.format(job_count)
+                else:
+                    job_name = str(args.slurm_job_name)
                 
                 task = taskhandler.Task(
                     'Pkg{:04g}'.format(job_count),
-                    'Pkg{:04g}'.format(job_count),
+                    job_name,
                     'python',
                     '{} {} {} {}'.format(scriptpath, arg_str_base, src_txt, scratch),
                     build_archive,

@@ -44,10 +44,12 @@ class TestPackagerStrips(unittest.TestCase):
         test_param_list = (
             # input, [expected outputs], args, message
             (self.source_data, o_list, '--project arcticdem --build-rasterproxies', None),
+            (self.source_data, o_list, '--skip-archive', None),
         )
-
+        j=0
         for i, o_list, opts, msg in test_param_list:
-            o_dir = os.path.join(self.output_dir, self.source_data_dn)
+            j+=1
+            o_dir = os.path.join(self.output_dir, f'{self.source_data_dn}_{j}')
             # clean up test area if needed
             try:
                 shutil.rmtree(o_dir)
@@ -67,8 +69,15 @@ class TestPackagerStrips(unittest.TestCase):
             for o in o_list:
                 ob = os.path.join(o_dir, o)
                 ## Test that tar and dem.mrf exist
-                self.assertTrue(os.path.isfile(f'{ob}.tar.gz'))
-                self.assertTrue(os.path.isfile(f'{ob}_dem.mrf'))
+                if 'skip-archive' not in opts:
+                    self.assertTrue(os.path.isfile(f'{ob}.tar.gz'))
+                else:
+                    self.assertFalse(os.path.isfile(f'{ob}.tar.gz'))
+
+                if 'build-rasterproxies' in opts:
+                    self.assertTrue(os.path.isfile(f'{ob}_dem.mrf'))
+                else:
+                    self.assertFalse(os.path.isfile(f'{ob}_dem.mrf'))
 
                 ## Test that tifs are COGs
                 for tif in glob.glob(f'{ob}*tif'):

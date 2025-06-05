@@ -64,6 +64,8 @@ def main():
                         help="print actions without executing")
     parser.add_argument('--version', action='version', version=f"Current version: {SHORT_VERSION}",
                         help='print version and exit')
+    parser.add_argument("--slurm-job-name", default=None,
+                        help="assign a name to the slurm job for easier job tracking")
 
     pos_arg_keys = ['src', 'scratch']
     arg_keys_to_remove = utils.SCHEDULER_ARGS + ['dryrun']
@@ -183,10 +185,16 @@ def main():
     task_queue = []
     logger.info('Packaging DEMs')
     for raster in rasters:
-        # logger.info("[{}/{}] {}".format(i,total,raster.srcfp))
+
+        # add a custom name to the job
+        if not args.slurm_job_name:
+            job_name = 'Pkg_{}'.format(raster.tileid)
+        else:
+            job_name = str(args.slurm_job_name)
+
         task = taskhandler.Task(
             raster.srcfn,
-            'Pkg_{}'.format(raster.tileid),
+            job_name,
             'python',
             '{} {} {} {}'.format(scriptpath, arg_str_base, raster.srcfp, scratch),
             build_archive,
