@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# This script tests the current environment to verify than GDAL is properly
+# This script tests the current environment to verify that GDAL is properly
 # applying the vertical datum transformation between WGS84 and EGM08 based
 # on an (arbitrarily selected) sample pixel from the pgc-opendata-dems S3
 # bucket.

@@ -54,6 +54,7 @@ resample_setsm - resample SETSM DEMs to a lower resolution.
 
 divide_setsm_tiles - Divide SETSM DEM mosaic tiles into subtiles.
 
+gdal_wgs84_to_egm08_working.sh - Verify that GDAL is properly applying the vertical datum transformation between WGS84 and EGM08.
 
 ## SpatioTemporal Asset Catalog (STAC) Building Tools
 
