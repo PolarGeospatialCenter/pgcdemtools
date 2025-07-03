@@ -5,12 +5,20 @@ WITH latest_version AS (
         FROM dem.strip_dem_all b
         GROUP BY ("left"(b.stripdemid, '-8'))
      ),
-     latest_lsf AS (
+     latest_s2s AS (
          SELECT a.stripdemid,
-                bool_and(a.is_lsf) AS min_lsf
+                array_to_string(max(string_to_array(s2s_ver, '.')::int[]),'.') as max_s2s
          FROM dem.strip_dem_all a
-                  JOIN latest_version ON a.stripdemid = latest_version.strip_max
+         JOIN latest_version ON a.stripdemid = latest_version.strip_max
          GROUP BY a.stripdemid
+     ),
+     latest_lsf AS (
+         SELECT c.stripdemid,
+                c.s2s_ver,
+                bool_and(c.is_lsf) AS min_lsf
+         FROM dem.strip_dem_all c
+         JOIN latest_s2s ON c.stripdemid = latest_s2s.stripdemid and c.s2s_ver = latest_s2s.max_s2s
+         GROUP BY c.stripdemid, s2s_ver
      )
 
 SELECT sda.dem_id,
@@ -63,10 +71,10 @@ SELECT sda.dem_id,
 FROM dem.strip_dem_all sda
 JOIN latest_lsf
     ON sda.stripdemid = latest_lsf.stripdemid
-    AND sda.is_lsf = latest_lsf.min_lsf
-WHERE sda.status = 'vida';
+    AND sda.s2s_ver = latest_lsf.s2s_ver
+    AND sda.is_lsf = latest_lsf.min_lsf;
 
-comment on materialized view dem.strip_dem_master is 'Strip DEMs from strip_dem_all that belong to canonical stripdemids and exist on Vida. Canonical is defined as the latest SETSM version of a strip imagery pair and resolution.  Non-LSF is given preference if both types exist.';
+comment on materialized view dem.strip_dem_master is 'Strip DEMs from strip_dem_all that belong to canonical stripdemids and exist on Vida or on tape. Canonical is defined as the latest SETSM version of a stereo imagery pair and resolution. The latest s2s version and the the Non-LSF version is given preference if multiples exist.';
 
 create index strip_dem_mst_dem_id_idx
     on dem.strip_dem_master (dem_id);
