@@ -824,15 +824,21 @@ class SetsmDem(object):
         self.get_geocell()
 
         ## Make strip ID
-        if self.algm_version_key:
-            self.stripdemid = '_'.join((self.pairname, self.res_str, self.algm_version_key))
-            self.stripdirname = '_'.join((
-                self.pairname,
-                "{}{}".format(self.res_str, '_lsf' if self.is_lsf else ''),
-                self.algm_version_key
-            ))
-        else:
+        if self.algm_version_key is None:
             raise RuntimeError("Cannot determine SETSM version")
+        if self.release_version is None:
+            raise RuntimeError("Cannot determine S2S (release) version")
+
+        self.stripdemid = '_'.join((self.pairname, self.res_str, self.algm_version_key))
+
+        stripdirname_parts = [
+            self.pairname,
+            self.res_str
+        ]
+        stripdirname_parts.append('lsf') if self.is_lsf else False # Leaving '_lsf' option for pre v4.2 strips
+        stripdirname_parts.append(self.algm_version_key)
+        stripdirname_parts.append(self.release_version) if self.release_version >= 's2s042' else False
+        self.stripdirname = '_'.join(stripdirname_parts)
 
     def compute_density_and_statistics(self):
         ## If neither metadata, mdf, nor density file contain valid density info, compute it.
