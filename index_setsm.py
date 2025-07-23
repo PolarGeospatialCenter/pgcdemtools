@@ -1274,7 +1274,15 @@ def write_to_json(json_fd, groups, total, args):
             json_fn = "{}_{}".format(args.project,groupid)
             json_fp = "{}.json".format(os.path.join(json_fd,json_fn))
         else:
-            json_fp = "{}.json".format(os.path.join(json_fd,groupid))
+            # TODO: this seems like a hack
+            # remove _s2s042 if at end of groupid to match stripdirname as returned from setsm.
+            # This is what batch_check_setsm.py -vqc and shelve_setsm_dems.py expect.
+            # - batch_check_setsm.py expects the json to be named based on the folder as produced
+            #   by setsm-prod-v1.
+            # - shelve_setsm_dems.py expects the json to be named based on part of the filenames
+            # both of those happen to be the same and don't have the _s2s042 part.
+            json_fn = re.sub(r"_s2s\d{3}$","", groupid) # remove _s2s042 if at end of groupid
+            json_fp = "{}.json".format(os.path.join(json_fd,json_fn))
 
         if os.path.isfile(json_fp) and args.overwrite:
             os.remove(json_fp)
