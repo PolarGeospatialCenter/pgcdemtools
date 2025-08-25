@@ -852,17 +852,18 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 res_dir = record.res_str + '_dsp' if record.is_dsp else record.res_str
 
                                 if args.custom_paths == 'BP':
-                                    # https://blackpearl-data2.pgc.umn.edu/dem-strips-arceua/2m/WV02/2015/05/
-                                    # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002.tar
+                                    # https://blackpearl-data2.pgc.umn.edu/dem-strips-arc/2m/WV02/2015/05/
+                                    # WV02_20150506_1030010041510B00_1030010043050B00_50cm_v040002_s2s042.tar
                                     if not region:
                                         logger.error("Pairname not found in region lookup {}, cannot build custom path".format(
                                                 record.pairname))
                                         valid_record = False
 
                                     else:
-                                        # FIXME: Will we need separate buckets for different s2s version strips (i.e. v4 vs. v4.1)?
-                                        bucket = 'dem-{}s-{}'.format(
-                                            args.mode, bp_region.split('-')[0])
+                                        # bp_region is like anteas-05, arcgeu-08, nplnam-02, ...
+                                        # bucket names are dem-strips-{ant,arc,npl}
+                                        # (scenes use bp_region.split('-')[0] ... like anteas)
+                                        bucket = f"dem-strips-{bp_region[0:3]}"
                                         custom_path = '/'.join([
                                             path_prefix,
                                             bucket,
@@ -874,8 +875,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         ])
 
                                 elif args.custom_paths in ('PGC', 'BW'):
-                                    # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/strips_v4/
-                                    # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204/
+                                    # /mnt/pgc/data/elev/dem/setsm/ArcticDEM/region/arcticdem_01_iceland/s2s042/
+                                    # 2m/WV01_20200630_10200100991E2C00_102001009A862700_2m_v040204_s2s042/
                                     # WV01_20200630_10200100991E2C00_102001009A862700_seg1_etc
 
                                     if not region:
@@ -891,7 +892,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                             pretty_project,         # project (e.g. ArcticDEM)
                                             'region',
                                             region,                 # region
-                                            'strips_v{}'.format(record.s2s_version),
+                                            record.release_version, # e.g. s2s042, previously 'strips_v{}'.format(record.s2s_version)
                                             res_dir,                # e.g. 2m, 50cm, 2m_dsp
                                             groupid,                # strip ID
                                             record.srcfn            # file name (meta.txt)
@@ -1273,7 +1274,15 @@ def write_to_json(json_fd, groups, total, args):
             json_fn = "{}_{}".format(args.project,groupid)
             json_fp = "{}.json".format(os.path.join(json_fd,json_fn))
         else:
-            json_fp = "{}.json".format(os.path.join(json_fd,groupid))
+            # TODO: this seems like a hack
+            # remove _s2s042 if at end of groupid to match stripdirname as returned from setsm.
+            # This is what batch_check_setsm.py -vqc and shelve_setsm_dems.py expect.
+            # - batch_check_setsm.py expects the json to be named based on the folder as produced
+            #   by setsm-prod-v1.
+            # - shelve_setsm_dems.py expects the json to be named based on part of the filenames
+            # both of those happen to be the same and don't have the _s2s042 part.
+            json_fn = re.sub(r"_s2s\d{3}$","", groupid) # remove _s2s042 if at end of groupid
+            json_fp = "{}.json".format(os.path.join(json_fd,json_fn))
 
         if os.path.isfile(json_fp) and args.overwrite:
             os.remove(json_fp)
