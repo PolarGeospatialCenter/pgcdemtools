@@ -1,15 +1,4 @@
-create materialized view scene_dem_all as
-WITH dems_on_hand AS (
-    SELECT scene_dem.scenedemid,
-           scene_dem.stripdemid
-    FROM dem.scene_dem
-    WHERE scene_dem.dem_res = 0.5
-    UNION ALL
-    SELECT scene_dem_staging.scenedemid,
-           scene_dem_staging.stripdemid
-    FROM dem.scene_dem_staging
-    WHERE scene_dem_staging.dem_res = 0.5
-)
+create materialized view dem.scene_dem_all as
 SELECT a.scenedemid,
        a.stripdemid,
        a.status,
@@ -99,60 +88,16 @@ FROM dem.scene_dem_staging sds
                WHERE tbl.scenedemid IS NULL
                GROUP BY sds2.scenedemid, sds2.stripdemid, sds2.is_dsp) tbl2
               ON sds.scenedemid = tbl2.scenedemid AND sds.stripdemid = tbl2.stripdemid AND
-                 sds.is_dsp = tbl2.is_dsp AND (sds.location || sds.index_date) = tbl2.loc_idate
-UNION ALL
-SELECT b.scenedemid,
-       b.stripdemid,
-       'aws'::character varying AS status,
-       c.pairname,
-       c.sensor1,
-       c.sensor2,
-       c.acqdate1,
-       c.acqdate2,
-       c.catalogid1,
-       c.catalogid2,
-       c.cent_lat,
-       c.cent_lon,
-       c.region,
-       c.epsg,
-       c.proj4,
-       c.nd_value,
-       c.dem_res,
-       c.cr_date,
-       c.algm_ver,
-       c.prod_ver,
-       c.has_lsf,
-       c.has_nonlsf,
-       c.is_dsp,
-       c.is_xtrack,
-       c.scene1,
-       c.scene2,
-       c.gen_time1,
-       c.gen_time2,
-       NULL::character varying  AS location,
-       b.filesz_dem,
-       c.filesz_lsf,
-       b.filesz_mt,
-       b.filesz_or,
-       b.filesz_or2,
-       NULL::timestamptz  AS index_date,
-       c.wkb_geometry
-FROM (SELECT min(csda.path::text) AS path
-      FROM dem.csdap_pgc_dem_delivery csda
-               LEFT JOIN dems_on_hand doh USING (scenedemid, stripdemid)
-      WHERE doh.scenedemid IS NULL
-      GROUP BY csda.scenedemid, csda.stripdemid) csda_uniq
-         JOIN dem.csdap_pgc_dem_delivery b USING (path)
-         LEFT JOIN dem.scene_dem_pseudo_50cm c USING (scenedemid, stripdemid);
+                 sds.is_dsp = tbl2.is_dsp AND (sds.location || sds.index_date) = tbl2.loc_idate;
 
-comment on materialized view scene_dem_all is 'Concatenation of scene DEM source tables. Scene DEMs from staging that are also on tape are excluded. Scene DEMs that are on hand are removed from the CSDAP DEM table. Duplicate scenedemid-stripdemid-isdsp combos in staging are removed and only records with the smallest location and index date are kept.';
+comment on materialized view dem.scene_dem_all is 'Concatenation of scene DEM source tables. Scene DEMs from staging that are also on tape are excluded. Duplicate scenedemid-stripdemid-isdsp combos in staging are removed and only records with the smallest location and index date are kept.';
 
-alter materialized view scene_dem_all owner to pgc_gis_admin;
+alter materialized view dem.scene_dem_all owner to pgc_gis_admin;
 
 create unique index scenedem_stripdem_isdsp_all_idx
-    on scene_dem_all (scenedemid, stripdemid, is_dsp);
+    on dem.scene_dem_all (scenedemid, stripdemid, is_dsp);
 
-grant select on scene_dem_all to pgc_users;
+grant select on dem.scene_dem_all to pgc_users;
 
-grant select on scene_dem_all to backup;
+grant select on dem.scene_dem_all to backup;
 
