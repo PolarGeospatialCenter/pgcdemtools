@@ -1051,6 +1051,7 @@ class SetsmDem(object):
                     self.s2s_version = s2s_version
             except KeyError:
                 pass
+            self._set_release_version_from_s2s_version()
 
             try:
                 stripdemid_meta = metad['STRIP_DEM_stripDemGroupId']
