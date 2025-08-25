@@ -837,7 +837,7 @@ class SetsmDem(object):
         ]
         stripdirname_parts.append('lsf') if self.is_lsf else False # Leaving '_lsf' option for pre v4.2 strips
         stripdirname_parts.append(self.algm_version_key)
-        stripdirname_parts.append(self.release_version) if self.release_version >= 's2s042' else False
+        stripdirname_parts.append(self.release_version) if self.release_version >= 's2s041' else False
         self.stripdirname = '_'.join(stripdirname_parts)
 
     def compute_density_and_statistics(self):
