@@ -843,13 +843,13 @@ class TestIndexerTiles(unittest.TestCase):
         test_param_list = (
             # input, output, args, result feature count, message
             (os.path.join(self.tile_dir, 'v3', '33_11'), self.test_str,
-             '--project arcticdem', 3, 'Done'),  # test 100x100km tile at 3 resolutions
+             '', 3, 'Done'),  # test 100x100km tile at 3 resolutions
             (os.path.join(self.tile_dir, 'v3', '33_11_quartertiles'), self.test_str,
-             '--overwrite --project arcticdem', 4, 'Done'),  # test quartertiles formatted for release
+             '--overwrite', 4, 'Done'),  # test quartertiles formatted for release
             (os.path.join(self.tile_dir, 'v4', '59_57'), self.test_str,
-             '--overwrite --check --project arcticdem', 4, 'Done'),  # test v4 tiles, 2m
+             '--overwrite --check', 4, 'Done'),  # test v4 tiles, 2m
             (os.path.join(self.tile_dir, 'v4', 'utm34n_60_06'), self.test_str,
-             '--overwrite --project earthdem', 4, 'Done'),  # test v4 utm tiles, 2m
+             '--overwrite', 4, 'Done'),  # test v4 utm tiles, 2m
         )
 
         for i, o, options, result_cnt, msg in test_param_list:
@@ -922,6 +922,28 @@ class TestIndexerTiles(unittest.TestCase):
 
     # @unittest.skip("test")
     def testTilev4Json(self):
+        ## Test project is required for json creation
+        cmd = 'python {}/index_setsm.py --np {} {} --mode tile --write-json'.format(
+            __app_dir__,
+            os.path.join(self.tile_dir, 'v4', '59_57'),
+            self.output_dir,
+        )
+        p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        (so, se) = p.communicate()
+        # print(se)
+        # print(so)
+
+        json_list = [
+            'arcticdem_59_57_2m.json',
+        ]
+
+        for json_fn in json_list:
+            json = os.path.join(self.output_dir, json_fn)
+            self.assertFalse(os.path.isfile(json))
+        ## Test if stdout has proper error
+        msg = "--project option is required when mode=tile using --write-json or --use-release-fields"
+        self.assertIn(msg, se.decode())
+
         ## Test json creation
         cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --write-json'.format(
             __app_dir__,
@@ -942,7 +964,7 @@ class TestIndexerTiles(unittest.TestCase):
             self.assertTrue(os.path.isfile(json))
 
         ## Test json read
-        cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --read-json'.format(
+        cmd = 'python {}/index_setsm.py --np {} {} --mode tile --read-json'.format(
             __app_dir__,
             self.output_dir,
             self.test_str,
@@ -977,7 +999,7 @@ class TestIndexerTiles(unittest.TestCase):
         self.assertTrue(os.path.isfile(json))
 
         ## Test json read
-        cmd = 'python {}/index_setsm.py --np {} {} --mode tile --project arcticdem --read-json'.format(
+        cmd = 'python {}/index_setsm.py --np {} {} --mode tile --read-json'.format(
             __app_dir__,
             self.output_dir,
             self.test_str,
