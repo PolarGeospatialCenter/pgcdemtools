@@ -147,7 +147,7 @@ def main():
     parser.add_argument('--check', action='store_true', default=False,
                         help='verify new records exist in target index (not compatible with --write-json or --dryrun)')
     parser.add_argument('--skip-region-lookup', action='store_true', default=False,
-                        help="skip region lookup from database")
+                        help="skip region lookup on danco")
     parser.add_argument('--skip-records-missing-dsp-original-info', action='store_true', default=False,
                         help="skip adding records where the file info on the source DEM for a dsp product is missing"
                              " (valid only if --dsp-record-mode is orig or both)")
@@ -202,7 +202,7 @@ def main():
     if args.mode == 'scene' and args.use_release_fields:
         parser.error("--use-release-fields option is not applicable to mode=scene")
 
-    ## Todo add Bp region lookup via API instead of DB?
+    ## Todo add Bp region lookup via API instead of Danco?
     if args.skip_region_lookup and (args.custom_paths == 'PGC' or args.custom_paths == 'BP'):
         parser.error('--skip-region-lookup is not compatible with --custom-paths = PGC or BP')
 
@@ -316,15 +316,15 @@ def main():
                 pairs = pickle.load(open(args.read_pickle, "rb"))
 
             else:
-                #### Get DB connection if available
-                section_depr = 'sandwich'
-                section = 'pgc_sandwich_dgarchive'
+                #### Get Danco connection if available
+                section_depr = 'danco'
+                section = 'pgc_danco_footprint'
                 conn_str = None
                 if section not in config.sections() and section_depr in config.sections():
                     logger.warning(f"Config section name '{section_depr}' is deprecated and should be changed to '{section}'")
                     section = section_depr
                 if section in config.sections():
-                    db_conn_info = {
+                    danco_conn_info = {
                         'host':config.get(section,'host'),
                         'port':config.getint(section,'port'),
                         'name':config.get(section,'name'),
@@ -332,14 +332,14 @@ def main():
                         'user':config.get(section,'user'),
                         'pw':config.get(section,'pw'),
                     }
-                    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**db_conn_info)
+                    conn_str = "PG:host={host} port={port} dbname={name} user={user} password={pw} active_schema={schema}".format(**danco_conn_info)
                     conn_str_redacted = re.sub(r"password=\S+", "password=PASS", conn_str)
-                    logger.info(f"Derived DB connection string from {args.config}: '{conn_str_redacted}'")
+                    logger.info(f"Derived Danco connection string from {args.config}: '{conn_str_redacted}'")
                 elif section in pg_config.sections():
                     conn_str = f"PG:service={section} active_schema=public"
-                    logger.info(f"Derived DB connection string from {pg_config_file}: '{conn_str}'")
+                    logger.info(f"Derived Danco connection string from {pg_config_file}: '{conn_str}'")
                 if conn_str:
-                    logger.info("Fetching region lookup from DB")
+                    logger.info("Fetching region lookup from Danco")
                     pairs = get_pair_region_dict(conn_str)
                 else:
                     logger.warning(f"--config file or ~/.pg_service.conf do not contain credentials for service name '{section}'. Region cannot be determined.")
@@ -1315,20 +1315,19 @@ def write_to_json(json_fd, groups, total, args):
 
 
 def get_pair_region_dict(conn_str):
-    """Fetches a pairname-region lookup dictionary from DB
+    """Fetches a pairname-region lookup dictionary from Danco's footprint DB
     pairnames_with_earthdem_region table
     """
 
     pairs = {}
     stereo_ds = ogr.Open(conn_str)
-    tbl_name = 'vendor.pairname_with_earthdem_region'
 
     if stereo_ds is None:
         logger.warning("Could not connect to footprint db")
     else:
-        stereo_lyr = stereo_ds.GetLayer(tbl_name)
+        stereo_lyr = stereo_ds.GetLayer("public.pairname_with_earthdem_region")
         if stereo_lyr is None:
-            logger.warning(f"Could not obtain {tbl_name}")
+            logger.warning("Could not obtain public.pairname_with_earthdem_region layer")
             stereo_ds = None
         else:
             pairs = {f["pairname"]:(f["region_id"],f["bp_region"]) for f in stereo_lyr}
