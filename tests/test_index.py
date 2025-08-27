@@ -600,6 +600,44 @@ class TestIndexerStrips(unittest.TestCase):
             except AssertionError as e:
                 self.assertIn(msg, se.decode())
 
+    def testRegionLookup(self):
+
+        test_param_list = (
+            # input, output, args, result feature count, message
+            (self.strip_dir, self.test_str, '', self.strip_count, 'Done'), # test region lookup happens
+        )
+
+        for i, o, options, result_cnt, msg in test_param_list:
+            cmd = 'python {}/index_setsm.py --np --mode strip {} {} {}'.format(
+                __app_dir__,
+                i,
+                o,
+                options
+            )
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            (so, se) = p.communicate()
+            # print(cmd)
+            # print(se)
+            # print(so)
+
+            ## Test if ds exists and has correct number of records
+            self.assertTrue(os.path.isfile(o))
+            ds = ogr.Open(o, 0)
+            layer = ds.GetLayer()
+            self.assertIsNotNone(layer)
+            cnt = layer.GetFeatureCount()
+            self.assertEqual(cnt, result_cnt)
+            for feat in layer:
+                self.assertIsNotNone(feat.GetField('REGION'))
+            ds, layer = None, None
+
+            ## Test if stdout has proper error
+            try:
+                self.assertIn(msg, so.decode())
+            except AssertionError as e:
+                self.assertIn(msg, se.decode())
+
+
     # @unittest.skip("test")
     def testStripFromTxtAndMdf(self):
 
