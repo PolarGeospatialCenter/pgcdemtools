@@ -154,7 +154,8 @@ def main():
     parser.add_argument("--write-pickle", help="store region lookup in a pickle file. skipped if --write-json is used")
     parser.add_argument("--read-pickle", help='read region lookup from a pickle file. skipped if --write-json is used')
     parser.add_argument("--custom-paths", choices=custom_path_prefixes.keys(), help='Use custom path schema')
-    parser.add_argument('--project', choices=utils.PROJECTS.keys(), help='project name (required when writing tiles)')
+    parser.add_argument('--project', choices=utils.PROJECTS.keys(), help='project name (required when '
+                                                                         'writing tile jsons or with --use-release-fields)')
     parser.add_argument('--debug', action='store_true', default=False, help='print DEBUG level logger messages to terminal')
     parser.add_argument('--dryrun', action='store_true', default=False, help='run script without inserting records')
     parser.add_argument('--np', action='store_true', default=False, help='do not print progress bar')
@@ -193,8 +194,8 @@ def main():
         parser.error('--check cannot be used with the --write-json option')
 
     ## Check project
-    if args.mode == 'tile' and not args.project:
-        parser.error("--project option is required if when mode=tile")
+    if args.mode == 'tile' and (args.write_json or args.use_release_fields) and not args.project:
+        parser.error("--project option is required when mode=tile using --write-json or --use-release-fields")
 
     if args.mode == 'strip' and args.use_release_fields and not args.project:
         parser.error("--project option is required when mode=strip using --use-release-fields")
