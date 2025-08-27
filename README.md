@@ -36,12 +36,8 @@ package_setsm_tiles - Build an index of a SETSM DEM mosaic tiles or directory of
 into tar.gz archives.
 
 ### Shelve
-shelve_setsm_by_date - Move or copy a SETSM DEM or a directory of DEMs into folders based on acquisition date.
-
-shelve_setsm_by_geocell - Move or copy a SETSM DEM or a directory of DEMs into folders based on the geocell that 
-intersects with the DEM centroid, as identified by the lower left geocell corner.
-
-shelve_setsm_by_shp - Move or copy a SETSM DEM or a directory of DEMs into folders based on a custom shapefile index.
+shelve_setsm_simple - Move or copy a SETSM DEM or a directory of DEMs into folders based on acquisition date, the 
+geocell that intersects with the DEM centroid as identified by the lower left geocell corner, or a custom shapefile index.
 
 ### Retrieve
 copy_dems - Copy DEMs using a subset of the DEM index built using index_setsm.py.
