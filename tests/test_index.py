@@ -795,18 +795,24 @@ class TestIndexerStrips(unittest.TestCase):
                 pairname = feat.GetField('PAIRNAME')
                 res = feat.GetField('DEM_RES')
                 s2s_version = feat.GetField('S2S_VER')
-                #is_dsp = feat.GetField('IS_DSP')
+                s2s_lookup = {
+                    '3': 's2s030',
+                    '4': 's2s040',
+                    '4.1': 's2s041',
+                    '4.2': 's2s042',
+                }
+                release_ver = s2s_lookup[s2s_version]
                 res_dir = '2m' if res == 2.0 else '50cm'
-                #res_dir = res_dir + '_dsp' if is_dsp else res_dir
                 if '--custom-paths BP' in options:
-                    # FIXME: Will we need separate buckets for different s2s version strips (i.e. v4 vs. v4.1)?
                     p = 'https://blackpearl-data2.pgc.umn.edu/dem-strips-{}/{}/W'.format(
-                        pairname_region_lookup[pairname][1], res_dir)
+                        pairname_region_lookup[pairname][1][:3], res_dir)
                     self.assertTrue(location.startswith(p))
+                    if release_ver >= 's2s040':
+                        self.assertTrue(location.endswith(f'_{release_ver}.tar'))
                 elif '--custom-paths PGC' in options:
                     r = pairname_region_lookup[pairname][0]
-                    p = '/mnt/pgc/data/elev/dem/setsm/{}/region/{}/strips_v{}/{}/W'.format(
-                        PROJECTS[r.split('_')[0]], r, s2s_version, res_dir)
+                    p = '/mnt/pgc/data/elev/dem/setsm/{}/region/{}/{}/{}/W'.format(
+                        PROJECTS[r.split('_')[0]], r, release_ver, res_dir)
                     self.assertTrue(location.startswith(p))
                 elif '--custom-paths CSS' in options:
                     p = '/css/nga-dems/setsm/strip/strips_v{}/{}/W'.format(s2s_version, res_dir)

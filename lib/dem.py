@@ -837,7 +837,7 @@ class SetsmDem(object):
         ]
         stripdirname_parts.append('lsf') if self.is_lsf else False # Leaving '_lsf' option for pre v4.2 strips
         stripdirname_parts.append(self.algm_version_key)
-        stripdirname_parts.append(self.release_version) if self.release_version >= 's2s042' else False
+        stripdirname_parts.append(self.release_version) if self.release_version >= 's2s040' else False
         self.stripdirname = '_'.join(stripdirname_parts)
 
     def compute_density_and_statistics(self):
@@ -1051,6 +1051,7 @@ class SetsmDem(object):
                     self.s2s_version = s2s_version
             except KeyError:
                 pass
+            self._set_release_version_from_s2s_version()
 
             try:
                 stripdemid_meta = metad['STRIP_DEM_stripDemGroupId']
