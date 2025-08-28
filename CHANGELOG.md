@@ -1,6 +1,26 @@
 History
 =======
 
+1.4.0 (2025-08-28)
+------------------
+* Fixup `index_setsm.py` dryrun actions
+* Add database view definitions
+* Index setsm bugfix
+* Rebuild strip DEMs scene metadata from .mdf files
+* Update Slurm Options and Handle Old Scene DEM Jsons
+* Fix package_setsm.py rasterproxy logic bug
+* add bitmask as component option to resample_setsm.py
+* Update for python 3.12
+* Update shelve_setsm_strips to use mdf.txt
+* Adapt unittest tests to be run by pytest
+* Migrate to STAC spec v1.1.0 and generate items from Sandwich
+* Add gdal_wgs84_to_egm08_working.sh script.
+* Change Strip DEM view definitions to manage strips on tape
+* Folder structure update for v4.2 strips.
+* Remove 50cm DEMs at CSDA from dem.scene_dem_all view definition
+* Switch region lookup from danco to sandwich
+* Make project arg required only when absolutely necessary for index_setsm.py
+
 1.3.0 (2023-08-28)
 ------------------
 * More complete check of `SetsmScene` source file existence
