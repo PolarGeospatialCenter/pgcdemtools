@@ -79,6 +79,9 @@ comment on materialized view dem.strip_dem_master is 'Strip DEMs from strip_dem_
 create index strip_dem_mst_dem_id_idx
     on dem.strip_dem_master (dem_id);
 
+create index strip_dem_mst_pairname_idx
+    on dem.strip_dem_master (pairname);
+
 create unique index strip_dem_mst_dem_strip_id_idx
     on dem.strip_dem_master (dem_id, stripdemid);
 
