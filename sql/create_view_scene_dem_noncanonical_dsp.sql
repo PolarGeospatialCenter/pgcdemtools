@@ -10,7 +10,7 @@ SELECT a.scenedemid,
        a.catalogid2,
        a.dem_res,
        a.algm_ver,
-    a.prod_ver,
+       a.prod_ver,
        a.scene1,
        a.scene2,
        a.gen_time1,
@@ -18,9 +18,9 @@ SELECT a.scenedemid,
        a.is_dsp,
        a.is_xtrack
 FROM dem.scene_dem_all a
-         LEFT JOIN dem.scene_dem_master_dsp b ON a.stripdemid = b.stripdemid AND a.is_dsp = b.is_dsp
-WHERE b.stripdemid IS NULL
-  AND a.is_dsp = true;
+LEFT JOIN dem.scene_dem_master_dsp b
+ON a.stripdemid = b.stripdemid AND a.is_dsp = b.is_dsp
+WHERE b.stripdemid IS NULL AND a.is_dsp = true;
 
 comment on view dem.scene_dem_noncanonical_dsp is 'DEMs in scene_dem_all (DSP-only) that are not in scene_dem_master. DEM locations can be obtained by joining to scene_dem and scene_dem_staging tables.';
 
