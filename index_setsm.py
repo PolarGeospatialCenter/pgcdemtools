@@ -1217,7 +1217,7 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                 tmp_layer.CreateFeature(feat)
                             dst_alias = 'dst'
                             src_alias = 'src'
-                            join_condition = utils._generate_join_condition(fld_list, src_alias, dst_alias)
+                            join_condition = utils._generate_equality_test_join_condition(fld_list, src_alias, dst_alias)
                             sql = f"""
                                 SELECT {src_alias}.*
                                 FROM {tmp_schema}.{tmp_layer_name} {src_alias}
