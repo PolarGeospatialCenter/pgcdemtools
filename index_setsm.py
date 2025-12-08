@@ -1142,20 +1142,17 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         try:
                                             layer.CreateFeature(feat)
                                         except Exception as e:
-                                            if utils.GDAL_ERROR_HANDLER.errored:
-                                                gdal_errmsg = utils.GDAL_ERROR_HANDLER.err_msg
-                                                if "duplicate key value violates unique constraint" in gdal_errmsg:
-                                                    duplicate_record_cnt += 1
-                                                    log_errmsg = "Skipping duplicate record error in OGR CreateFeature call:\n{}".format(gdal_errmsg)
-                                                    if duplicate_record_cnt <= 30:
-                                                        logger.error(log_errmsg)
-                                                        if duplicate_record_cnt == 30:
-                                                            logger.warning("Maximum 'duplicate record' error messages printed to terminal,"
-                                                                           " further messages will be printed to debug")
-                                                    else:
-                                                        logger.debug(log_errmsg)
+                                            errmsg = str(e)
+                                            if "duplicate key value violates unique constraint" in errmsg:
+                                                duplicate_record_cnt += 1
+                                                log_errmsg = "Skipping duplicate record error in OGR CreateFeature call:\n{}".format(errmsg)
+                                                if duplicate_record_cnt <= 30:
+                                                    logger.error(log_errmsg)
+                                                    if duplicate_record_cnt == 30:
+                                                        logger.warning("Maximum 'duplicate record' error messages printed to terminal,"
+                                                                       " further messages will be printed to debug")
                                                 else:
-                                                    raise
+                                                    logger.debug(log_errmsg)
                                             else:
                                                 raise
                                         layer.CommitTransaction()
