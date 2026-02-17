@@ -70,7 +70,7 @@ gather_stac_collections - Scans a directory tree for STAC Collections and gather
 
 ### Example - Build STAC Tree from source DEMs:
 
-```
+```shell
 STAC_DIR: output base directory for STAC files
 DEM_DIR: A STAC item is created for each *_dem.tif found (recursively) under this directory
 DOMAIN: arcticdem, earthdem, or rema.  Must match the domain for the DEMs in DEM_DIR
@@ -166,12 +166,16 @@ are described below.
 
 ```shell
 # On Linux
-export SANDWICH_DSN="..."           # PostgreSQL connection string 
+export SANDWICH_DSN="..."           # PostgreSQL connection string (e.g., "service=pgc_sandwich_dgarchive") 
 export SAMPLING_STRATEGY="static"   # 1% random sample (repeatable) [DEFAULT IF NOT SET]
 export SAMPLING_STRATEGY="random"   # 1% random sample (non-repeatable)
 export SAMPLING_STRATEGY="full"     # Full dataset scan
 
-# On Windows, use 'set' in place of 'export' (e.g. set SANDWICH_DSN="...")
+# On Windows, use 'set' in place of 'export' with no quotes
+set SANDWICH_DSN=...
+set SAMPLING_STRATEGY=static
+set SAMPLING_STRATEGY=random
+set SAMPLING_STRATEGY=full
 ```
 
 ### Execute Tests
