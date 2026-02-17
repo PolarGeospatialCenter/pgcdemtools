@@ -270,7 +270,10 @@ def main():
         config.read(args.config)
 
         pg_config_file = os.path.expanduser("~/.pg_service.conf")
+        if sys.platform == 'win32':
+            pg_config_file = os.path.expandvars("%APPDATA%\\postgresql\\.pg_service.conf")
         pg_config = configparser.ConfigParser()
+        logger.debug(f"Reading pg_service.conf from {pg_config_file}")
         pg_config.read(pg_config_file)
 
         #### Get output DB connection if specified
@@ -295,7 +298,7 @@ def main():
                 logger.info(f"Derived dst dataset PG connection string from {pg_config_file}: '{dst_ds}'")
 
             else:
-                logger.error(f"--config file or ~/.pg_service.conf must contain credentials for service name '{section}'")
+                logger.error(f"--config file or .pg_service.conf must contain credentials for service name '{section}'")
                 rc = -1
 
         #### Set dataset path is SHP or GDB
