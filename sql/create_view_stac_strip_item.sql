@@ -1,8 +1,9 @@
 CREATE OR REPLACE VIEW dem.stac_strip_item AS (
 WITH canonical_strips AS (
     -- Contains one row for each strip item that should be created
-    -- NOTE: dem_id is not unique in dem.strip_dem_all. Use a combination of dem_id & stripdemid to
-    -- ensure the correct row from dem.strip_dem_all is joined (e.g. USING (dem_id, stripdemid) )
+    -- NOTE: dem_id is not unique in dem.strip_dem_all. It appears to be unique in dem.strip_dem_release, however this
+    -- may change in the future. Use a combination of dem_id & stripdemid (includes SETSM version) to
+    -- ensure the correct rows from these tables are joined (e.g. USING (dem_id, stripdemid) ).
     SELECT
         format('%s-strips-s2s041-2m', sd_release.project) AS collection,
         dem_id AS item_id,
@@ -23,10 +24,10 @@ href_parts AS (
         split_part(collection, '-', 2) AS kind,
         split_part(collection, '-', 3) AS release_version,
         split_part(collection, '-', 4) AS resolution_str,
-        sd_all.geocell AS geocell
+        sd_release.geocell AS geocell
     FROM canonical_strips
 
-        LEFT JOIN dem.strip_dem_all AS sd_all
+        LEFT JOIN dem.strip_dem_release AS sd_release
             USING (dem_id, stripdemid)
 ),
 
@@ -84,15 +85,15 @@ strip_properties AS (
         jsonb_build_object(
             -- Common properties
             'title', item_id,
-            'created', to_char(sd_all.cr_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
+            'created', to_char(sd_release.cr_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
             'license', 'CC-BY-4.0',
             'published', to_char(sd_release.release_date AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'), -- Field is truncated to date, existing items include H:M:S
             'description', 'Digital surface models from photogrammetric elevation extraction using the SETSM algorithm.  The DEM strips are a time-stamped product suited to time-series analysis.',
-            'instruments', jsonb_build_array(sd_all.sensor1, sd_all.sensor2),
+            'instruments', jsonb_build_array(sd_release.sensor1, sd_release.sensor2),
             'constellation', 'maxar',
-            'datetime', to_char(least(sd_all.avgacqtm1, sd_all.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            'start_datetime', to_char(least(sd_all.avgacqtm1, sd_all.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
-            'end_datetime', to_char(greatest(sd_all.avgacqtm1, sd_all.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'datetime', to_char(least(sd_release.avgacqtm1, sd_release.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'start_datetime', to_char(least(sd_release.avgacqtm1, sd_release.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
+            'end_datetime', to_char(greatest(sd_release.avgacqtm1, sd_release.avgacqtm2) AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"'),
 
             -- Projection properties
             'gsd', primary_asset.gsd,
@@ -107,37 +108,34 @@ strip_properties AS (
             ),
 
             -- PGC properties
-            'pgc:rmse', round(sd_all.rmse::NUMERIC, 6),
-            'pgc:is_lsf', sd_all.is_lsf,
-            'pgc:geocell', sd_all.geocell,
-            'pgc:pairname', sd_all.pairname,
-            'pgc:image_ids', json_build_array(sd_all.catalogid1, sd_all.catalogid2),
-            'pgc:is_xtrack', sd_all.is_xtrack,
-            'pgc:stripdemid', sd_all.stripdemid,
-            'pgc:s2s_version', sd_all.s2s_ver,
+            'pgc:rmse', round(sd_release.rmse::NUMERIC, 6),
+            'pgc:is_lsf', sd_release.is_lsf,
+            'pgc:geocell', sd_release.geocell,
+            'pgc:pairname', sd_release.pairname,
+            'pgc:image_ids', json_build_array(sd_release.catalogid1, sd_release.catalogid2),
+            'pgc:is_xtrack', sd_release.is_xtrack,
+            'pgc:stripdemid', sd_release.stripdemid,
+            'pgc:s2s_version', sd_release.s2s_ver,
             'pgc:avg_sun_elevs', json_build_array(
-                round(sd_all.avg_sunel1::NUMERIC, 6),
-                round(sd_all.avg_sunel2::NUMERIC, 6)
+                round(sd_release.avg_sunel1::NUMERIC, 6),
+                round(sd_release.avg_sunel2::NUMERIC, 6)
             ),
-            'pgc:setsm_version', sd_all.algm_ver,
-            'pgc:cloud_area_sqkm', round(sd_all.cloud_area::NUMERIC, 6),
-            'pgc:valid_area_sqkm', round(sd_all.valid_area::NUMERIC, 6),
-            'pgc:water_area_sqkm', round(sd_all.water_area::NUMERIC, 6),
-            'pgc:cloud_area_percent', round(sd_all.cloud_perc::NUMERIC, 6),
-            'pgc:valid_area_percent', round(sd_all.valid_perc::NUMERIC, 6),
-            'pgc:water_area_percent', round(sd_all.water_perc::NUMERIC, 6),
-            'pgc:avg_convergence_angle', round(sd_all.avgconvang::NUMERIC, 6),
-            'pgc:masked_matchtag_density', round(sd_all.mask_dens::NUMERIC, 6),
-            'pgc:valid_area_matchtag_density', round(sd_all.valid_dens::NUMERIC, 6),
-            'pgc:avg_expected_height_accuracy', round(sd_all.avg_ht_acc::NUMERIC, 6)
+            'pgc:setsm_version', sd_release.algm_ver,
+            'pgc:cloud_area_sqkm', round(sd_release.cloud_area::NUMERIC, 6),
+            'pgc:valid_area_sqkm', round(sd_release.valid_area::NUMERIC, 6),
+            'pgc:water_area_sqkm', round(sd_release.water_area::NUMERIC, 6),
+            'pgc:cloud_area_percent', round(sd_release.cloud_perc::NUMERIC, 6),
+            'pgc:valid_area_percent', round(sd_release.valid_perc::NUMERIC, 6),
+            'pgc:water_area_percent', round(sd_release.water_perc::NUMERIC, 6),
+            'pgc:avg_convergence_angle', round(sd_release.avgconvang::NUMERIC, 6),
+            'pgc:masked_matchtag_density', round(sd_release.mask_dens::NUMERIC, 6),
+            'pgc:valid_area_matchtag_density', round(sd_release.valid_dens::NUMERIC, 6),
+            'pgc:avg_expected_height_accuracy', round(sd_release.avg_ht_acc::NUMERIC, 6)
         ) AS content
     FROM canonical_strips
 
-        LEFT JOIN dem.strip_dem_all AS sd_all
-            USING (dem_id, stripdemid)
-
         LEFT JOIN dem.strip_dem_release AS sd_release
-            USING (dem_id)
+            USING (dem_id, stripdemid)
 
         LEFT JOIN (
             SELECT * FROM dem.stac_raster_asset_info WHERE asset_key = 'dem'
@@ -279,11 +277,11 @@ strip_assets AS (
 
 strip_items AS (
     SELECT
-        collection,
-        item_id,
+        collection::TEXT,
+        item_id::TEXT,
         jsonb_build_object(
             'id', item_id,
-            'bbox', st_asgeojson(sd_all.wkb_geometry, options := 1)::jsonb->'bbox',
+            'bbox', st_asgeojson(sd_release.wkb_geometry, options := 1)::jsonb->'bbox',
             'type', 'Feature',
             'links', links.content,
             'assets', jsonb_build_object(
@@ -295,7 +293,7 @@ strip_items AS (
                 'metadata', strip_assets.metadata,
                 'readme', strip_assets.readme
             ),
-            'geometry', st_asgeojson(sd_all.wkb_geometry, maxdecimaldigits := 6)::jsonb,
+            'geometry', st_asgeojson(sd_release.wkb_geometry, maxdecimaldigits := 6)::jsonb,
             'collection', collection,
             'properties', strip_properties.content,
             'stac_version', '1.1.0',
@@ -306,7 +304,7 @@ strip_items AS (
         ) AS content
     FROM canonical_strips
 
-        LEFT JOIN dem.strip_dem_all AS sd_all
+        LEFT JOIN dem.strip_dem_release AS sd_release
             USING (dem_id, stripdemid)
 
         LEFT JOIN links
