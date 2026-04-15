@@ -156,7 +156,7 @@ conda create --name pgc-with-pystac --clone pgc
 # Activate the new environment
 conda activate pgc-with-pystac
 # Add the additional libraries
-conda install pystac jsonschema
+conda install "pystac>=1.12*,<2" jsonschema
 ```
 
 ### Configure Environment Variables

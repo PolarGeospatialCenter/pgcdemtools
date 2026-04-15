@@ -19,6 +19,7 @@ from build_stac_items import (build_strip_stac_item,
 PYSTAC_REQUIRED_REASON = "requires pystac >= 1.12.0"
 try:
     import pystac
+    import pystac.validation  # Will no longer be automatically imported in pystac v2
 
     # Check the version of pystac installed is at least 1.12.0, which is when the STAC
     # spec version 1.1 was first supported.
