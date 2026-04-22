@@ -667,11 +667,11 @@ def shelve_item(raster, dst, args, tiles=None, shp_srs=None):
         dst_dir = os.path.join(dst, geocell)
 
     elif args.mode == 'date':
-        platform = raster.sensor1
+        year = raster.acqdate1.strftime("%Y")
         year = raster.acqdate1.strftime("%Y")
         month = raster.acqdate1.strftime("%m")
-        day = raster.acqdate1.strftime("%d")
-        dst_dir = os.path.join(dst, platform, year, month, day)
+        stripdemid = raster.stripdemid
+        dst_dir = os.path.join(dst, year, month, stripdemid)
 
     elif args.mode == 'shp':
         ## Convert geom to match shp srs and get centroid
