@@ -613,7 +613,6 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
             #### loop through records and add features
             i=0
             recordids = []
-            tmp_layer_features = []
             invalid_record_cnt = 0
             duplicate_record_cnt = 0
 
@@ -1142,28 +1141,19 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                                         layer.StartTransaction()
                                         utils.GDAL_ERROR_HANDLER.reset_error_state()
                                         try:
-                                            # Clone feature for insert into the temporary layer if --check is specified
-                                            if args.check and not args.dryrun:
-                                                tmp_feat = feat.Clone()
-                                                tmp_geom = feat_geom.Clone()
-                                                tmp_feat.SetGeometry(tmp_geom)
-                                                tmp_layer_features.append(tmp_feat)
                                             layer.CreateFeature(feat)
                                         except Exception as e:
-                                            if utils.GDAL_ERROR_HANDLER.errored:
-                                                gdal_errmsg = utils.GDAL_ERROR_HANDLER.err_msg
-                                                if "duplicate key value violates unique constraint" in gdal_errmsg:
-                                                    duplicate_record_cnt += 1
-                                                    log_errmsg = "Skipping duplicate record error in OGR CreateFeature call:\n{}".format(gdal_errmsg)
-                                                    if duplicate_record_cnt <= 30:
-                                                        logger.error(log_errmsg)
-                                                        if duplicate_record_cnt == 30:
-                                                            logger.warning("Maximum 'duplicate record' error messages printed to terminal,"
-                                                                           " further messages will be printed to debug")
-                                                    else:
-                                                        logger.debug(log_errmsg)
+                                            errmsg = str(e)
+                                            if "duplicate key value violates unique constraint" in errmsg:
+                                                duplicate_record_cnt += 1
+                                                log_errmsg = "Skipping duplicate record error in OGR CreateFeature call:\n{}".format(errmsg)
+                                                if duplicate_record_cnt <= 30:
+                                                    logger.error(log_errmsg)
+                                                    if duplicate_record_cnt == 30:
+                                                        logger.warning("Maximum 'duplicate record' error messages printed to terminal,"
+                                                                       " further messages will be printed to debug")
                                                 else:
-                                                    raise
+                                                    logger.debug(log_errmsg)
                                             else:
                                                 raise
                                         layer.CommitTransaction()
@@ -1185,9 +1175,8 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
             # Check contents of layer for all records
             if args.check and not args.dryrun:
-                logger.info("Checking for new records in target table")
+                logger.info("Checking for new records...")
                 if ogr_driver_str in ("PostgreSQL"):
-                    # Perform the check in postgres instead
                     schema_sql = "select current_schema()"
                     rs = ds.ExecuteSQL(schema_sql)
                     f = rs.GetNextFeature()
@@ -1198,42 +1187,40 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
                     ds.ReleaseResultSet(rs)
                     tablename = layer.GetName() 
                     if schema and tablename:
-                        tmp_layer_name = f"tmp_{uuid.uuid4().hex}"
-                        # including defaults allows the feature ID to be set
-                        ds.ExecuteSQL(f"CREATE TEMP TABLE {tmp_layer_name} (LIKE {schema}.{tablename} INCLUDING DEFAULTS)")
-                        # find the schema the tmp table was created in, otherwise postgres tries to find the table in whatever the active_schema is
-                        rs = ds.ExecuteSQL(f"select relnamespace::regnamespace from pg_class where relname = '{tmp_layer_name}'")
-                        f = rs.GetNextFeature()
-                        if f:
-                            tmp_schema = f.GetFieldAsString(0)
-                        else:
-                            tmp_schema = None
-                        if not tmp_schema:
-                            logger.error("Unable to get the schema for the temporary table")
+                        tmp_layer_name = "expected_rows"
+                        ds.ExecuteSQL(f"CREATE TEMP TABLE {tmp_layer_name} (LIKE {schema}.{tablename} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING INDEXES)")
+                        recordid_mode = args.mode + '_release' if args.use_release_fields else args.mode
+                        columns = re.findall(r'\{(.*?)\}', recordid_map[recordid_mode])
+                        column_list = f"({', '.join(columns)})"
+                        for recordid in recordids:
+                            parts = recordid.split('|')
+                            quoted_parts = ["'" + p.replace("'", "''") + "'" for p in parts]
+                            values_string = f"({', '.join(quoted_parts)})"
+                            insert_stmt = f"insert into {tmp_layer_name} {column_list} values {values_string}"
+                            ds.ExecuteSQL(insert_stmt)
+                        dst_alias = 'dst'
+                        src_alias = 'src'
+                        id_fld_list = [id_fld for id_fld in id_flds if id_fld in fld_list]
+                        id_fld_col = id_fld_list[0]
+                        join_condition = utils._generate_equality_test_join_condition(id_fld_list, src_alias, dst_alias)
+                        sql = f"""
+                            SELECT {src_alias}.*
+                            FROM {tmp_layer_name} {src_alias}
+                            LEFT JOIN {schema}.{tablename} {dst_alias} ON {join_condition}
+                            WHERE {dst_alias}.{id_fld_col} IS NULL
+                        """
+                        result_layer = ds.ExecuteSQL(sql)
+                        f = result_layer.GetNextFeature()
+                        err_cnt = 0
+                        while f:
+                            err_cnt += 1
+                            f = result_layer.GetNextFeature()
+                        ds.ReleaseResultSet(result_layer)
+                        if err_cnt > 0:
+                            logger.error("There are %s records not found in target layer", err_cnt)
                             rc = -1
                         else:
-                            tmp_layer = ds.GetLayer(f"{tmp_schema}.{tmp_layer_name}")
-                            for feat in tmp_layer_features:
-                                tmp_layer.CreateFeature(feat)
-                            dst_alias = 'dst'
-                            src_alias = 'src'
-                            join_condition = utils._generate_equality_test_join_condition(fld_list, src_alias, dst_alias)
-                            sql = f"""
-                                SELECT {src_alias}.*
-                                FROM {tmp_schema}.{tmp_layer_name} {src_alias}
-                                LEFT JOIN {schema}.{tablename} {dst_alias} ON {join_condition}
-                                WHERE {dst_alias} IS NULL
-                            """
-                            result_layer = ds.ExecuteSQL(sql)
-                            f = result_layer.GetNextFeature()
-                            err_cnt = 0
-                            while f:
-                                err_cnt += 1
-                                f = result_layer.GetNextFeature()
-                            ds.ReleaseResultSet(result_layer)
-                            if err_cnt > 0:
-                                logger.error("There are %s records not found in target layer", err_cnt)
-                                rc = -1
+                            logger.info("There are no missing records")
                     else:
                         logger.info("Unable to verify the results since we cannot determine the schema of the connection")
                         rc = -1

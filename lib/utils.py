@@ -499,7 +499,7 @@ def osr_srs_preserve_axis_order(osr_srs):
     return osr_srs
 
 
-def check_file_inclusion(f, pairname, overlap_prefix, args):
+def check_file_inclusioa(f, pairname, overlap_prefix, args):
     move_file = False
 
     #### determine if file is part of overlap
@@ -893,5 +893,6 @@ def _generate_equality_test_join_condition(fld_list, lhs_alias, rhs_alias, ignor
     """
     Creates SQL join condition string to check if the table represented by rhs_alias has any missing items from the table represented by lhs_alias
     Uses `IS NOT DISTINCT FROM` instead of `=` due to some columns having NULL values.
+    fld_list should contain columns that make up the unique composite key for the tables.
     """
     return " AND ".join([f'{lhs_alias}.{f} IS NOT DISTINCT FROM {rhs_alias}.{f}' for f in fld_list if f not in ignore_fields])
