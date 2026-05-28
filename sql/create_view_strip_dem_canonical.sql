@@ -1,4 +1,4 @@
-create materialized view dem.strip_dem_master as
+create view dem.strip_dem_canonical as
 WITH latest_version AS (
         SELECT left(b.stripdemid, '-8') AS strip_nover,
                max(b.stripdemid)        AS strip_max
@@ -72,20 +72,10 @@ FROM dem.strip_dem_all sda
 JOIN latest_lsf
     ON sda.stripdemid = latest_lsf.stripdemid
     AND sda.s2s_ver = latest_lsf.s2s_ver
-    AND sda.is_lsf = latest_lsf.min_lsf
-WHERE sda.valid_area >= 16 and sda.mask_dens >= 0.05;
+    AND sda.is_lsf = latest_lsf.min_lsf;
 
-comment on materialized view dem.strip_dem_master is 'Strip DEMs from strip_dem_all that are canonical and also releasable (valid_area >=16 and mask_dens >= 0.05). Canonical is defined as the latest SETSM version of a stereo imagery pair and resolution. The latest s2s version and the Non-LSF version is given preference if multiples exist.';
+comment on view dem.strip_dem_canonical is 'Strip DEMs from strip_dem_all that are canonical. The latest s2s version and the Non-LSF version is given preference if multiples exist.';
 
-create index strip_dem_mst_dem_id_idx
-    on dem.strip_dem_master (dem_id);
+alter  view dem.strip_dem_canonical owner to pgc_gis_admin;
 
-create index strip_dem_mst_pairname_idx
-    on dem.strip_dem_master (pairname);
-
-create unique index strip_dem_mst_dem_strip_id_idx
-    on dem.strip_dem_master (dem_id, stripdemid);
-
-alter materialized view dem.strip_dem_master owner to pgc_gis_admin;
-
-grant select on dem.strip_dem_master to pgc_users;
+grant select on dem.strip_dem_canonical to pgc_users;
