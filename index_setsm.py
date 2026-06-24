@@ -7,6 +7,7 @@ import os
 import pickle
 import re
 import sys
+import uuid
 
 from osgeo import gdal, osr, ogr
 
@@ -1177,24 +1178,73 @@ def write_to_ogr_dataset(ogr_driver_str, ogrDriver, dst_ds, dst_lyr, groups, pai
 
             # Check contents of layer for all records
             if args.check and not args.dryrun:
-                logger.info("Checking for new records in target table")
-                layer.ResetReading()
-                attrib_maps = [{id_fld: convert_value(id_fld, feat.GetField(id_fld)) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
-                layer_recordids = [recordid_map[args.mode].format(**attrib_map) for attrib_map in attrib_maps]
-                layer_recordids = set(layer_recordids)
+                logger.info("Checking for new records...")
+                if ogr_driver_str in ("PostgreSQL"):
+                    schema_sql = "select current_schema()"
+                    rs = ds.ExecuteSQL(schema_sql)
+                    f = rs.GetNextFeature()
+                    if f:
+                        schema = f.GetFieldAsString(0)
+                    else:
+                        schema = None
+                    ds.ReleaseResultSet(rs)
+                    tablename = layer.GetName() 
+                    if schema and tablename:
+                        tmp_layer_name = "expected_rows"
+                        ds.ExecuteSQL(f"CREATE TEMP TABLE {tmp_layer_name} (LIKE {schema}.{tablename} INCLUDING CONSTRAINTS INCLUDING DEFAULTS INCLUDING INDEXES)")
+                        recordid_mode = args.mode + '_release' if args.use_release_fields else args.mode
+                        columns = re.findall(r'\{(.*?)\}', recordid_map[recordid_mode])
+                        column_list = f"({', '.join(columns)})"
+                        for recordid in recordids:
+                            parts = recordid.split('|')
+                            quoted_parts = ["'" + p.replace("'", "''") + "'" for p in parts]
+                            values_string = f"({', '.join(quoted_parts)})"
+                            insert_stmt = f"insert into {tmp_layer_name} {column_list} values {values_string}"
+                            ds.ExecuteSQL(insert_stmt)
+                        dst_alias = 'dst'
+                        src_alias = 'src'
+                        id_fld_list = [id_fld for id_fld in id_flds if id_fld in fld_list]
+                        id_fld_col = id_fld_list[0]
+                        join_condition = utils._generate_equality_test_join_condition(id_fld_list, src_alias, dst_alias)
+                        sql = f"""
+                            SELECT {src_alias}.*
+                            FROM {tmp_layer_name} {src_alias}
+                            LEFT JOIN {schema}.{tablename} {dst_alias} ON {join_condition}
+                            WHERE {dst_alias}.{id_fld_col} IS NULL
+                        """
+                        result_layer = ds.ExecuteSQL(sql)
+                        f = result_layer.GetNextFeature()
+                        err_cnt = 0
+                        while f:
+                            err_cnt += 1
+                            f = result_layer.GetNextFeature()
+                        ds.ReleaseResultSet(result_layer)
+                        if err_cnt > 0:
+                            logger.error("There are %s records not found in target layer", err_cnt)
+                            rc = -1
+                        else:
+                            logger.info("There are no missing records")
+                    else:
+                        logger.info("Unable to verify the results since we cannot determine the schema of the connection")
+                        rc = -1
+                else:
+                    layer.ResetReading()
+                    attrib_maps = [{id_fld: convert_value(id_fld, feat.GetField(id_fld)) for id_fld in id_flds if id_fld in fld_list} for feat in layer]
+                    layer_recordids = [recordid_map[args.mode].format(**attrib_map) for attrib_map in attrib_maps]
+                    layer_recordids = set(layer_recordids)
 
-                err_cnt = 0
-                for recordid in recordids:
-                    if recordid not in layer_recordids:
-                        err_cnt += 1
-                        if err_cnt == 1 and layer_recordids:
-                            logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
-                        logger.error("New record not found in target layer: {}".format(recordid))
-                if err_cnt > 1:
-                    logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
+                    err_cnt = 0
+                    for recordid in recordids:
+                        if recordid not in layer_recordids:
+                            err_cnt += 1
+                            if err_cnt == 1 and layer_recordids:
+                                logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
+                            logger.error("New record not found in target layer: {}".format(recordid))
+                    if err_cnt > 1:
+                        logger.error("Example record already existing in target layer: {}".format(next(iter(layer_recordids))))
 
-                if err_cnt > 0:
-                    rc = -1
+                    if err_cnt > 0:
+                        rc = -1
 
         else:
             logger.error('Cannot open layer: {}'.format(dst_lyr))
